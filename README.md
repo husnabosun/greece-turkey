@@ -31,7 +31,7 @@ npx expo start --web      # opens http://localhost:8081
 ## Live data and the network
 
 - **Weather** comes from [Open-Meteo](https://open-meteo.com) (free, no key). It is cached for 1 hour. Without internet the app uses the last cache, then built-in demo weather, so it always works.
-- Everything else (fields, sprays, offers, factories) is mock data in `src/data/mock.ts`. There is no backend.
+- Everything else (fields, sprays, offers, factories) is mock data in `src/data/mock.ts`. There is no backend (for now).
 - Camera: on a phone or a browser with a camera it uses the live camera. Without permission it falls back to "Choose a photo" or "Use sample photo".
 
 ## Project layout
