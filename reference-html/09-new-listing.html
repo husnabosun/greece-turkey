@@ -1,0 +1,119 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+:root{--bg:#FAFAF8;--text:#151515;--muted:#6B6B6B;--line:#E6E6E2;--terra:#C9553A;--pink:#FBE6DE;--mustard:#C9A13B;--green:#3F6B2F;--blue:#2E6FB0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:linear-gradient(160deg,#dfe9f3,#c9dbec);width:520px;height:960px;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;color:var(--text)}
+.phone{width:410px;height:870px;background:#1c1c1c;border-radius:62px;padding:12px;box-shadow:0 30px 60px rgba(40,60,90,.3)}
+.screen{position:relative;width:100%;height:100%;border-radius:50px;overflow:hidden;background:var(--bg)}
+.status{position:relative;height:54px;display:flex;justify-content:space-between;align-items:center;padding:0 30px 0 34px;font-weight:600;font-size:16px}
+.island{position:absolute;left:50%;top:11px;transform:translateX(-50%);width:120px;height:34px;background:#000;border-radius:20px}
+.content{padding:10px 20px 0}
+.top{display:flex;justify-content:space-between;align-items:flex-start}
+h1{font-size:27px;line-height:1.12;font-weight:800;letter-spacing:-.7px}
+.actions{display:flex;gap:9px}
+.circ{width:42px;height:42px;border-radius:50%;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;position:relative;font-weight:700;font-size:14px}
+.circ.en{border-color:#bbb}
+.circ i{position:absolute;top:10px;right:11px;width:7px;height:7px;border-radius:50%;background:#E5473A}
+.fields{display:flex;gap:8px;margin-top:14px;overflow:hidden;white-space:nowrap}
+.fp{flex:none;height:36px;border-radius:18px;padding:0 13px;display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;background:#fff;border:1px solid var(--line);color:#333}
+.fp.on{background:var(--text);color:#fff;border-color:var(--text)}
+.dot{width:8px;height:8px;border-radius:50%}
+.weather{margin-top:14px;height:46px;border-radius:16px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;padding:0 16px;font-size:14.5px;font-weight:600;gap:8px}
+.weather .sep{width:1px;height:22px;background:var(--line);margin:0 12px}
+.weather .m{color:var(--muted);font-weight:500}
+.today{position:relative;margin-top:14px;background:var(--pink);border-radius:22px;padding:18px 18px 18px}
+.fieldtag{display:inline-flex;align-items:center;gap:6px;background:#fff;border-radius:12px;padding:5px 10px;font-size:12px;font-weight:700;color:#333}
+.kicker{margin-top:12px;font-size:11.5px;font-weight:700;letter-spacing:1.4px;color:var(--terra)}
+.today h2{font-size:23px;font-weight:800;line-height:1.14;margin-top:6px;letter-spacing:-.5px;max-width:240px}
+.today p{font-size:14px;margin-top:6px;color:#5a5a5a}
+.leaf{position:absolute;top:56px;right:18px;width:58px;height:58px;border-radius:50%;background:#F6CFC2;display:flex;align-items:center;justify-content:center}
+.btn{margin-top:14px;display:inline-flex;align-items:center;gap:9px;background:var(--terra);color:#fff;border-radius:24px;height:44px;padding:0 20px;font-size:15px;font-weight:700}
+.pager{position:absolute;right:18px;bottom:22px;font-size:12px;font-weight:600;color:#9a6b5c}
+.chips{display:flex;gap:8px;margin-top:12px}
+.chip{flex:1;height:40px;border-radius:14px;background:#fff;border:1.5px solid;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13.5px;font-weight:700}
+.sechead{display:flex;justify-content:space-between;align-items:baseline;margin-top:18px}
+.sec{font-size:17px;font-weight:800}
+.see{font-size:13px;color:var(--muted);font-weight:500}
+.cards{display:flex;gap:10px;margin-top:10px;width:520px}
+.fc{flex:none;width:224px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:12px}
+.fch{display:flex;justify-content:space-between;align-items:center}
+.fname{font-size:15px;font-weight:800}
+.fsub{font-size:11.5px;color:var(--muted);margin-top:1px}
+.score{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
+.rows{margin-top:10px;display:flex;flex-direction:column;gap:7px}
+.row{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#333}
+.pill{margin-left:auto;font-size:11px;font-weight:700;padding:2px 8px;border-radius:9px}
+.nav{position:absolute;left:14px;right:14px;bottom:20px;height:76px;background:#fff;border-radius:26px;display:flex;justify-content:space-around;align-items:center;box-shadow:0 8px 26px rgba(0,0,0,.08);border:1px solid #eee}
+.ni{width:60px;display:flex;flex-direction:column;align-items:center;gap:5px;color:#555;font-size:11.5px;font-weight:500}
+.ni .ic{width:28px;height:28px;display:flex;align-items:center;justify-content:center}
+.ni.on{color:#111;font-weight:700}
+.ni.on .ic{width:46px;height:46px;border-radius:50%;background:#151515;margin-top:-6px}
+.home{position:absolute;bottom:7px;left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:#1d1d1d}
+.tabs{display:flex;border-radius:14px;padding:4px}.tab{flex:1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:13.5px;font-weight:600;color:#555}.tab.on{background:#fff;color:#151515;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.08)}.pr{display:flex;align-items:center;justify-content:space-between;margin-top:6px;border:1.5px solid #151515;border-radius:16px;height:58px;padding:0 8px}
+.pv{font-size:28px;font-weight:800;letter-spacing:-.5px}
+.pm2{width:42px;height:42px;border-radius:50%;background:#F1EFEA;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700}
+.track{position:relative;margin-top:16px;height:8px;border-radius:4px;background:#ECEAE4}
+.fair{position:absolute;left:35%;width:40%;top:0;bottom:0;border-radius:4px;background:#9DC08A}
+.dotm{position:absolute;left:58%;top:-7px;width:22px;height:22px;margin-left:-11px;border-radius:50%;background:#151515;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+</style><style>
+.hdr{display:flex;align-items:center;gap:12px}
+.back{width:40px;height:40px;border-radius:50%;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+.ht{font-size:20px;font-weight:800}
+.steps{margin-left:auto;display:flex;gap:5px}.steps i{width:22px;height:5px;border-radius:3px;background:#E3E1DB}.steps i.on{background:#151515}
+.lab{font-size:12.5px;font-weight:700;color:var(--muted);margin-top:14px;margin-bottom:6px}
+.fsel{background:#fff;border:1.5px solid #151515;border-radius:18px;padding:10px 12px;display:flex;align-items:center;gap:10px}
+.fsel .sb{width:40px;height:40px;border-radius:50%;background:#E7F0E2;color:var(--green);display:flex;align-items:center;justify-content:center;font-weight:800}
+.chg{margin-left:auto;font-size:12.5px;font-weight:700;color:var(--blue)}
+.auto{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.auto span{font-size:11.5px;font-weight:600;background:#F1EFEA;border-radius:9px;padding:4px 9px;color:#444}
+.row2{display:flex;gap:10px}
+.box{flex:1;background:#fff;border:1px solid var(--line);border-radius:16px;padding:10px 12px}
+.bl{font-size:11.5px;color:var(--muted);font-weight:600}
+.stp{display:flex;align-items:center;justify-content:space-between;margin-top:4px}
+.stp b{font-size:20px;font-weight:800}.stp b small{font-size:12px;color:var(--muted)}
+.pm{width:30px;height:30px;border-radius:50%;background:#F1EFEA;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px}
+.bv{font-size:15px;font-weight:800;margin-top:6px}
+.ai{margin-top:12px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:14px}
+.aih{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:.8px;color:var(--green)}
+.rng{font-size:28px;font-weight:800;margin-top:6px;letter-spacing:-.6px}.rng small{font-size:13px;color:var(--muted);font-weight:600}
+.scale{position:relative;margin-top:26px;height:10px;border-radius:5px;background:linear-gradient(90deg,#F2C9BB 0 30%,#CFE2C3 30% 75%,#E8E0C9 75%)}
+.sl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:5px;font-weight:600}
+.mk{position:absolute;top:-6px;width:3px;height:22px;border-radius:2px;background:#8a8a85}
+.mk span{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:10px;font-weight:700;color:#666}
+.you{position:absolute;top:-9px;width:28px;height:28px;margin-left:-14px;border-radius:50%;background:#151515;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.inp{margin-top:12px;display:flex;align-items:center;gap:10px}
+.field{flex:1;height:46px;border-radius:14px;border:1.5px solid #151515;display:flex;align-items:center;padding:0 14px;font-size:17px;font-weight:800}
+.field small{margin-left:auto;font-size:12px;color:var(--muted);font-weight:600}
+.ok{font-size:12px;font-weight:700;color:var(--green);display:flex;align-items:center;gap:5px}
+.why{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+.wr{display:flex;justify-content:space-between;font-size:12px;font-weight:600;padding:2px 0}
+.pub{position:absolute;left:20px;right:20px;bottom:30px;height:54px;border-radius:27px;background:#151515;color:#fff;display:flex;align-items:center;justify-content:center;gap:9px;font-size:16px;font-weight:700}
+</style></head><body><div class="phone"><div class="screen"><div class="status"><span>9:41</span><div class="island"></div><div style="display:flex;gap:6px;align-items:center"><svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1" fill="#151515"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="#151515"/><rect x="10" y="3" width="3" height="9" rx="1" fill="#151515"/><rect x="15" y="0" width="3" height="12" rx="1" fill="#151515"/></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 11.5l2.2-2.6a3.2 3.2 0 00-4.4 0z M3.6 6.6a6.3 6.3 0 018.8 0l1.4-1.6a8.5 8.5 0 00-11.6 0z M.8 3.4a10.4 10.4 0 0114.4 0L16 2.4a12 12 0 00-16 0z" fill="#151515"/></svg><svg width="27" height="13" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="#151515" opacity=".4"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#151515"/><rect x="24.5" y="4.5" width="2" height="4" rx="1" fill="#151515" opacity=".4"/></svg></div></div>
+<div class="content">
+ <div class="hdr"><div class="back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#151515" stroke-width="2.4" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></div><div class="ht">New listing</div><div class="steps"><i class="on"></i><i class="on"></i><i></i></div></div>
+ <div class="lab">FIELD</div>
+ <div class="fsel"><div class="sb">86</div><div><div style="font-size:15px;font-weight:800">River plot</div><div style="font-size:11.5px;color:var(--muted)">Quality profile attached automatically</div></div><div class="chg">Change</div></div>
+ <div class="auto"><span>Ayvalık variety</span><span>140 trees</span><span>✓ Safe to harvest</span><span>✓ No issues</span></div>
+ <div class="row2" style="margin-top:12px">
+  <div class="box"><div class="bl">How much?</div><div class="stp"><div class="pm">–</div><b>2.5 <small>t</small></b><div class="pm">+</div></div></div>
+  <div class="box"><div class="bl">Harvest</div><div class="bv">3–10 Nov</div></div>
+ </div>
+ <div class="lab" style="margin-top:12px">DELIVERY</div>
+ <div class="tabs" style="margin-top:0;background:#F1EFEA"><div class="tab on" style="height:40px">🚚 Factory picks up</div><div class="tab" style="height:40px">I deliver</div></div>
+ <div class="ai">
+  <div class="aih"><svg width="15" height="15" viewBox="0 0 24 24" fill="#3F6B2F"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8zM19 14l.9 2.6 2.6.9-2.6.9L19 21l-.9-2.6-2.6-.9 2.6-.9z"/></svg>AI SUGGESTS <span style="color:#151515;letter-spacing:0;font-size:14px;margin-left:4px">€0.84 – €0.92 /kg</span></div>
+  <div class="bl" style="margin-top:12px">Your price per kg</div>
+  <div class="pr"><div class="pm2">–</div><div class="pv">€0.88</div><div class="pm2">+</div></div>
+  <div class="track"><div class="fair"></div><div class="dotm"></div></div>
+  <div class="sl"><span>Low</span><span style="color:var(--green)">✓ Fair price</span><span>High</span></div>
+  <div class="why"><div style="font-size:12.5px;font-weight:800;margin-bottom:3px">Why this price?</div>
+   <div class="wr"><span>Quality score 86</span><span style="color:var(--green)">+ €0.06</span></div>
+   <div class="wr"><span>No banned products</span><span style="color:var(--green)">+ €0.03</span></div>
+   <div class="wr"><span>Exchange price today</span><span style="color:#151515">€0.78</span></div>
+  </div>
+ </div>
+</div>
+<div class="pub">Publish listing<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+<div class="home"></div>
+</div></div></body></html>
