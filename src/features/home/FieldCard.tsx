@@ -8,8 +8,9 @@ const levelTone: Record<Level, PillTone> = { high: 'risk', medium: 'warn', low: 
 const levelLabel: Record<Level, string> = { high: 'High', medium: 'Medium', low: 'Low', good: 'Good' };
 const levelDot: Record<Level, string> = { high: colors.risk, medium: colors.warn, low: colors.good, good: colors.good };
 
-export function FieldCard({ field, onPress }: { field: Field; onPress: () => void }) {
-  const { pest, harvest } = field;
+export function FieldCard({ field, pest: livePest, onPress }: { field: Field; pest?: { name: string; level: Level }; onPress: () => void }) {
+  const { harvest } = field;
+  const pest = livePest ?? field.pest;
   const low = field.score < 70;
   return (
     <Pressable onPress={onPress} className="w-[236px]">

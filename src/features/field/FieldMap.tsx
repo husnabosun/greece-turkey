@@ -32,9 +32,11 @@ interface Props {
   showHealth: boolean;
   onToggleHealth: (v: boolean) => void;
   onLocate: () => void;
+  /** Ring colour of healthy trees: follows the field's highest current risk. */
+  ringColor?: string;
 }
 
-export function FieldMap({ trees, selectedId, onSelect, showHealth, onToggleHealth, onLocate }: Props) {
+export function FieldMap({ trees, selectedId, onSelect, showHealth, onToggleHealth, onLocate, ringColor = colors.good }: Props) {
   const [zoom, setZoom] = useState(1);
   return (
     <View className="h-[300px] overflow-hidden rounded-[18px] bg-[#4B7A36]">
@@ -59,7 +61,7 @@ export function FieldMap({ trees, selectedId, onSelect, showHealth, onToggleHeal
                       height: size - 2,
                       borderRadius: size,
                       borderWidth: t.status === 'healthy' ? 3 : 2,
-                      borderColor: t.status === 'healthy' ? colors.good : '#fff',
+                      borderColor: t.status === 'healthy' ? ringColor : '#fff',
                       backgroundColor: t.status === 'healthy' ? '#fff' : statusColor[t.status],
                     }}
                   />

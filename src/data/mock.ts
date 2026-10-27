@@ -1,8 +1,26 @@
 /** Seed data for the demo. All names, places and numbers come from here. */
+import { dateLabel, daysAgoAt, whenLabel } from '../lib/dates';
+import type { ThreatId } from '../lib/risk/types';
+
 export type Level = 'high' | 'medium' | 'low' | 'good';
+
+/** A known place that can harm a field, e.g. a coal power plant. Used by the location risk rule. */
+export interface LocationRisk {
+  kind: 'coal-plant';
+  label: string;
+  km: number;
+  /** Compass bearing from the field to the source, in degrees (0 = north). */
+  bearingDeg: number;
+}
 
 export interface Field {
   id: string;
+  /** Field centre, used for the weather forecast. */
+  lat: number;
+  lon: number;
+  /** Days since the trees were last pruned, if known. Fresh cuts are wounds for olive knot. */
+  prunedDaysAgo?: number;
+  locationRisks?: LocationRisk[];
   name: string;
   trees: number;
   ha: number;
@@ -29,23 +47,29 @@ export interface Spray {
   id: string;
   fieldId: string;
   product: string;
+  /** When the spray was applied (milliseconds). */
+  ts: number;
+  /** Short date for lists, e.g. "12 Oct". */
   date: string;
   area: string;
   dose: string;
   banned: boolean;
+  /** Threats this spray protects against, for as long as its protection window lasts. */
+  targets?: ThreatId[];
+  protectionDays?: number;
   /** Short description shown next to "Approved for olives". */
   tag?: string;
   /** Shown in the "Approved for olives" box. */
   licence?: string;
   stage?: number;
-  /** Warning shown under the record, e.g. rain after spraying. */
-  note?: string;
 }
 
 export interface SprayProduct {
   name: string;
   dose: string;
   banned: boolean;
+  targets?: ThreatId[];
+  protectionDays?: number;
   tag?: string;
   licence?: string;
   stage?: number;
@@ -149,11 +173,16 @@ export const farmerGroups = [
 ];
 
 export const farmer = { name: 'Mehmet', place: 'Germencik, Aydın' };
+/** Where a new field is placed until the farmer draws it: the middle of the three demo fields. */
+export const farmerLocation = { lat: 39.325, lon: 26.7 };
 export const weather = { temp: 22, sky: 'Sunny', next: 'Rain tomorrow' };
 
 export const fields: Field[] = [
   {
     id: 'north',
+    lat: 39.33,
+    lon: 26.7,
+    prunedDaysAgo: 10,
     name: 'North grove',
     trees: 120,
     ha: 1.1,
@@ -172,6 +201,8 @@ export const fields: Field[] = [
   },
   {
     id: 'river',
+    lat: 39.3,
+    lon: 26.72,
     name: 'River plot',
     trees: 140,
     ha: 0.8,
@@ -189,6 +220,9 @@ export const fields: Field[] = [
   },
   {
     id: 'hill',
+    lat: 39.345,
+    lon: 26.68,
+    locationRisks: [{ kind: 'coal-plant', label: 'coal power plant', km: 4, bearingDeg: 0 }],
     name: 'Hill',
     trees: 90,
     ha: 0.7,
@@ -207,21 +241,35 @@ export const fields: Field[] = [
 ];
 
 export const sprayProducts: SprayProduct[] = [
-  { name: 'Copper oxychloride', dose: '3 kg/ha', banned: false, licence: '12-4471', stage: 75 },
-  { name: 'Kaolin clay', dose: '50 kg/ha', banned: false, tag: 'natural fly barrier', licence: '09-2210', stage: 71 },
+  { name: 'Copper oxychloride', dose: '3 kg/ha', banned: false, targets: ['peacock-spot', 'anthracnose', 'olive-knot'], protectionDays: 14, licence: '12-4471', stage: 75 },
+  { name: 'Kaolin clay', dose: '50 kg/ha', banned: false, targets: ['olive-fly', 'olive-moth'], protectionDays: 10, tag: 'natural fly barrier', licence: '09-2210', stage: 71 },
   { name: 'Chlorpyrifos product', dose: '1 l/ha', banned: true },
 ];
 
+const spray = (id: string, fieldId: string, productName: string, days: number, hour: number, area: string): Spray => {
+  const p = sprayProducts.find((x) => x.name === productName)!;
+  const ts = daysAgoAt(days, hour);
+  return {
+    id,
+    fieldId,
+    product: p.name,
+    ts,
+    date: dateLabel(ts),
+    area,
+    dose: p.dose,
+    banned: p.banned,
+    targets: p.targets,
+    protectionDays: p.protectionDays,
+    tag: p.tag,
+    licence: p.licence,
+    stage: p.stage,
+  };
+};
+
 export const sprays: Spray[] = [
-  { id: 's1', fieldId: 'north', product: 'Chlorpyrifos product', date: '12 Oct', area: 'North grove, rows 1–6', dose: '1 l/ha', banned: true },
-  {
-    id: 's2', fieldId: 'north', product: 'Copper oxychloride', date: '18 Sep', area: 'whole field', dose: '3 kg/ha',
-    banned: false, licence: '12-4471', stage: 75, note: 'It rained 4 hours later. The spray may have washed off.',
-  },
-  {
-    id: 's3', fieldId: 'north', product: 'Kaolin clay', date: '2 Aug', area: 'whole field', dose: '50 kg/ha',
-    banned: false, tag: 'natural fly barrier', licence: '09-2210', stage: 71,
-  },
+  spray('s1', 'north', 'Chlorpyrifos product', 15, 9, 'North grove, rows 1–6'),
+  spray('s2', 'north', 'Copper oxychloride', 9, 10, 'whole field'),
+  spray('s3', 'north', 'Kaolin clay', 86, 10, 'whole field'),
 ];
 
 export const tasks: Task[] = [
@@ -254,52 +302,6 @@ export const marketTrend = { pct: 6, avgPrice: 0.95 };
 export const initialNotifications = [
   { id: 'n1', emoji: '📸', title: 'Send a photo of your fly trap', body: 'Fly numbers rose 60% near River plot. Takes 10 seconds.', when: 'now' },
   { id: 'n2', emoji: '💧', title: 'Did you spray this week?', body: 'Peacock spot risk was high in North grove. Tap Yes or No.', when: '1h ago' },
-];
-
-export type RiskLevel = 'low' | 'medium' | 'high';
-export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
-
-export const forecasts: Record<'pests' | 'weather', { title: string; subtitle: string; note: string; levels: RiskLevel[] }> = {
-  pests: {
-    title: '7-day forecast',
-    subtitle: 'Olive fly risk · North grove',
-    note: 'Higher risk on Wed–Thu due to warm temperatures. Check traps and monitor closely.',
-    levels: ['low', 'low', 'medium', 'high', 'medium', 'medium', 'low'],
-  },
-  weather: {
-    title: '7-day rain',
-    subtitle: 'Rain risk · North grove',
-    note: 'Rain is likely on Tue–Wed. Wet leaves help peacock spot spread, so check leaves afterwards.',
-    levels: ['low', 'medium', 'high', 'medium', 'low', 'low', 'low'],
-  },
-};
-
-export const alerts: AlertItem[] = [
-  {
-    id: 'al1', tab: 'pests', title: 'Olive fly', where: 'North grove · 2 hours ago', level: 'high',
-    text: 'Trap counts increased by 60% this week. Check traps and consider control measures.',
-    ai: 'The fly lays eggs in the olive fruit when it is warm. Check the yellow traps every two days.',
-  },
-  {
-    id: 'al2', tab: 'pests', title: 'Peacock spot', where: 'North grove · today', level: 'medium',
-    text: 'Early spots detected on Tree #23. Monitor leaves, especially after rain.',
-    ai: 'Round dark spots on the leaves are peacock spot. Prune for airflow and remove fallen leaves.',
-  },
-  {
-    id: 'al3', tab: 'weather', title: 'Rain tomorrow', where: 'North grove · tomorrow', level: 'medium',
-    text: 'About 12 mm of rain is expected. Wet leaves help peacock spot spread.',
-    ai: 'Do not spray right before rain, it washes the product off. Check the leaves after the rain.',
-  },
-  {
-    id: 'al4', tab: 'weather', title: 'Warm week', where: 'All fields · today', level: 'low',
-    text: 'Temperatures stay above 25 °C until Saturday.',
-    ai: 'Warm weather makes the olive fly more active. Check the traps more often.',
-  },
-  {
-    id: 'al5', tab: 'location', title: 'Location risk', where: 'Hill · coal power plant 4 km away', level: 'action',
-    text: 'Ash can settle on olives this week (north wind).',
-    ai: 'Wash the olives before delivery or order a lab test.',
-  },
 ];
 
 /** Points the Hill quality score loses if the location risk is ignored. */
@@ -369,13 +371,24 @@ export interface Scan {
   recheckDue?: boolean;
 }
 
-const day = (month: number, d: number, h = 9, m = 0) => Date.UTC(2026, month, d, h, m);
+const scan = (
+  id: string,
+  daysAgo: number,
+  hour: number,
+  minute: number,
+  rest: Omit<Scan, 'id' | 'date' | 'when' | 'ts'>,
+): Scan => {
+  const ts = Math.min(daysAgoAt(daysAgo, hour, minute), Date.now() - 60_000);
+  return { id, ts, date: dateLabel(ts), when: whenLabel(ts), ...rest };
+};
+
+const PEACOCK = 'Spilocaea oleaginea · early stage';
 
 export const initialScans: Scan[] = [
-  { id: 'sc1', fieldId: 'north', treeId: 23, mode: 'leaf', title: 'Peacock spot', latin: 'Spilocaea oleaginea · early stage', tone: 'high', pill: 'High risk', confidence: 92, date: '12 Oct', when: '12 Oct, 08:40', ts: day(9, 12, 8, 40), photo: 'leaf-spots', spots: 4 },
-  { id: 'sc2', fieldId: 'north', treeId: 23, mode: 'leaf', title: 'Peacock spot', latin: 'Spilocaea oleaginea · early stage', tone: 'medium', pill: 'Medium risk', confidence: 90, date: 'Today', when: 'Today, 09:12', ts: day(9, 27, 9, 12), photo: 'leaf-spots', spots: 1 },
-  { id: 'sc3', fieldId: 'north', treeId: 41, mode: 'leaf', title: 'Peacock spot', latin: 'Spilocaea oleaginea · early stage', tone: 'high', pill: 'High risk', confidence: 88, date: '2 Oct', when: '2 Oct, 10:05', ts: day(9, 2, 10, 5), photo: 'leaf-spots', spots: 3, recheckDue: true },
-  { id: 'sc4', fieldId: 'north', treeId: 12, mode: 'leaf', title: 'Healthy leaf', tone: 'healthy', pill: 'Healthy', confidence: 94, date: '28 Sep', when: '28 Sep, 17:20', ts: day(8, 28, 17, 20), photo: 'leaf-healthy' },
-  { id: 'sc5', fieldId: 'river', mode: 'trap', title: 'Fly trap', tone: 'medium', pill: 'Medium risk', confidence: 88, date: 'Today', when: 'Today, 07:50', ts: day(9, 27, 7, 50), photo: 'trap', flies: 14 },
-  { id: 'sc6', fieldId: 'river', mode: 'fruit', title: 'Olive fly sting', latin: 'Bactrocera oleae', tone: 'watch', pill: 'Watch', confidence: 77, date: '20 Oct', when: '20 Oct, 12:15', ts: day(9, 20, 12, 15), photo: 'fruit' },
+  scan('sc1', 15, 8, 40, { fieldId: 'north', treeId: 23, mode: 'leaf', title: 'Peacock spot', latin: PEACOCK, tone: 'high', pill: 'High risk', confidence: 92, photo: 'leaf-spots', spots: 4 }),
+  scan('sc2', 0, 9, 12, { fieldId: 'north', treeId: 23, mode: 'leaf', title: 'Peacock spot', latin: PEACOCK, tone: 'medium', pill: 'Medium risk', confidence: 90, photo: 'leaf-spots', spots: 1 }),
+  scan('sc3', 25, 10, 5, { fieldId: 'north', treeId: 41, mode: 'leaf', title: 'Peacock spot', latin: PEACOCK, tone: 'high', pill: 'High risk', confidence: 88, photo: 'leaf-spots', spots: 3, recheckDue: true }),
+  scan('sc4', 29, 17, 20, { fieldId: 'north', treeId: 12, mode: 'leaf', title: 'Healthy leaf', tone: 'healthy', pill: 'Healthy', confidence: 94, photo: 'leaf-healthy' }),
+  scan('sc5', 0, 7, 50, { fieldId: 'river', mode: 'trap', title: 'Fly trap', tone: 'medium', pill: 'Medium risk', confidence: 88, photo: 'trap', flies: 14 }),
+  scan('sc6', 7, 12, 15, { fieldId: 'river', mode: 'fruit', title: 'Olive fly sting', latin: 'Bactrocera oleae', tone: 'watch', pill: 'Watch', confidence: 77, photo: 'fruit' }),
 ];

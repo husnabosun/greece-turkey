@@ -58,7 +58,8 @@ src/
 - Background `#FAFAF8`, card `#FFFFFF`, text `#151515`, muted `#6B6B6B`, border `#E6E6E2`, soft grey `#F1EFEA`
 - High risk `#C9553A` (soft `#FBE6DE`), medium `#C9A13B` (soft `#F7EED6`), good `#3F6B2F` (soft `#E7F0E2`),
   accent blue `#2E6FB0` (soft `#E8F0F8`)
-- Dark cards (AI cards, summaries): `#151515` with green accent `#B9E09A`
+- AI cards follow the design in screens/latest for each screen. Do not make a card dark unless the PNG shows it dark.
+- Images in screens/latest always win over reference-html and over any rule in this file about colours or layout.
 - Font: Inter. Headings 800 weight. Cards: 1px border, radius 18–22. Pills/buttons: fully rounded.
 - AI content is always marked with a small ✦ sparkle icon.
 - Large touch targets (min 44 px) and short, plain English text (users have limited digital experience).

@@ -3,7 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Screen } from '@/components/Screen';
-import { AIBox, Card, FieldChips, Pill, type PillTone } from '@/components/ui';
+import { Card, FieldChips, Pill, type PillTone } from '@/components/ui';
 import type { Breakdown } from '@/data/mock';
 import { useActiveField, useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
@@ -23,23 +23,23 @@ function status(value: number): { label: string; tone: PillTone } {
 }
 
 function Ring({ score }: { score: number }) {
-  const r = 44;
+  const r = 47;
   const c = 2 * Math.PI * r;
   const color = score < 70 ? colors.risk : score < 80 ? colors.warn : colors.good;
   return (
-    <View className="h-[112px] w-[112px] items-center justify-center">
-      <Svg width={112} height={112} viewBox="0 0 112 112" style={{ position: 'absolute' }}>
-        <Circle cx={56} cy={56} r={r} stroke={colors.soft} strokeWidth={8} fill="none" />
+    <View className="h-[120px] w-[120px] items-center justify-center">
+      <Svg width={120} height={120} viewBox="0 0 120 120" style={{ position: 'absolute' }}>
+        <Circle cx={60} cy={60} r={r} stroke="#EDEDEA" strokeWidth={11} fill="none" />
         <Circle
-          cx={56}
-          cy={56}
+          cx={60}
+          cy={60}
           r={r}
           stroke={color}
-          strokeWidth={8}
+          strokeWidth={11}
           fill="none"
           strokeLinecap="round"
           strokeDasharray={`${(c * score) / 100} ${c}`}
-          transform="rotate(-90 56 56)"
+          transform="rotate(-90 60 60)"
         />
       </Svg>
       <Text className="font-i8 text-ap-title text-ink">{`${score}%`}</Text>
@@ -53,13 +53,14 @@ export function QualityScreen() {
   const fields = useStore((s) => s.fields);
   const selectField = useStore((s) => s.selectField);
   const showToast = useStore((s) => s.showToast);
+  const answers = useStore((s) => s.feedback.length);
   const down = field.trend.pct < 0;
 
   return (
     <Screen tabs={false}>
       <ScreenHeader back title="Quality score" />
       <View className="mt-2.5">
-        <FieldChips fields={fields} selected={field.id} onSelect={selectField} />
+        <FieldChips fields={fields} selected={field.id} onSelect={selectField} tone="black" />
       </View>
 
       <Card className="mt-2 flex-row items-center p-3">
@@ -105,18 +106,27 @@ export function QualityScreen() {
         })}
       </Card>
 
-      <View className="mt-2">
-        <AIBox title="AI plan to increase the score">
-          <Text className="mt-0.5 font-i5 text-ap-small text-white/70">{`Complete these ${field.plan.length} steps to improve your quality score.`}</Text>
-          {field.plan.map((step, i) => (
-            <View key={step.text} className="mt-2 flex-row items-start border-t border-white/10 pt-2">
-              <Text className="w-5 font-i8 text-ap-body text-white">{`${i + 1}.`}</Text>
-              <Text className="flex-1 font-i5 text-ap-body text-white">{step.text}</Text>
-              <Text className="ml-2 font-i8 text-ap-body text-lime">{`+${step.points}`}</Text>
-            </View>
-          ))}
-        </AIBox>
-      </View>
+      <Text className="mt-2 text-center font-i5 text-ap-small text-muted">{`Your feedback helps the forecast learn · ${answers} answer${answers === 1 ? '' : 's'}`}</Text>
+
+      <Card className="mt-2 p-3">
+        <View className="flex-row items-start justify-between">
+          <View className="flex-1">
+            <Text className="font-i8 text-ap-card text-ink">AI Plan to Increase the Score</Text>
+            <Text className="font-i5 text-ap-body text-muted">{`Complete these ${field.plan.length} steps to improve your quality score.`}</Text>
+          </View>
+          <Pressable onPress={() => showToast('Score gain: the points you win when you finish the step')} accessibilityLabel="Score gain info" className="h-8 flex-row items-center gap-1">
+            <Text className="font-i5 text-ap-small text-muted">Score gain</Text>
+            <Info size={16} color={colors.muted} />
+          </Pressable>
+        </View>
+        {field.plan.map((step, i) => (
+          <View key={step.text} className="mt-2 flex-row items-start border-t border-line pt-2">
+            <Text className="w-6 font-i8 text-ap-body text-ink">{`${i + 1}.`}</Text>
+            <Text className="flex-1 font-i5 text-ap-body text-ink">{step.text}</Text>
+            <Text className="ml-2 font-i8 text-ap-body text-good">{`+${step.points}`}</Text>
+          </View>
+        ))}
+      </Card>
     </Screen>
   );
 }

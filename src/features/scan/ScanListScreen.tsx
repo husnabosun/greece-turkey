@@ -140,7 +140,7 @@ export function ScanListScreen() {
       <Pressable
         onPress={() => openCamera(router, { fieldId: filterField })}
         accessibilityRole="button"
-        className="absolute right-5 z-30 h-12 flex-row items-center gap-2 rounded-full bg-ink px-5"
+        className="absolute right-5 z-30 h-12 flex-row items-center gap-2 rounded-full bg-primary px-5"
         style={{ bottom: offset + 12, boxShadow: '0 6px 16px rgba(0,0,0,0.2)' }}
       >
         <Camera size={18} color="#fff" />

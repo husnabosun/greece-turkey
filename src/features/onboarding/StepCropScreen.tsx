@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/Screen';
 import { Button, Card } from '@/components/ui';
-import type { Field } from '@/data/mock';
+import { farmerLocation, type Field } from '@/data/mock';
 import {
   haFromTrees,
   PROOFS,
@@ -83,6 +83,8 @@ export function StepCropScreen() {
     const name = draft.name.trim() || 'New field';
     addField({
       name,
+      lat: farmerLocation.lat,
+      lon: farmerLocation.lon,
       trees: draft.trees,
       ha: haFromTrees(draft.trees),
       variety: draft.variety,

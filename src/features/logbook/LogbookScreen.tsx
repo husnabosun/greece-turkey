@@ -6,11 +6,11 @@ import Svg, { Circle, Rect } from 'react-native-svg';
 import { RoundButton, ScreenHeader } from '@/components/ScreenHeader';
 import { Screen, useTabBarOffset } from '@/components/Screen';
 import { Card, FieldChips } from '@/components/ui';
-import { nearbyFarms } from '@/data/mock';
+import { nearbyFarms, type Spray } from '@/data/mock';
 import { useActiveField, useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { AddSpraySheet } from './AddSpraySheet';
-import { SprayCard, sprayColor } from './SprayCard';
+import { SprayCard, sprayColor, useWashoff } from './SprayCard';
 
 function EuFlag() {
   const stars = Array.from({ length: 12 }, (_, i) => {
@@ -62,7 +62,7 @@ export function LogbookScreen() {
           }
         />
         <View className="mt-2.5">
-          <FieldChips fields={fields} selected={field.id} onSelect={selectField} />
+          <FieldChips fields={fields} selected={field.id} onSelect={selectField} tone="black" />
         </View>
 
         <View className="mt-2 flex-row gap-2">
@@ -108,18 +108,7 @@ export function LogbookScreen() {
         ) : (
           <View className="mt-1.5">
             {shown.map((s, i) => (
-              <View key={s.id} className="flex-row">
-                <View className="w-6 items-center">
-                  <View
-                    className="absolute w-px bg-line"
-                    style={i === shown.length - 1 ? { top: 0, height: 18 } : { top: i === 0 ? 18 : 0, bottom: 0 }}
-                  />
-                  <View className="mt-4 h-3 w-3 rounded-full" style={{ backgroundColor: sprayColor(s) }} />
-                </View>
-                <View className="flex-1 pb-1.5">
-                  <SprayCard spray={s} />
-                </View>
-              </View>
+              <TimelineRow key={s.id} spray={s} first={i === 0} last={i === shown.length - 1} />
             ))}
           </View>
         )}
@@ -136,6 +125,21 @@ export function LogbookScreen() {
       </Pressable>
 
       {adding ? <AddSpraySheet field={field} labelScan={labelScan} onClose={() => { setAdding(false); setLabelScan(false); }} /> : null}
+    </View>
+  );
+}
+
+function TimelineRow({ spray, first, last }: { spray: Spray; first: boolean; last: boolean }) {
+  const washoff = useWashoff(spray);
+  return (
+    <View className="flex-row">
+      <View className="w-6 items-center">
+        <View className="absolute w-px bg-line" style={last ? { top: 0, height: 18 } : { top: first ? 18 : 0, bottom: 0 }} />
+        <View className="mt-4 h-3 w-3 rounded-full" style={{ backgroundColor: sprayColor(spray, washoff) }} />
+      </View>
+      <View className="flex-1 pb-1.5">
+        <SprayCard spray={spray} />
+      </View>
     </View>
   );
 }

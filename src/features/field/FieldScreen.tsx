@@ -7,6 +7,7 @@ import { Screen } from '@/components/Screen';
 import { Card, Chip, FieldChips, Pill } from '@/components/ui';
 import type { Tree } from '@/data/mock';
 import { openCamera } from '@/features/scan/nav';
+import { currentRisk, LEVEL_COLOR, useRisk } from '@/state/risk';
 import { useActiveField, useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { FieldMap } from './FieldMap';
@@ -23,6 +24,7 @@ export function FieldScreen() {
   const selectedTreeId = useStore((s) => s.selectedTreeId);
   const selectTree = useStore((s) => s.selectTree);
   const [showHealth, setShowHealth] = useState(true);
+  const now = currentRisk(useRisk()[field.id]);
 
   const followUp = trees.filter((t) => t.status === 'diseased');
   const tree = trees.find((t) => t.id === selectedTreeId) ?? followUp[0] ?? null;
@@ -86,6 +88,7 @@ export function FieldScreen() {
           showHealth={showHealth}
           onToggleHealth={setShowHealth}
           onLocate={() => showToast('Showing your location')}
+          ringColor={LEVEL_COLOR[now?.level ?? 'Low']}
         />
       </View>
 
@@ -130,7 +133,7 @@ export function FieldScreen() {
             <Pressable
               onPress={() => openCamera(router, { fieldId: field.id, treeId: tree.id, mode: 'leaf' })}
               accessibilityRole="button"
-              className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-ink"
+              className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-primary"
             >
               <Camera size={15} color="#fff" />
               <Text className="font-i7 text-ap-pill text-white">Scan this tree</Text>

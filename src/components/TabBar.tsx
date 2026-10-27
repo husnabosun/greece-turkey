@@ -7,12 +7,13 @@ import { TAB_BAR_HEIGHT } from '@/theme/tokens';
 
 type BottomTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
-const TABS: Record<string, { label: string; Icon: LucideIcon }> = {
-  index: { label: 'Home', Icon: House },
-  field: { label: 'Field', Icon: Sprout },
-  scan: { label: 'Scan', Icon: Camera },
-  logbook: { label: 'Logbook', Icon: ScrollText },
-  market: { label: 'Market', Icon: ShoppingBasket },
+/** `circle` follows the PNG of each tab: dark green on Home, Field and Scan, black on Logbook and Market. */
+const TABS: Record<string, { label: string; Icon: LucideIcon; circle: string }> = {
+  index: { label: 'Home', Icon: House, circle: 'bg-primary' },
+  field: { label: 'Field', Icon: Sprout, circle: 'bg-primary' },
+  scan: { label: 'Scan', Icon: Camera, circle: 'bg-primary' },
+  logbook: { label: 'Logbook', Icon: ScrollText, circle: 'bg-ink' },
+  market: { label: 'Market', Icon: ShoppingBasket, circle: 'bg-ink' },
 };
 
 /** Solid bar fixed to the bottom edge: full width, white, 1 px top border, safe area added below. */
@@ -35,7 +36,7 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
             accessibilityLabel={tab.label}
             className="w-16 items-center"
           >
-            <View className={`h-9 w-9 items-center justify-center rounded-full ${focused ? 'bg-primary' : ''}`}>
+            <View className={`h-9 w-9 items-center justify-center rounded-full ${focused ? tab.circle : ''}`}>
               <tab.Icon size={22} strokeWidth={focused ? 2.2 : 1.8} color={focused ? '#fff' : '#444'} />
             </View>
             <Text className={`mt-0.5 text-ap-small ${focused ? 'font-i7 text-ink' : 'font-i5 text-muted'}`}>{tab.label}</Text>

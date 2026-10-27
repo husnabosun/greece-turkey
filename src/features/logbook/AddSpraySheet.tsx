@@ -4,7 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useTabBarOffset } from '@/components/Screen';
 import { Button, Chip } from '@/components/ui';
 import { sprayProducts, type Field } from '@/data/mock';
-import { formatDay } from '@/lib/dates';
+import { daysAgoAt, formatDay } from '@/lib/dates';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 
@@ -52,7 +52,10 @@ export function AddSpraySheet({ field, onClose, labelScan = false }: { field: Fi
     addSpray({
       fieldId: field.id,
       product: product.name,
+      ts: daysAgoAt(daysAgo, new Date().getHours()),
       date: formatDay(daysAgo),
+      targets: product.targets,
+      protectionDays: product.protectionDays,
       area: area === 'whole field' ? area : `${field.name}, ${area}`,
       dose: product.dose,
       banned: product.banned,

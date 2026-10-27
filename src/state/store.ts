@@ -19,7 +19,13 @@ import {
   type Task,
   type Tree,
 } from '@/data/mock';
+import { createFeedback, upsertFeedback, type FeedbackAnswer, type FeedbackEntry } from '@/lib/feedback';
+import type { Assessment } from '@/lib/risk';
+import { buildSignals } from '@/lib/risk/signals';
+import { seasonStage } from '@/lib/risk/season';
 import { nextTimestamp } from '@/lib/scans';
+import type { FieldWeather } from '@/lib/weather';
+import { loadAllWeather, loadFeedback, saveFeedback } from './services';
 import type { CropStage, RecordsKind, SprayCount } from '@/lib/onboarding';
 
 export interface Listing {
@@ -94,6 +100,11 @@ interface AppState {
   lastSavedScanId: string | null;
   /** Dark status bar in the phone frame (camera screens). */
   darkChrome: boolean;
+  /** Live, cached or demo weather per field. Missing until the first load finishes. */
+  weather: Record<string, FieldWeather>;
+  weatherLoading: boolean;
+  /** "Was this right?" answers, kept as training data. */
+  feedback: FeedbackEntry[];
   locationRiskDone: boolean;
   labTestOrdered: boolean;
   draft: OnboardingDraft;
@@ -103,6 +114,9 @@ interface AppState {
 
   selectField: (id: string | 'all') => void;
   selectTree: (id: number | null) => void;
+  loadWeather: (opts?: { force?: boolean }) => Promise<void>;
+  answerFeedback: (a: { fieldId: string; assessment: Assessment; answer: FeedbackAnswer; reason?: string }) => void;
+  hydrateFeedback: () => Promise<void>;
   setPendingScan: (scan: Scan | null) => void;
   setCaptureUri: (uri: string | null) => void;
   saveScan: () => void;
@@ -141,6 +155,9 @@ export const useStore = create<AppState>((set, get) => ({
   captureUri: null,
   lastSavedScanId: null,
   darkChrome: false,
+  weather: {},
+  weatherLoading: false,
+  feedback: [],
   locationRiskDone: false,
   labTestOrdered: false,
   draft: EMPTY_DRAFT,
@@ -150,6 +167,39 @@ export const useStore = create<AppState>((set, get) => ({
 
   selectField: (id) => set({ selectedFieldId: id, selectedTreeId: null }),
   selectTree: (id) => set({ selectedTreeId: id }),
+
+  loadWeather: async (opts) => {
+    set({ weatherLoading: true });
+    const fields = get().fields;
+    const results = await loadAllWeather(fields, opts);
+    set((s) => ({ weather: { ...s.weather, ...results }, weatherLoading: false }));
+  },
+
+  /** Saves a "Was this right?" answer with the prediction, the weather and the field signals. */
+  answerFeedback: ({ fieldId, assessment, answer, reason }) => {
+    const s = get();
+    const field = s.fields.find((f) => f.id === fieldId);
+    const w = s.weather[fieldId];
+    if (!field || !w) return;
+    const entry = createFeedback({
+      fieldId,
+      assessment,
+      answer,
+      reason,
+      season: seasonStage(assessment.day),
+      weatherSource: w.source,
+      weather: w.days,
+      signals: buildSignals(field, s.scans, s.sprays, s.locationRiskDone),
+    });
+    const next = upsertFeedback(s.feedback, entry);
+    set({ feedback: next });
+    void saveFeedback(next);
+  },
+
+  hydrateFeedback: async () => {
+    const stored = await loadFeedback();
+    if (stored.length) set((s) => ({ feedback: [...stored.filter((e) => !s.feedback.some((x) => x.id === e.id)), ...s.feedback] }));
+  },
 
   setPendingScan: (scan) => set({ pendingScan: scan }),
   setCaptureUri: (uri) => set({ captureUri: uri }),
