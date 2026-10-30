@@ -1,6 +1,7 @@
 /** Glue between the pure libs and the device: AsyncStorage for the weather cache and the feedback answers. */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Field } from '@/data/mock';
+import { LANGUAGES, type Language } from '@/lib/ai/schemas';
 import type { FeedbackEntry } from '@/lib/feedback';
 import { getFieldWeather, type FieldWeather, type WeatherStorage } from '@/lib/weather';
 
@@ -35,5 +36,24 @@ export async function saveFeedback(entries: FeedbackEntry[]): Promise<void> {
     await AsyncStorage.setItem(FEEDBACK_KEY, JSON.stringify(entries));
   } catch {
     // Storage is optional: the answers stay in memory.
+  }
+}
+
+const LANGUAGE_KEY = 'agropulse.language';
+
+export async function loadLanguage(): Promise<Language | null> {
+  try {
+    const raw = await AsyncStorage.getItem(LANGUAGE_KEY);
+    return LANGUAGES.find((l) => l === raw) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveLanguage(language: Language): Promise<void> {
+  try {
+    await AsyncStorage.setItem(LANGUAGE_KEY, language);
+  } catch {
+    // Storage is optional.
   }
 }

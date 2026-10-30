@@ -1,12 +1,14 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronRight, Info, Settings } from 'lucide-react-native';
+import { Check, ChevronRight, Info, Settings, Sparkles } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { RoundButton, ScreenHeader } from '@/components/ScreenHeader';
 import { Screen } from '@/components/Screen';
-import { Card, FieldChips, Pill, type PillTone } from '@/components/ui';
+import { AiTag, Card, FieldChips, Pill, type PillTone } from '@/components/ui';
 import type { Field } from '@/data/mock';
 import { THREAT_BY_ID, threatsInGroup, type Assessment, type RiskLevel, type ThreatGroup } from '@/lib/risk';
+import { topAssessments } from '@/lib/ai/mappers';
+import { useAdvice } from '@/state/ai';
 import { LEVEL_COLOR, useRisk, type FieldRiskView } from '@/state/risk';
 import { useActiveField, useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
@@ -108,6 +110,32 @@ function AlertRow({ field, a, first }: { field: Field; a: Assessment; first: boo
   );
 }
 
+/** The advisor text (✦) for one field: it explains the engine's numbers in the selected language. */
+function AdvisorCard({ fieldId, level }: { fieldId: string; level: RiskLevel }) {
+  const { advice, loading } = useAdvice(fieldId);
+  if (!advice) return null;
+  return (
+    <Card className="mt-2 p-3">
+      <View className="flex-row items-center justify-between">
+        <View className="flex-row items-center gap-1.5">
+          <Sparkles size={14} color={colors.good} />
+          <Text className="font-i7 text-ap-body text-good">Advisor</Text>
+        </View>
+        <Pill tone={PILL[level]}>{`${level} risk`}</Pill>
+      </View>
+      <Text className="mt-1.5 font-i7 text-ap-body text-ink">{advice.summary}</Text>
+      {advice.actions.map((x) => (
+        <View key={x} className="mt-1.5 flex-row items-start gap-1.5">
+          <Check size={14} color={colors.good} strokeWidth={3} />
+          <Text className="flex-1 font-i5 text-ap-body text-muted">{x}</Text>
+        </View>
+      ))}
+      <Text className="mt-1.5 font-i5 text-ap-small text-muted">{advice.whyNow}</Text>
+      {loading && advice.source === 'demo' ? null : <AiTag source={advice.source} className="mt-2" />}
+    </Card>
+  );
+}
+
 export function AlertsScreen() {
   const showToast = useStore((s) => s.showToast);
   const fields = useStore((s) => s.fields);
@@ -148,6 +176,8 @@ export function AlertsScreen() {
       <View className="mt-2">
         <FieldChips fields={fields} selected={field.id} onSelect={(id) => setFieldId(id)} />
       </View>
+
+      <AdvisorCard fieldId={field.id} level={topAssessments(view.risk)[0].level} />
 
       <Forecast list={view.risk[selected.id]} threatName={selected.name} fieldName={field.name} view={view} />
 

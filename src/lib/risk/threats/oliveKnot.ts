@@ -20,7 +20,8 @@ export const oliveKnot: Threat = {
     const pruning = pruneAge === undefined || pruneAge < 0 ? 0 : 1 - ramp(pruneAge, 0, cfg.pruningWoundDays);
     const leafFall = stage === 'harvest' ? cfg.leafFallWound : 0;
     const recent = pastDays(input, cfg.stormWindowDays);
-    const storm = recent.some((d) => d.maxGust > C.wind.thresholdKmh || d.tMin < C.frost.thresholdC) ? cfg.stormWound : 0;
+    // Frost, or hail-like wind: strong gusts together with heavy rain on the same day.
+    const storm = recent.some((d) => d.tMin < C.frost.thresholdC || (d.maxGust > cfg.hailGustKmh && d.rain >= cfg.hailRainMm)) ? cfg.stormWound : 0;
     const wounds = Math.max(pruning, leafFall, storm);
 
     const around = aroundDay(input, cfg.rainDaysBefore, cfg.rainDaysAfter);

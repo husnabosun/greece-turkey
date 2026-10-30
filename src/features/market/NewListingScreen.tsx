@@ -5,8 +5,8 @@ import { Pressable, Text, View } from 'react-native';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Pill } from '@/components/ui';
-import { tonsAvailable } from '@/data/mock';
-import { euroPrice, priceFactors, roundPrice, suggestedRange } from '@/lib/market';
+import { exchangePrice, tonsAvailable } from '@/data/mock';
+import { euroPrice, roundPrice } from '@/lib/market';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { factoryById, useFairPrice } from './shared';
@@ -22,8 +22,7 @@ export function NewListingScreen() {
   const request = params.factoryId ? factoryById(params.factoryId) : null;
   const [fieldId, setFieldId] = useState(params.fieldId && fields.some((f) => f.id === params.fieldId) ? params.fieldId : 'river');
   const field = fields.find((f) => f.id === fieldId)!;
-  const { fair, hasBanned } = useFairPrice(fieldId);
-  const range = suggestedRange(fair);
+  const { fair, range, factors, hasBanned } = useFairPrice(fieldId);
   const requestPrice = request ? roundPrice((request.priceLow + request.priceHigh) / 2) : null;
 
   const [tons, setTons] = useState(tonsAvailable);
@@ -150,6 +149,7 @@ export function NewListingScreen() {
             </Text>
           </View>
           <Text className="mt-0.5 font-i5 text-ap-small text-muted">Based on your field’s quality score and current market demand.</Text>
+          <Text className="mt-0.5 font-i5 text-ap-small text-muted">{exchangePrice.source}</Text>
         </View>
 
         <Text className="mb-1.5 mt-2.5 font-i5 text-ap-body text-muted">Your price per kg</Text>
@@ -166,10 +166,12 @@ export function NewListingScreen() {
 
         <View className="mt-2.5 rounded-xl bg-good-soft p-2.5">
           <Text className="mb-1 font-i8 text-ap-body text-ink">Why this price?</Text>
-          {priceFactors(field.score, hasBanned).map((f) => (
-            <View key={f.label} className="h-6 flex-row items-center justify-between">
-              <Text className="font-i5 text-ap-body text-ink">{f.label}</Text>
-              <Text className={`font-i6 text-ap-body ${f.amount ? 'text-good' : 'text-muted'}`}>{`+ ${euroPrice(f.amount)}`}</Text>
+          {factors.map((f) => (
+            <View key={f.label} className="min-h-6 flex-row items-center justify-between gap-2 py-0.5">
+              <Text className="flex-1 font-i5 text-ap-body text-ink">{f.label}</Text>
+              <Text className={`font-i6 text-ap-body ${f.kind === 'base' ? 'text-ink' : f.amount < 0 ? 'text-risk' : 'text-good'}`}>
+                {f.kind === 'base' ? euroPrice(f.amount) : `${f.amount < 0 ? '−' : '+'} ${euroPrice(Math.abs(f.amount))}`}
+              </Text>
             </View>
           ))}
         </View>

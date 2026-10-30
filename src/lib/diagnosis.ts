@@ -6,7 +6,7 @@ export interface Action {
   hint: string;
 }
 
-export type Diagnosis = Pick<Scan, 'title' | 'latin' | 'tone' | 'pill' | 'confidence' | 'photo' | 'spots' | 'flies'>;
+export type Diagnosis = Pick<Scan, 'title' | 'latin' | 'tone' | 'pill' | 'confidence' | 'photo' | 'spots' | 'flies' | 'source' | 'detail'>;
 
 export const PEACOCK_ACTIONS: Action[] = [
   { title: 'Prune for airflow', hint: 'Improve air circulation' },
@@ -26,6 +26,12 @@ const TRAP_ACTIONS: Action[] = [
   { title: 'Send a photo', hint: 'Again next week' },
 ];
 
+const RETAKE_ACTIONS: Action[] = [
+  { title: 'Take a new photo', hint: 'In daylight' },
+  { title: 'Move closer', hint: 'One olive or leaf' },
+  { title: 'Ask for help', hint: 'If still unsure' },
+];
+
 const HEALTHY_ACTIONS: Action[] = [
   { title: 'Keep checking', hint: 'Once a week' },
   { title: 'Scan after rain', hint: 'Wet leaves get spots' },
@@ -38,10 +44,10 @@ const HEALTHY_ACTIONS: Action[] = [
  */
 export function diagnose(mode: ScanMode, opts: { previousSpots?: number } = {}): Diagnosis {
   if (mode === 'fruit') {
-    return { title: 'Olive fly sting', latin: 'Bactrocera oleae', tone: 'watch', pill: 'Watch', confidence: 81, photo: 'fruit' };
+    return { title: 'Olive fly sting', latin: 'Bactrocera oleae', tone: 'watch', pill: 'Watch', confidence: 81, photo: 'fruit', source: 'demo' };
   }
   if (mode === 'trap') {
-    return { title: 'Fly trap', tone: 'medium', pill: 'Medium risk', confidence: 88, photo: 'trap', flies: 12 };
+    return { title: 'Fly trap', tone: 'medium', pill: 'Medium risk', confidence: 88, photo: 'trap', flies: 12, source: 'demo' };
   }
   const spots = opts.previousSpots ? Math.max(1, opts.previousSpots - 2) : 3;
   return {
@@ -52,6 +58,7 @@ export function diagnose(mode: ScanMode, opts: { previousSpots?: number } = {}):
     confidence: 92,
     photo: 'leaf-spots',
     spots,
+    source: 'demo',
   };
 }
 
@@ -68,18 +75,25 @@ export function scanTitle(scan: Pick<Scan, 'mode' | 'title' | 'treeId' | 'flies'
   return scan.treeId ? `Tree #${scan.treeId} · ${scan.title}` : scan.title;
 }
 
-export function explain(scan: Pick<Scan, 'mode' | 'tone' | 'title' | 'confidence' | 'flies'>): { headline: string; detail: string } {
+export function explain(scan: Pick<Scan, 'mode' | 'tone' | 'title' | 'confidence' | 'flies' | 'detail'>): { headline: string; detail: string } {
   const sure = confidencePhrase(scan.confidence);
+  const unclear = scan.title === 'Not clear';
   if (scan.mode === 'trap') {
+    if (scan.confidence < 40) {
+      return { headline: `We are not sure about the count (${scan.flies ?? 0} flies).`, detail: scan.detail ?? 'Lay the trap flat in daylight and take the photo again.' };
+    }
     return {
       headline: `We counted ${scan.flies ?? 0} flies on the trap.`,
-      detail: 'The number of flies shows how strong the attack is. Check the trap again in 2 days.',
+      detail: scan.detail ?? 'The number of flies shows how strong the attack is. Check the trap again in 2 days.',
     };
   }
   if (scan.mode === 'fruit') {
+    if (unclear) return { headline: 'We cannot tell from this photo.', detail: scan.detail ?? 'Take a new photo of one olive, close up and in daylight.' };
+    if (scan.tone === 'healthy') return { headline: `We are ${sure} this olive is healthy.`, detail: scan.detail ?? 'We found no marks on the fruit.' };
+    if (scan.title === 'Other damage') return { headline: `We see damage, but ${sure === 'not sure' ? 'we are not sure' : 'it is not olive fly'}.`, detail: scan.detail ?? 'Check the fruit again in a few days.' };
     return {
       headline: `We are ${sure} this is an olive fly sting.`,
-      detail: 'The olive fly lays its egg under the skin of the fruit. Look for a small dark dot.',
+      detail: scan.detail ?? 'The olive fly lays its egg under the skin of the fruit. Look for a small dark dot.',
     };
   }
   if (scan.tone === 'healthy') {
@@ -91,9 +105,10 @@ export function explain(scan: Pick<Scan, 'mode' | 'tone' | 'title' | 'confidence
   };
 }
 
-export function actionsFor(scan: Pick<Scan, 'mode' | 'tone'>): Action[] {
+export function actionsFor(scan: Pick<Scan, 'mode' | 'tone' | 'title' | 'confidence'>): Action[] {
+  if (scan.title === 'Not clear' || (scan.mode === 'trap' && scan.confidence < 40)) return RETAKE_ACTIONS;
   if (scan.mode === 'trap') return TRAP_ACTIONS;
-  if (scan.mode === 'fruit') return FRUIT_ACTIONS;
+  if (scan.mode === 'fruit') return scan.tone === 'healthy' ? HEALTHY_ACTIONS : FRUIT_ACTIONS;
   return scan.tone === 'healthy' ? HEALTHY_ACTIONS : PEACOCK_ACTIONS;
 }
 

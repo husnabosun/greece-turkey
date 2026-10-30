@@ -1,0 +1,9 @@
+{
+  "version": "v1",
+  "preprocess": "resize_center_crop",
+  "input_size": 256,
+  "value_range": [
+    0,
+    255
+  ]
+}

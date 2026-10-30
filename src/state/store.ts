@@ -19,13 +19,14 @@ import {
   type Task,
   type Tree,
 } from '@/data/mock';
+import type { Language } from '@/lib/ai/schemas';
 import { createFeedback, upsertFeedback, type FeedbackAnswer, type FeedbackEntry } from '@/lib/feedback';
 import type { Assessment } from '@/lib/risk';
 import { buildSignals } from '@/lib/risk/signals';
 import { seasonStage } from '@/lib/risk/season';
 import { nextTimestamp } from '@/lib/scans';
 import type { FieldWeather } from '@/lib/weather';
-import { loadAllWeather, loadFeedback, saveFeedback } from './services';
+import { loadAllWeather, loadFeedback, loadLanguage, saveFeedback, saveLanguage } from './services';
 import type { CropStage, RecordsKind, SprayCount } from '@/lib/onboarding';
 
 export interface Listing {
@@ -105,6 +106,8 @@ interface AppState {
   weatherLoading: boolean;
   /** "Was this right?" answers, kept as training data. */
   feedback: FeedbackEntry[];
+  /** Language of the AI advisor text (the app itself stays in English). */
+  language: Language;
   locationRiskDone: boolean;
   labTestOrdered: boolean;
   draft: OnboardingDraft;
@@ -117,6 +120,7 @@ interface AppState {
   loadWeather: (opts?: { force?: boolean }) => Promise<void>;
   answerFeedback: (a: { fieldId: string; assessment: Assessment; answer: FeedbackAnswer; reason?: string }) => void;
   hydrateFeedback: () => Promise<void>;
+  setLanguage: (language: Language) => void;
   setPendingScan: (scan: Scan | null) => void;
   setCaptureUri: (uri: string | null) => void;
   saveScan: () => void;
@@ -158,6 +162,7 @@ export const useStore = create<AppState>((set, get) => ({
   weather: {},
   weatherLoading: false,
   feedback: [],
+  language: 'en',
   locationRiskDone: false,
   labTestOrdered: false,
   draft: EMPTY_DRAFT,
@@ -196,7 +201,14 @@ export const useStore = create<AppState>((set, get) => ({
     void saveFeedback(next);
   },
 
+  setLanguage: (language) => {
+    set({ language });
+    void saveLanguage(language);
+  },
+
   hydrateFeedback: async () => {
+    const language = await loadLanguage();
+    if (language) set({ language });
     const stored = await loadFeedback();
     if (stored.length) set((s) => ({ feedback: [...stored.filter((e) => !s.feedback.some((x) => x.id === e.id)), ...s.feedback] }));
   },

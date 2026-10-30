@@ -1,4 +1,5 @@
 export { AIBox } from './AIBox';
+export { AiTag, FromLabelTag, PrivacyLine } from './AiTag';
 export { Button } from './Button';
 export { Card } from './Card';
 export { Chip, FieldChips } from './FieldChips';

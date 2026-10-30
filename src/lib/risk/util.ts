@@ -67,22 +67,34 @@ interface Factor {
   text: string;
 }
 
-/** Collects weighted factors, then gives the 0..100 score and the drivers sorted by their share. */
+/**
+ * Collects weighted factors, then gives the 0..100 score and the drivers sorted by their share.
+ * A factor can be marked `{ available: false }` (no trap count, no recent scan): it is left out and
+ * the weights of the other factors are scaled up to add up to 1, so missing data does not cap the score.
+ */
 export class Scorer {
   private factors: Factor[] = [];
 
-  add(weight: number, value: number, text: string) {
+  add(weight: number, value: number, text: string, opts: { available?: boolean } = {}) {
+    if (opts.available === false) return this;
     this.factors.push({ weight, value: clamp(value), text });
     return this;
   }
 
-  get score(): number {
-    return 100 * sum(this.factors.map((f) => f.weight * f.value));
+  private get totalWeight(): number {
+    return sum(this.factors.map((f) => f.weight));
   }
 
+  get score(): number {
+    const total = this.totalWeight;
+    return total > 0 ? (100 * sum(this.factors.map((f) => f.weight * f.value))) / total : 0;
+  }
+
+  /** Reasons whose share of the score is large enough, strongest first. */
   drivers(): string[] {
+    const total = this.totalWeight;
     return this.factors
-      .filter((f) => f.weight * f.value >= C.minDriverContribution)
+      .filter((f) => f.text && total > 0 && (f.weight * f.value) / total >= C.minDriverContribution)
       .sort((a, b) => b.weight * b.value - a.weight * a.value)
       .map((f) => f.text);
   }

@@ -1,7 +1,9 @@
 import { Star } from 'lucide-react-native';
 import { Text, View } from 'react-native';
 import { factories, type Factory } from '@/data/mock';
-import { fairPrice } from '@/lib/market';
+import { useMemo } from 'react';
+import { exchangePrice } from '@/data/mock';
+import { fairPrice, fittingRequests, hasBannedLast12Months, priceFactors, suggestedRange } from '@/lib/market';
 import { useStore } from '@/state/store';
 
 export function factoryById(id: string): Factory {
@@ -10,11 +12,19 @@ export function factoryById(id: string): Factory {
   return f;
 }
 
-/** Fair price of a field, from its quality score and spray records. */
+/**
+ * Fair price of a field: the exchange price, adjusted for quality score, banned products in the last
+ * 12 months and the open factory requests that fit the field. `factors` are the lines of "Why this price?".
+ */
 export function useFairPrice(fieldId: string) {
   const score = useStore((s) => s.fields.find((f) => f.id === fieldId)?.score ?? 0);
-  const hasBanned = useStore((s) => s.sprays.some((sp) => sp.fieldId === fieldId && sp.banned));
-  return { fair: fairPrice(score, hasBanned), hasBanned, score };
+  const sprays = useStore((s) => s.sprays);
+  return useMemo(() => {
+    const hasBanned = hasBannedLast12Months(sprays, fieldId, Date.now());
+    const input = { score, hasBanned, fittingRequests: fittingRequests(factories, score, hasBanned), exchange: exchangePrice };
+    const fair = fairPrice(input);
+    return { fair, range: suggestedRange(fair), factors: priceFactors(input), hasBanned, score };
+  }, [score, sprays, fieldId]);
 }
 
 /** Wordmark in place of a real logo. */

@@ -11,6 +11,7 @@ import {
   PROOFS,
   proofLevel,
   startingScore,
+  verifiedLevel,
   validProofs,
   type CropStage,
   type ProofLevel,
@@ -69,7 +70,9 @@ export function StepCropScreen() {
   const proofs = PROOFS[draft.stage];
   const added = validProofs(draft.stage, draft.proofs);
   const score = startingScore(draft.stage, draft.sprays, draft.records, draft.proofs);
-  const level = proofLevel(draft.stage, draft.proofs);
+  const sales = useStore((s) => s.sales);
+  // A new field has no sales yet, so it can only be Self-reported or Evidence-based.
+  const level = verifiedLevel({ id: 'new-field', proofLevel: proofLevel(draft.stage, draft.proofs) }, sales);
 
   const toggleProof = (id: string) =>
     setDraft({ proofs: draft.proofs.includes(id) ? draft.proofs.filter((p) => p !== id) : [...draft.proofs, id] });
@@ -83,6 +86,7 @@ export function StepCropScreen() {
     const name = draft.name.trim() || 'New field';
     addField({
       name,
+      proofLevel: level,
       lat: farmerLocation.lat,
       lon: farmerLocation.lon,
       trees: draft.trees,

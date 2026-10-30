@@ -5,13 +5,14 @@ import type { SeasonStage } from './types';
  * Starting heuristics: [month, day] where each stage starts. Dormant also covers the spring leaf growth.
  */
 const STAGE_STARTS: { stage: SeasonStage; month: number; day: number }[] = [
-  { stage: 'dormant', month: 1, day: 1 },
-  { stage: 'flowering', month: 5, day: 1 },
+  // The harvest runs from 15 October over the new year to 31 January, so it also starts the calendar year.
+  { stage: 'harvest', month: 1, day: 1 },
+  { stage: 'dormant', month: 2, day: 1 },
+  { stage: 'flowering', month: 4, day: 20 },
   { stage: 'fruit-set', month: 6, day: 10 },
   { stage: 'pit-hardening', month: 7, day: 10 },
   { stage: 'ripening', month: 8, day: 15 },
   { stage: 'harvest', month: 10, day: 15 },
-  { stage: 'dormant', month: 12, day: 15 },
 ];
 
 export const STAGE_LABEL: Record<SeasonStage, string> = {

@@ -46,11 +46,28 @@ export function startingScore(stage: CropStage, sprays: SprayCount, records: Rec
   return Math.min(95, BASE + SPRAY_POINTS[sprays] + RECORD_POINTS[records] + proofs * POINTS_PER_PROOF);
 }
 
-/** Adding proof moves the level up: 2 proofs make it evidence-based, all of them lab verified. */
+/** Minimum number of valid proofs for "Evidence-based". */
+export const EVIDENCE_PROOFS = 2;
+
+/** Level from the proof the farmer added. "Lab verified" never comes from proof, only from a lab result. */
 export function proofLevel(stage: CropStage, added: string[]): ProofLevel {
-  const n = validProofs(stage, added).length;
-  if (n >= PROOFS[stage].length) return 'Lab verified';
-  return n >= 2 ? 'Evidence-based' : 'Self-reported';
+  return validProofs(stage, added).length >= EVIDENCE_PROOFS ? 'Evidence-based' : 'Self-reported';
+}
+
+export interface SaleLike {
+  fieldId: string;
+  status: 'inProgress' | 'paid';
+  /** Result of the lab check of this sale, once there is one. */
+  labResult?: 'passed' | 'failed';
+}
+
+/**
+ * "Lab verified" only when the field has at least one completed sale with a lab result.
+ * Otherwise the level from the proof the farmer added.
+ */
+export function verifiedLevel(field: { id: string; proofLevel: ProofLevel }, sales: SaleLike[]): ProofLevel {
+  const labVerified = sales.some((s) => s.fieldId === field.id && s.status === 'paid' && s.labResult !== undefined);
+  return labVerified ? 'Lab verified' : field.proofLevel;
 }
 
 export const haFromTrees = (trees: number) => Math.round(trees * 0.0075 * 10) / 10;

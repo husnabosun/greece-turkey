@@ -30,9 +30,6 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
-
 # typescript
 *.tsbuildinfo
 
@@ -42,3 +39,26 @@ yarn-error.*
 
 # --- added by git-ship ---
 __pycache__/
+
+# Backtest downloads (re-created by research/scripts/backtest.ts)
+research/data/raw/
+
+# Leaf datasets (large, downloaded from Kaggle)
+research/data/olive_leaves/
+research/data/edincik/
+research/data/field_photos/
+
+# secrets (GEMINI_API_KEY lives here, never commit)
+.env
+.env.*
+!.env.example
+.vercel
+
+# trained model (large, rebuilt by the notebook); the .tflite stays in git
+research/models/*.keras
+research/checkpoints/
+
+# Figures that show Edincik dataset photos (the notebook saves them under *_edincik_photos.png)
+research/figures/leaf/*_edincik_photos.png
+research/figures/leaf/ds_samples_edincik.png
+research/figures/leaf/v2_preprocessing.png

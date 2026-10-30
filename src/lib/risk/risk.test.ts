@@ -24,13 +24,25 @@ const RAINY_NOV = (extra: Parameters<typeof around>[2] = {}) =>
 
 describe('season', () => {
   it('maps dates to stages', () => {
-    expect(seasonStage('2026-01-20')).toBe('dormant');
+    expect(seasonStage('2026-02-15')).toBe('dormant');
+    expect(seasonStage('2026-04-19')).toBe('dormant');
+    expect(seasonStage('2026-04-20')).toBe('flowering');
+    expect(seasonStage('2026-04-25')).toBe('flowering');
     expect(seasonStage('2026-05-15')).toBe('flowering');
     expect(seasonStage('2026-06-20')).toBe('fruit-set');
     expect(seasonStage('2026-07-25')).toBe('pit-hardening');
     expect(seasonStage('2026-09-10')).toBe('ripening');
+    expect(seasonStage('2026-10-14')).toBe('ripening');
+    expect(seasonStage('2026-10-15')).toBe('harvest');
     expect(seasonStage('2026-11-10')).toBe('harvest');
-    expect(seasonStage('2026-12-20')).toBe('dormant');
+  });
+
+  it('runs the harvest over the new year until 31 January', () => {
+    expect(seasonStage('2026-12-20')).toBe('harvest');
+    expect(seasonStage('2027-01-20')).toBe('harvest');
+    expect(seasonStage('2027-01-31')).toBe('harvest');
+    expect(seasonStage('2027-02-01')).toBe('dormant');
+    expect(seasonStage('2027-02-15')).toBe('dormant');
   });
 });
 
@@ -46,12 +58,44 @@ describe('peacock spot', () => {
     expect(peacockSpot.assess(inputFor(w)).level).toBe('Low');
   });
 
+  it('is Low after a dry week in November, even though it is mild and in season', () => {
+    const w = around('2026-11-10', { tMean: 15, tMin: 11, tMax: 19, wetHours: 3 });
+    const a = peacockSpot.assess(inputFor(w));
+    expect(a.level).toBe('Low');
+    expect(a.score).toBeLessThan(C.levels.medium);
+  });
+
+  it('is High after 3 rainy, mild days', () => {
+    const w = around('2026-11-10', { tMean: 15, tMin: 12, tMax: 18, wetHours: 5 }, {
+      0: { rain: 8, rainyHours: 6, wetHours: 12 },
+      [-1]: { rain: 10, rainyHours: 8, wetHours: 12 },
+      [-2]: { rain: 6, rainyHours: 5, wetHours: 12 },
+    });
+    expect(peacockSpot.assess(inputFor(w)).level).toBe('High');
+  });
+
+  it('keeps temperature and season from dominating: a cold, wet week in summer is not zero but not High', () => {
+    const w = around('2026-07-10', { tMean: 30, tMin: 24, tMax: 36, wetHours: 12 }, { 0: { rain: 8, rainyHours: 6 }, [-1]: { rain: 8, rainyHours: 6 }, [-2]: { rain: 8, rainyHours: 6 }, [-3]: { rain: 8, rainyHours: 6 } });
+    const a = peacockSpot.assess(inputFor(w));
+    expect(a.score).toBeGreaterThan(0);
+    expect(a.level).not.toBe('High');
+  });
+
+  it('never goes down because of a scan, and a scan alone cannot make a dry day High', () => {
+    const dry = around('2026-11-10', { tMean: 15, wetHours: 3 });
+    const scan = { ts: noon('2026-11-09'), mode: 'leaf' as const, title: 'Peacock spot', tone: 'high', spots: 4 };
+    const base = peacockSpot.assess(inputFor(dry)).score;
+    const withScan = peacockSpot.assess(inputFor(dry, 14, { scans: [scan] }));
+    expect(withScan.score).toBeGreaterThanOrEqual(base);
+    expect(withScan.level).not.toBe('High');
+  });
+
   it('goes up after a recent peacock spot scan', () => {
     const w = around('2026-11-10', { tMean: 15, wetHours: 5 }, { 0: { rain: 4, rainyHours: 4, wetHours: 10 } });
     const base = peacockSpot.assess(inputFor(w)).score;
     const scan = { ts: noon('2026-11-05'), mode: 'leaf' as const, title: 'Peacock spot', tone: 'high', spots: 4 };
     const withScan = peacockSpot.assess(inputFor(w, 14, { scans: [scan] }));
-    expect(withScan.score).toBeGreaterThan(base + 5);
+    expect(withScan.score).toBeGreaterThan(base);
     expect(withScan.drivers.join(' ')).toMatch(/found on a scan/);
   });
 
@@ -80,23 +124,60 @@ describe('peacock spot', () => {
 });
 
 describe('olive fly', () => {
-  it('is High in mild, humid weather at ripening with some flies in the trap', () => {
-    const w = around('2026-10-05', { tMean: 23, tMin: 18, tMax: 28, rhMean: 80 });
-    const trap = { ts: noon('2026-10-04'), mode: 'trap' as const, title: 'Fly trap', tone: 'medium', flies: 8 };
-    expect(oliveFly.assess(inputFor(w, 14, { scans: [trap] })).level).toBe('High');
+  /** Perfect fly weather at ripening: mild-warm, humid, fruit on the trees. */
+  const perfect = () => around('2026-10-05', { tMean: 23, tMin: 18, tMax: 28, rhMean: 80 });
+  const trap = (flies: number) => ({ ts: noon('2026-10-04'), mode: 'trap' as const, title: 'Fly trap', tone: 'medium', flies });
+
+  it('is Medium, not High, in perfect fly weather at ripening without a trap', () => {
+    const a = oliveFly.assess(inputFor(perfect()));
+    expect(a.level).toBe('Medium');
+    expect(a.drivers[0]).toBe('Weather suits the fly – check your traps to confirm');
+    expect(a.confidence).toBe('Medium');
+  });
+
+  it('is High in the same weather with 20 flies in the trap', () => {
+    const a = oliveFly.assess(inputFor(perfect(), 14, { scans: [trap(20)] }));
+    expect(a.level).toBe('High');
+    expect(a.confidence).toBe('High');
+    expect(a.drivers).not.toContain('Weather suits the fly – check your traps to confirm');
+  });
+
+  it('is not High with 1 fly in the trap, even in perfect weather', () => {
+    const a = oliveFly.assess(inputFor(perfect(), 14, { scans: [trap(1)] }));
+    expect(a.level).not.toBe('High');
+    expect(oliveFly.assess(inputFor(perfect(), 14, { scans: [trap(0)] })).level).not.toBe('High');
+  });
+
+  it('is High with 10 flies only when the weather is also High, and with 15 flies whatever the weather', () => {
+    const weak = around('2026-10-05', { tMean: 12, tMax: 15, rhMean: 55 });
+    expect(oliveFly.assess(inputFor(perfect(), 14, { scans: [trap(10)] })).level).toBe('High');
+    expect(oliveFly.assess(inputFor(weak, 14, { scans: [trap(10)] })).level).toBe('Medium');
+    expect(oliveFly.assess(inputFor(weak, 14, { scans: [trap(15)] })).level).toBe('High');
+  });
+
+  it('has no risk without fruit, even in perfect weather', () => {
+    const a = oliveFly.assess(inputFor(around('2026-03-10', { tMean: 23, tMax: 28, rhMean: 80 })));
+    expect(a.score).toBe(0);
+    expect(a.level).toBe('Low');
+  });
+
+  it('can be lifted to High by a recent sting scan', () => {
+    const sting = { ts: noon('2026-10-03'), mode: 'fruit' as const, title: 'Olive fly sting', tone: 'watch' };
+    const w = perfect();
+    expect(oliveFly.assess(inputFor(w)).level).toBe('Medium');
+    expect(oliveFly.assess(inputFor(w, 14, { scans: [sting] })).level).toBe('High');
   });
 
   it('is Low on very hot, dry days', () => {
     const w = around('2026-08-20', { tMean: 33, tMin: 26, tMax: 38, rhMean: 30 });
-    const a = oliveFly.assess(inputFor(w));
-    expect(a.level).toBe('Low');
+    expect(oliveFly.assess(inputFor(w)).level).toBe('Low');
   });
 
   it('is at least Medium when a trap has more than 10 flies, even in winter', () => {
     const w = around('2026-01-20', { tMean: 9, tMin: 5, tMax: 13 });
     expect(oliveFly.assess(inputFor(w)).level).toBe('Low');
-    const trap = { ts: noon('2026-01-19'), mode: 'trap' as const, title: 'Fly trap', tone: 'medium', flies: 14 };
-    expect(['Medium', 'High']).toContain(oliveFly.assess(inputFor(w, 14, { scans: [trap] })).level);
+    const t = { ts: noon('2026-01-19'), mode: 'trap' as const, title: 'Fly trap', tone: 'medium', flies: 14 };
+    expect(['Medium', 'High']).toContain(oliveFly.assess(inputFor(w, 14, { scans: [t] })).level);
   });
 
   it('does not use an old trap count', () => {
@@ -106,9 +187,23 @@ describe('olive fly', () => {
   });
 
   it('is lowered by a kaolin spray', () => {
-    const w = around('2026-10-05', { tMean: 23, tMax: 28, rhMean: 80 });
+    const w = perfect();
     const kaolin: SpraySignal = { ts: noon('2026-10-02'), product: 'Kaolin clay', targets: ['olive-fly'], protectionDays: 10, banned: false };
     expect(oliveFly.assess(inputFor(w, 14, { sprays: [kaolin] })).score).toBeLessThan(oliveFly.assess(inputFor(w)).score);
+  });
+
+  it('uses the mean temperature of the last 3 days, not only the day itself', () => {
+    const cold = around('2026-10-05', { tMean: 23, tMax: 28, rhMean: 80 }, { [-1]: { tMean: 8 }, [-2]: { tMean: 8 } });
+    const a = oliveFly.assess(inputFor(cold));
+    expect(a.score).toBeLessThan(oliveFly.assess(inputFor(perfect())).score);
+    expect(a.drivers.join(' ')).not.toMatch(/about 23 °C/);
+    expect(oliveFly.assess(inputFor(perfect())).drivers.join(' ')).toMatch(/Mild-warm weather \(about 23 °C over 3 days\) suits the fly/);
+  });
+
+  it('counts little fruit at fruit set', () => {
+    expect(C.oliveFly.fruit['fruit-set']).toBe(0.1);
+    const jun = oliveFly.assess(inputFor(around('2026-06-20', { tMean: 23, tMax: 28, rhMean: 80 })));
+    expect(jun.score).toBeLessThan(oliveFly.assess(inputFor(perfect())).score);
   });
 });
 
@@ -124,9 +219,30 @@ describe('olive moth', () => {
 });
 
 describe('anthracnose', () => {
+  const wetWeek = { 0: { rain: 14, rainyHours: 8 }, [-1]: { rain: 12, rainyHours: 7 }, [-2]: { rain: 10, rainyHours: 6 }, [-3]: { rain: 8, rainyHours: 5 } };
+
   it('is High in a warm, rainy week near harvest', () => {
-    const w = around('2026-10-22', { tMean: 18, tMax: 22, wetHours: 10 }, { 0: { rain: 14, rainyHours: 8 }, [-1]: { rain: 12, rainyHours: 7 }, [-2]: { rain: 10, rainyHours: 6 }, [-3]: { rain: 8, rainyHours: 5 } });
+    const w = around('2026-10-22', { tMean: 18, tMax: 22, wetHours: 10 }, wetWeek);
     expect(anthracnose.assess(inputFor(w)).level).toBe('High');
+  });
+  it('is Low after a dry week at harvest, even when it is warm', () => {
+    const w = around('2026-11-05', { tMean: 18, tMax: 22, wetHours: 3 });
+    expect(anthracnose.assess(inputFor(w)).level).toBe('Low');
+  });
+  it('is zero without ripe fruit, even in a wet, warm week', () => {
+    const w = around('2026-06-22', { tMean: 20, tMax: 25, wetHours: 10 }, wetWeek);
+    const a = anthracnose.assess(inputFor(w));
+    expect(a.score).toBe(0);
+    expect(a.level).toBe('Low');
+  });
+  it('is lower at ripening than at harvest in the same weather', () => {
+    const at = (day: string) => anthracnose.assess(inputFor(around(day, { tMean: 18, tMax: 22, wetHours: 10 }, wetWeek))).score;
+    expect(at('2026-09-20')).toBeLessThan(at('2026-10-22'));
+  });
+  it('keeps a floor for temperature only: a cold wet week at harvest is low but not zero', () => {
+    const cold = anthracnose.assess(inputFor(around('2026-12-10', { tMean: 3, tMax: 6, wetHours: 10 }, wetWeek)));
+    expect(cold.score).toBeGreaterThan(0);
+    expect(cold.level).not.toBe('High');
   });
   it('is Low in a dry summer', () => {
     const w = around('2026-07-20', { tMean: 29, tMax: 34, wetHours: 0, rhMean: 45 });
@@ -148,10 +264,20 @@ describe('olive knot', () => {
     const w = around('2026-03-10', { tMean: 12 }, rain12);
     expect(oliveKnot.assess(inputFor(w, 14, { prunedDaysAgo: 40 })).level).toBe('Low');
   });
-  it('rises after hail-like wind or frost', () => {
-    const calm = around('2026-02-10', { tMean: 10, tMin: 5 }, rain12);
-    const stormy = around('2026-02-10', { tMean: 10, tMin: 5 }, { ...rain12, [-1]: { maxGust: 80 } });
-    expect(oliveKnot.assess(inputFor(stormy)).score).toBeGreaterThan(oliveKnot.assess(inputFor(calm)).score);
+  it('is never High from leaf fall alone, even in heavy rain at harvest', () => {
+    const w = around('2026-11-10', { tMean: 14, tMin: 10, tMax: 18 }, { 0: { rain: 30, rainyHours: 10 }, [-1]: { rain: 20, rainyHours: 8 } });
+    const a = oliveKnot.assess(inputFor(w));
+    expect(a.level).not.toBe('High');
+    expect(a.drivers.join(' ')).toMatch(/Leaf fall/);
+  });
+  it('is High after frost or hail-like wind with rain, but strong wind alone is not enough', () => {
+    const base = { tMean: 10, tMin: 5 };
+    const hail = around('2026-02-10', base, { ...rain12, [-1]: { maxGust: 80, rain: 15, rainyHours: 3 } });
+    const windOnly = around('2026-02-10', base, { ...rain12, [-1]: { maxGust: 80 } });
+    const frosty = around('2026-02-10', base, { ...rain12, [-1]: { tMin: -2 } });
+    expect(oliveKnot.assess(inputFor(hail)).level).toBe('High');
+    expect(oliveKnot.assess(inputFor(frosty)).level).toBe('High');
+    expect(oliveKnot.assess(inputFor(windOnly)).level).not.toBe('High');
   });
 });
 

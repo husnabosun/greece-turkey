@@ -1,16 +1,18 @@
 /**
  * All thresholds and weights of the risk engine.
  *
+ * Frozen for the Nov 1 submission. Next calibration: agronomist review + farmer feedback data.
+ *
  * STARTING HEURISTICS, TO BE VALIDATED BY AN AGRONOMIST AND CALIBRATED WITH FIELD DATA.
  * They are plausible for Aegean olive groves, not measured. Change numbers here, never in the logic.
  *
- * Every threat score is the weighted sum of factors that are each 0..1. Weights of one threat add up to 1,
- * so the score is 0..100. "ramp(x, a, b)" is 0 at a, 1 at b, linear in between.
+ * Threat scores are 0..100. Some are a weighted sum of factors that are each 0..1 (weights add up to 1);
+ * peacock spot, olive fly and anthracnose multiply their factors, because the biology needs all of them. "ramp(x, a, b)" is 0 at a, 1 at b, linear in between.
  * "trapezoid(x, lo, optLo, optHi, hi)" is 0 below lo and above hi, 1 between optLo and optHi.
  */
 import type { SeasonStage } from './types';
 
-export const ENGINE_VERSION = 'rules-0.1';
+export const ENGINE_VERSION = 'rules-0.5';
 
 export const RISK_CONFIG = {
   /** Score needed for each level. */
@@ -39,10 +41,8 @@ export const RISK_CONFIG = {
   signals: {
     scanWindowDays: 30,
     trapWindowDays: 14,
-    /** A trap with more flies than this makes olive fly at least Medium. */
+    /** A trap with at least this many flies makes olive fly at least Medium (and High when the weather is also High). */
     trapMediumFlies: 10,
-    /** Trap count at which the trap factor starts and reaches 1. */
-    trapRampFlies: [3, 25] as const,
     /** Words in a scan diagnosis (lower case) that count as these threats. */
     /** An old scan counts at least this share of a new one (it fades linearly over the scan window). */
     oldScanKeep: 0.5,
@@ -50,17 +50,25 @@ export const RISK_CONFIG = {
     flyMatch: 'olive fly',
   },
 
-  /** Peacock spot (Spilocaea oleaginea): wet, mild weather, mainly autumn to spring. */
+  /**
+   * Peacock spot (Spilocaea oleaginea): infection needs wet leaves, so the score is
+   * 100 × wetness × temperature × season, plus a small boost from a recent scan.
+   */
   peacockSpot: {
-    weights: { wetness: 0.45, temperature: 0.25, season: 0.15, inoculum: 0.15 },
+    /** Temperature and season never go below this, so they modulate the score but do not dominate it. */
+    multiplierFloor: 0.2,
+    /** Points added by a recent scan that found peacock spot (at most). A scan can only raise the score. */
+    inoculumBoost: 15,
+    /** A factor is listed as a driver when it is at least this strong (0..1). */
+    driverMin: 0.5,
     /** Wetness is half rainy days, half wet-leaf hours. */
     wetnessMix: { rainyDays: 0.5, wetHours: 0.5 },
     /** A day with at least this much rain (mm) is a rainy day. */
     rainyDayMm: 1,
     windowDays: 7,
     /** Rainy days in the window for a full score, and mean wet-leaf hours per day for a full score. */
-    fullRainyDays: 4,
-    fullWetHours: 10,
+    fullRainyDays: 3,
+    fullWetHours: 7,
     /** Mean temperature (°C): trapezoid lo, optLo, optHi, hi. */
     temperature: [5, 12, 20, 27] as const,
     season: { dormant: 1, flowering: 0.5, 'fruit-set': 0.15, 'pit-hardening': 0.05, ripening: 0.35, harvest: 1 } as Record<SeasonStage, number>,
@@ -68,17 +76,34 @@ export const RISK_CONFIG = {
     severity: { high: 1, medium: 0.6, other: 0.4 },
   },
 
-  /** Olive fly (Bactrocera oleae): attacks the fruit; likes mild, humid weather. */
+  /**
+   * Olive fly (Bactrocera oleae): attacks the fruit. weatherRisk = temperature × humidity × fruit.
+   * Weather alone shows at most Medium; High needs a trap count or a sting scan.
+   */
   oliveFly: {
-    weights: { temperature: 0.25, humidity: 0.15, fruit: 0.25, trap: 0.25, fruitScan: 0.1 },
-    temperature: [10, 18, 28, 35] as const,
-    /** Mean relative humidity (%) for no and for full effect, averaged over the last 3 days. */
+    /** A factor is listed as a driver when it is at least this strong (0..1). */
+    driverMin: 0.5,
+    temperature: [12, 20, 28, 35] as const,
+    /** The temperature is the mean of this many days, ending on the assessed day. */
+    temperatureDays: 3,
+    /** Mean relative humidity (%) for no and for full effect, averaged over the last days. */
     humidity: [45, 70] as const,
     humidityDays: 3,
-    /** How much fruit is on the tree, by stage. */
-    fruit: { dormant: 0, flowering: 0, 'fruit-set': 0.3, 'pit-hardening': 0.5, ripening: 1, harvest: 0.8 } as Record<SeasonStage, number>,
-    /** Very hot and dry days suppress the fly: the score is multiplied. */
+    /** How much fruit is on the tree, by stage. No fruit means no risk. */
+    fruit: { dormant: 0, flowering: 0, 'fruit-set': 0.1, 'pit-hardening': 0.5, ripening: 1, harvest: 0.8 } as Record<SeasonStage, number>,
+    /** Very hot and dry days suppress the fly: the weather risk is multiplied. */
     heatSuppression: { tMaxC: 35, rhBelow: 45, multiplier: 0.4 },
+    /** A weather risk (0..1) at or above this counts as "weather is High" for the trap rule. */
+    weatherHighRisk: 0.65,
+    /** High when flies >= signals.trapMediumFlies × this, whatever the weather. */
+    highFliesFactor: 1.5,
+    /** The score is 100 at this many flies. */
+    highFliesFull: 40,
+    /** Points a trap count adds to the weather score, growing between these two fly counts. */
+    trapBoost: 20,
+    trapBoostFlies: [3, 10] as const,
+    /** Points a recent sting scan adds (at most). It also allows High. */
+    stingBoost: 35,
   },
 
   /** Olive moth (Prays oleae): flowering, fruit set and leaf generations; likes mild weather. */
@@ -93,27 +118,40 @@ export const RISK_CONFIG = {
     humidity: [50, 75] as const,
   },
 
-  /** Anthracnose (Colletotrichum): fruit rot in a warm, rainy autumn near harvest. */
+  /**
+   * Anthracnose (Colletotrichum): fruit rot. The fungus needs wet, warm conditions AND ripe fruit, so
+   * score = 100 × wetness × temperature × fruit. Only the temperature has a floor; without ripe fruit the score is 0.
+   */
   anthracnose: {
-    weights: { rain: 0.3, wetness: 0.2, temperature: 0.25, season: 0.25 },
+    /** Temperature never goes below this. Fruit has no floor. */
+    temperatureFloor: 0.2,
+    /** A factor is listed as a driver when it is at least this strong (0..1). */
+    driverMin: 0.5,
     windowDays: 7,
+    /** Wetness is half rain, half wet-fruit hours. */
+    wetnessMix: { rain: 0.5, wetHours: 0.5 },
     /** Rain (mm) in the window for no and for full effect. */
-    rainMm: [5, 40] as const,
-    fullWetHours: 10,
+    rainMm: [5, 25] as const,
+    /** Mean wet hours per day (relative humidity above 90 %) for a full score. */
+    fullWetHours: 6,
     temperature: [8, 15, 25, 32] as const,
-    season: { dormant: 0, flowering: 0, 'fruit-set': 0.1, 'pit-hardening': 0.1, ripening: 0.7, harvest: 1 } as Record<SeasonStage, number>,
+    /** How much ripe fruit there is, by stage. Zero means no anthracnose. */
+    fruit: { dormant: 0, flowering: 0, 'fruit-set': 0, 'pit-hardening': 0, ripening: 0.7, harvest: 1 } as Record<SeasonStage, number>,
   },
 
-  /** Olive knot (Pseudomonas savastanoi): bacteria enter wounds; rain, hail or frost after pruning or leaf fall. */
+  /** Olive knot (Pseudomonas savastanoi): bacteria enter wounds. High needs a fresh pruning cut, frost or hail-like wind, plus rain. */
   oliveKnot: {
     weights: { wounds: 0.5, wet: 0.35, temperature: 0.15 },
     /** A pruning cut is a fresh wound for this many days. */
     pruningWoundDays: 14,
-    /** Wound level during harvest (leaf fall and beating the trees). */
-    leafFallWound: 0.25,
-    /** Wound level after hail-like wind or frost in the last 3 days. */
+    /** Wound level during harvest (leaf fall and beating the trees). Small: on its own it can only reach Medium. */
+    leafFallWound: 0.1,
+    /** Wound level after frost or hail-like wind in the last days. */
     stormWound: 0.8,
     stormWindowDays: 3,
+    /** Hail-like wind: strong gusts together with heavy rain on the same day. */
+    hailGustKmh: 60,
+    hailRainMm: 10,
     /** Rain (mm) from the day before to 2 days after, for no and for full effect. */
     rainMm: [2, 15] as const,
     rainDaysBefore: 1,

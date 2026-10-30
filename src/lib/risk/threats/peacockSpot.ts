@@ -1,11 +1,18 @@
 import { RISK_CONFIG as C } from '../config';
 import { seasonStage, STAGE_LABEL } from '../season';
 import type { AssessInput, Threat } from '../types';
-import { ageDays, finish, mean, pastDays, ramp, recentScans, Scorer, trapezoid } from '../util';
+import { ageDays, finish, mean, pastDays, ramp, recentScans, trapezoid } from '../util';
 
 const cfg = C.peacockSpot;
 
-/** Peacock spot (Spilocaea oleaginea): round spots on the leaves. Wet, mild weather, mainly autumn to spring. */
+/** A factor that modulates but never dominates: it stays between `floor` and 1. */
+const soften = (x: number) => cfg.multiplierFloor + (1 - cfg.multiplierFloor) * x;
+
+/**
+ * Peacock spot (Spilocaea oleaginea): round spots on the leaves.
+ * The fungus infects only when the leaves are wet, so wetness is the main factor and the others multiply it:
+ *   score = 100 × wetness × temperature × season, plus a small boost from a recent scan that found it.
+ */
 export const peacockSpot: Threat = {
   id: 'peacock-spot',
   name: 'Peacock spot',
@@ -18,10 +25,10 @@ export const peacockSpot: Threat = {
     const stage = seasonStage(input.day);
 
     const wetness = cfg.wetnessMix.rainyDays * ramp(rainyDays, 0, cfg.fullRainyDays) + cfg.wetnessMix.wetHours * ramp(wetHours, 0, cfg.fullWetHours);
-    const temperature = trapezoid(temp, cfg.temperature);
-    const season = cfg.season[stage];
+    const temperature = soften(trapezoid(temp, cfg.temperature));
+    const season = soften(cfg.season[stage]);
 
-    // A recent peacock spot scan means there are spores on the leaves already.
+    // A recent peacock spot scan means there are spores on the leaves already. It can only raise the score.
     const scans = recentScans(input, C.signals.scanWindowDays).filter((s) => s.title.toLowerCase().includes(C.signals.peacockMatch));
     let inoculum = 0;
     let scanAge = 0;
@@ -35,13 +42,21 @@ export const peacockSpot: Threat = {
       }
     }
 
-    const sc = new Scorer()
-      .add(cfg.weights.wetness, wetness, rainyDays > 0 ? `${rainyDays} rainy day${rainyDays === 1 ? '' : 's'} in the last ${cfg.windowDays} days, leaves wet about ${Math.round(wetHours)} h a day` : `Leaves wet about ${Math.round(wetHours)} h a day`)
-      .add(cfg.weights.temperature, temperature, `Mild temperature (${Math.round(temp)} °C) suits the fungus`)
-      .add(cfg.weights.season, season, `Peacock spot is likely in the ${STAGE_LABEL[stage]} season`)
-      .add(cfg.weights.inoculum, inoculum, `Peacock spot found on a scan ${scanAge === 0 ? 'today' : `${scanAge} days ago`}`);
+    const score = 100 * wetness * temperature * season + cfg.inoculumBoost * inoculum;
 
-    return finish(input, 'peacock-spot', sc.score, sc.drivers(), {
+    const drivers: string[] = [];
+    if (wetness >= cfg.driverMin) {
+      drivers.push(
+        rainyDays > 0
+          ? `${rainyDays} rainy day${rainyDays === 1 ? '' : 's'} in the last ${cfg.windowDays} days, leaves wet about ${Math.round(wetHours)} h a day`
+          : `Leaves wet about ${Math.round(wetHours)} h a day`,
+      );
+    }
+    if (inoculum > 0) drivers.push(`Peacock spot found on a scan ${scanAge === 0 ? 'today' : `${scanAge} days ago`}`);
+    if (wetness >= cfg.driverMin && temperature >= cfg.driverMin) drivers.push(`Mild temperature (${Math.round(temp)} °C) suits the fungus`);
+    if (wetness >= cfg.driverMin && season >= cfg.driverMin) drivers.push(`Peacock spot is likely in the ${STAGE_LABEL[stage]} season`);
+
+    return finish(input, 'peacock-spot', score, drivers, {
       low: ['Keep your normal checks.'],
       medium: ['Check the leaves for round spots after the next rain.', 'Prune for airflow so the leaves dry faster.'],
       high: ['Check the leaves for round spots now, especially after rain.', 'Prune for airflow and remove fallen leaves.', 'Ask a licensed agronomist if you see spots on many trees.'],

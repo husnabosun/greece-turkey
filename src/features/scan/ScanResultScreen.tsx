@@ -3,7 +3,7 @@ import { Camera, Check, Leaf, RefreshCw, Scissors, User, type LucideIcon } from 
 import { Pressable, Text, View } from 'react-native';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Screen } from '@/components/Screen';
-import { Button, Card, Pill, type PillTone } from '@/components/ui';
+import { AiTag, Button, Card, Pill, type PillTone } from '@/components/ui';
 import type { ScanTone } from '@/data/mock';
 import { actionsFor, explain, PHOTO_LABEL } from '@/lib/diagnosis';
 import { useStore } from '@/state/store';
@@ -76,6 +76,7 @@ export function ScanResultScreen() {
           <Text className="font-i7 text-ap-body text-ink">{headline}</Text>
           <Text className="font-i5 text-ap-body text-muted">{detail}</Text>
         </View>
+        {scan.source ? <AiTag source={scan.source} className="mt-2" /> : null}
       </Card>
 
       <View className="mt-3.5 flex-row items-center justify-between">

@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ScanMode } from '@/data/mock';
+import { PrivacyLine } from '@/components/ui';
 import { HINT, MODE_LABEL } from '@/lib/diagnosis';
 import { useStore } from '@/state/store';
 
@@ -132,7 +133,11 @@ export function CameraScreen() {
         <Text pointerEvents="none" className="absolute bottom-4 self-center rounded-full bg-black/50 px-3 py-1.5 font-i6 text-ap-body text-white">{HINT[mode]}</Text>
       </View>
 
-      <View className="flex-row items-center justify-between px-8" style={{ paddingTop: 14, paddingBottom: insets.bottom + 14 }}>
+      <View className="mx-4 mt-2">
+        <PrivacyLine dark />
+      </View>
+
+      <View className="flex-row items-center justify-between px-8" style={{ paddingTop: 8, paddingBottom: insets.bottom + 14 }}>
         <Pressable onPress={pickPhoto} accessibilityLabel="Choose a photo from your gallery" className="h-12 w-12 items-center justify-center rounded-full bg-white/15">
           <ImageIcon size={22} color="#fff" />
         </Pressable>

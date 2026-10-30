@@ -3,11 +3,13 @@ import { Bell, Camera, Cloud, CloudLightning, CloudRain, Droplet, Globe, Leaf, M
 import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Screen } from '@/components/Screen';
-import { Button, Card, FieldChips, SectionHeader } from '@/components/ui';
+import { AiTag, Button, Card, FieldChips, SectionHeader } from '@/components/ui';
 import { farmer, type Level, type ScanMode } from '@/data/mock';
 import { openCamera } from '@/features/scan/nav';
 import { THREAT_BY_ID, type Assessment, type RiskLevel, type ThreatId } from '@/lib/risk';
 import type { WeatherIcon } from '@/lib/weather';
+import { LANGUAGES, type Language } from '@/lib/ai/schemas';
+import { useAdvice } from '@/state/ai';
 import { countRisks, topPest, topRiskOfAll, useRisk } from '@/state/risk';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
@@ -51,7 +53,8 @@ export function HomeScreen() {
   const selected = useStore((s) => s.selectedFieldId);
   const selectField = useStore((s) => s.selectField);
   const showWelcomeBanners = useStore((s) => s.showWelcomeBanners);
-  const showToast = useStore((s) => s.showToast);
+  const language = useStore((s) => s.language);
+  const setLanguage = useStore((s) => s.setLanguage);
   const [menu, setMenu] = useState(false);
   const risk = useRisk();
 
@@ -79,6 +82,7 @@ export function HomeScreen() {
   const level: RiskLevel = a && a.level !== 'Low' ? a.level : 'Low';
   const tone = TONE[level];
   const field = fields.find((f) => f.id === top?.fieldId) ?? weatherField;
+  const { advice, loading: adviceLoading } = useAdvice(field.id);
   const threat = a ? THREAT_BY_ID[a.threat] : undefined;
   const group = threat?.group ?? 'pests';
   const when = a && w ? dayWord(a.day, w.todayIndex, w.days) : 'today';
@@ -107,7 +111,7 @@ export function HomeScreen() {
       </View>
 
       {menu ? (
-        <View className="absolute right-5 top-[64px] z-20 w-[200px] rounded-2xl border border-line bg-card p-1.5" style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+        <View className="absolute right-5 top-[64px] z-20 w-[230px] rounded-2xl border border-line bg-card p-1.5" style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
           <Pressable
             onPress={() => {
               setMenu(false);
@@ -118,16 +122,25 @@ export function HomeScreen() {
             <Plus size={18} color={colors.ink} />
             <Text className="font-i6 text-ap-body text-ink">Add a field</Text>
           </Pressable>
-          <Pressable
-            onPress={() => {
-              setMenu(false);
-              showToast('The app is in English for now');
-            }}
-            className="h-11 flex-row items-center gap-2.5 rounded-xl px-2.5"
-          >
-            <Globe size={18} color={colors.ink} />
-            <Text className="font-i6 text-ap-body text-ink">Language: English</Text>
-          </Pressable>
+          <View className="px-2.5 pb-1.5 pt-1">
+            <View className="mb-1.5 flex-row items-center gap-2">
+              <Globe size={16} color={colors.ink} />
+              <Text className="font-i6 text-ap-body text-ink">Advisor language</Text>
+            </View>
+            <View className="flex-row gap-1.5">
+              {LANGUAGES.map((l: Language) => (
+                <Pressable
+                  key={l}
+                  onPress={() => setLanguage(l)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: language === l }}
+                  className={`h-11 flex-1 items-center justify-center rounded-full border ${language === l ? 'border-ink bg-ink' : 'border-line bg-card'}`}
+                >
+                  <Text className={`font-i7 text-ap-pill ${language === l ? 'text-white' : 'text-ink'}`}>{l.toUpperCase()}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
         </View>
       ) : null}
 
@@ -157,9 +170,21 @@ export function HomeScreen() {
         <Text className="mt-0.5 max-w-[240px] font-i8 text-[20px] leading-[24px] text-ink">
           {a && level !== 'Low' ? `${threat?.name}${/risk$/i.test(threat?.name ?? '') ? '' : ' risk'} is ${level.toLowerCase()}` : 'No big risks in the next 3 days'}
         </Text>
-        <Text className="mt-1 font-i5 text-ap-body text-[#5a5a5a]" numberOfLines={2}>
-          {a ? a.actions[0] : 'Keep your normal checks.'}
-        </Text>
+        {advice?.source === 'gemini' ? (
+          <>
+            <Text className="mt-1 max-w-[260px] font-i5 text-ap-body text-[#5a5a5a]" numberOfLines={3}>
+              {advice.summary}
+            </Text>
+            <AiTag source="gemini" className="mt-1.5" />
+          </>
+        ) : (
+          <>
+            <Text className="mt-1 font-i5 text-ap-body text-[#5a5a5a]" numberOfLines={2}>
+              {a ? a.actions[0] : 'Keep your normal checks.'}
+            </Text>
+            {adviceLoading ? null : <AiTag source="demo" className="mt-1.5" />}
+          </>
+        )}
         <View className={`absolute right-3 top-[44px] h-12 w-12 items-center justify-center rounded-full ${tone.iconBg}`}>
           <CardIcon size={22} color={tone.iconColor} />
         </View>

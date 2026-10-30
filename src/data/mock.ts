@@ -1,5 +1,6 @@
 /** Seed data for the demo. All names, places and numbers come from here. */
-import { dateLabel, daysAgoAt, whenLabel } from '../lib/dates';
+import { dateLabel, daysAgoAt, formatDay, whenLabel } from '../lib/dates';
+import type { ProofLevel } from '../lib/onboarding';
 import type { ThreatId } from '../lib/risk/types';
 
 export type Level = 'high' | 'medium' | 'low' | 'good';
@@ -21,6 +22,8 @@ export interface Field {
   /** Days since the trees were last pruned, if known. Fresh cuts are wounds for olive knot. */
   prunedDaysAgo?: number;
   locationRisks?: LocationRisk[];
+  /** Level from the proof the farmer added. "Lab verified" comes from sales, see verifiedLevel(). */
+  proofLevel: ProofLevel;
   name: string;
   trees: number;
   ha: number;
@@ -62,6 +65,10 @@ export interface Spray {
   /** Shown in the "Approved for olives" box. */
   licence?: string;
   stage?: number;
+  /** Filled when the spray was read from a label. */
+  activeSubstances?: string[];
+  preHarvestDays?: number;
+  fromLabel?: boolean;
 }
 
 export interface SprayProduct {
@@ -134,6 +141,8 @@ export interface Sale {
   note: string;
   /** Paid date, shown for completed sales. */
   paidDate?: string;
+  /** Result of the lab check, once there is one. */
+  labResult?: 'passed' | 'failed';
 }
 
 export interface Factory {
@@ -172,6 +181,9 @@ export const farmerGroups = [
   { id: 'g-kamili', factoryId: 'kamili', initials: ['AY', 'HK', 'MS'], colors: ['#2E8BD8', '#7B3FB5', '#D8453A'], nearby: 3, quality: '84–88' },
 ];
 
+/** Today's exchange price for olives. The base of the fair price. Mock number, labelled with its source and date. */
+export const exchangePrice = { pricePerKg: 0.8, source: 'Demo price · replace with Edremit Commodity Exchange', date: formatDay(0) };
+
 export const farmer = { name: 'Mehmet', place: 'Germencik, Aydın' };
 /** Where a new field is placed until the farmer draws it: the middle of the three demo fields. */
 export const farmerLocation = { lat: 39.325, lon: 26.7 };
@@ -183,6 +195,7 @@ export const fields: Field[] = [
     lat: 39.33,
     lon: 26.7,
     prunedDaysAgo: 10,
+    proofLevel: 'Evidence-based',
     name: 'North grove',
     trees: 120,
     ha: 1.1,
@@ -203,6 +216,7 @@ export const fields: Field[] = [
     id: 'river',
     lat: 39.3,
     lon: 26.72,
+    proofLevel: 'Evidence-based',
     name: 'River plot',
     trees: 140,
     ha: 0.8,
@@ -223,6 +237,7 @@ export const fields: Field[] = [
     lat: 39.345,
     lon: 26.68,
     locationRisks: [{ kind: 'coal-plant', label: 'coal power plant', km: 4, bearingDeg: 0 }],
+    proofLevel: 'Self-reported',
     name: 'Hill',
     trees: 90,
     ha: 0.7,
@@ -291,8 +306,8 @@ export const offers: Offer[] = [
 
 export const sales: Sale[] = [
   { id: 'a0', fieldId: 'hill', factoryId: 'duru', tons: 1, pricePerKg: 0.9, status: 'inProgress', step: 3, note: 'picked up 22 Oct' },
-  { id: 'a1', fieldId: 'north', factoryId: 'duru', tons: 2.5, pricePerKg: 0.8, status: 'paid', step: 4, note: '', paidDate: '12 Oct 2026' },
-  { id: 'a2', fieldId: 'hill', factoryId: 'taris', tons: 0.5, pricePerKg: 0.9, status: 'paid', step: 4, note: '', paidDate: '28 Sep 2026' },
+  { id: 'a1', fieldId: 'north', factoryId: 'duru', tons: 2.5, pricePerKg: 0.8, status: 'paid', step: 4, note: '', paidDate: '12 Oct 2026', labResult: 'passed' },
+  { id: 'a2', fieldId: 'hill', factoryId: 'taris', tons: 0.5, pricePerKg: 0.9, status: 'paid', step: 4, note: '', paidDate: '28 Sep 2026', labResult: 'passed' },
 ];
 
 /** Tons the farmer can sell from a field this season. */
@@ -367,6 +382,10 @@ export interface Scan {
   flies?: number;
   /** A picked or captured photo; the sample drawing is used when missing. */
   uri?: string;
+  /** Who made the diagnosis of a new scan: "gemini", our own "model", or the "demo" mock. Missing on the sample history. */
+  source?: 'gemini' | 'model' | 'demo';
+  /** Extra sentence from the AI (what it saw, or notes on the trap). Replaces the standard explanation. */
+  detail?: string;
   /** This scan asked for a re-check. It is due until a newer scan of the same tree exists. */
   recheckDue?: boolean;
 }

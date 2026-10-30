@@ -5,7 +5,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Scan, ScanMode } from '@/data/mock';
-import { diagnose } from '@/lib/diagnosis';
+import { diagnose, type Diagnosis } from '@/lib/diagnosis';
+import { fruitToDiagnosis, trapToDiagnosis } from '@/lib/ai/mappers';
+import { diagnoseFruitAi, diagnoseTrapAi } from '@/state/ai';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { ScanPhoto } from './ScanPhoto';
@@ -15,6 +17,7 @@ const STEPS: Record<Exclude<ScanMode, 'label'>, string[]> = {
   fruit: ['Checking the photo is clear', 'Looking for marks on the fruit', 'Comparing with known olive problems', 'Preparing your result'],
   trap: ['Checking the photo is clear', 'Counting the flies on the trap', 'Comparing with last week', 'Preparing your result'],
 };
+/** The steps take at least this long; a real AI answer can take longer (the call times out after 20 s). */
 const TOTAL_MS = 1500;
 const STEP_MS = 330;
 
@@ -37,6 +40,7 @@ export function AnalysingScreen() {
   const [shown, setShown] = useState(0);
   const line = useRef(new Animated.Value(0)).current;
   const started = useRef(false);
+  const alive = useRef(true);
   const id = useRef(`sc${Date.now()}`).current;
 
   const previousSpots = treeId
@@ -61,15 +65,26 @@ export function AnalysingScreen() {
       ]),
     ).start();
 
+    // Fruit and trap photos are read by the AI server. Without a photo, a server or a key, the demo result is used.
+    const ai: Promise<Diagnosis | null> = !captureUri
+      ? Promise.resolve(null)
+      : mode === 'fruit'
+        ? diagnoseFruitAi(captureUri).then((r) => (r ? fruitToDiagnosis(r) : null))
+        : mode === 'trap'
+          ? diagnoseTrapAi(captureUri).then((r) => (r ? trapToDiagnosis(r) : null))
+          : Promise.resolve(null);
+
     const timers = STEPS[mode].map((_, i) => setTimeout(() => setShown(i + 1), i * STEP_MS + 120));
     timers.push(
-      setTimeout(() => {
+      setTimeout(async () => {
+        const real = await ai;
+        if (!alive.current) return;
         const scan: Scan = {
           id,
           fieldId,
           treeId,
           mode,
-          ...dx,
+          ...(real ?? dx),
           date: 'Today',
           when: whenLabel(),
           ts: Date.now(),
@@ -80,7 +95,10 @@ export function AnalysingScreen() {
         router.replace(`/scan/result/${id}`);
       }, TOTAL_MS),
     );
-    return () => timers.forEach(clearTimeout);
+    return () => {
+      alive.current = false;
+      timers.forEach(clearTimeout);
+    };
     // Runs once; the values are read from the first render on purpose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

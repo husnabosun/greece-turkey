@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npx expo export -p web",
+  "outputDirectory": "dist",
+  "functions": { "api/*.ts": { "maxDuration": 20 } },
+  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
+}
