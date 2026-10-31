@@ -48,7 +48,7 @@ export function FieldScreen() {
           selected={field.id}
           onSelect={selectField}
           trailing={
-            <Chip on={false} onPress={() => router.push('/onboarding')}>
+            <Chip on={false} onPress={() => router.push('/farmer/onboarding')}>
               <Text className="font-i7 text-ap-pill text-ink">+ Add</Text>
             </Chip>
           }
@@ -66,7 +66,7 @@ export function FieldScreen() {
           <Text className="font-i5 text-ap-small text-muted">Field size</Text>
         </View>
         <Pressable
-          onPress={() => router.push('/quality')}
+          onPress={() => router.push('/farmer/quality')}
           className={`flex-[1.4] flex-row items-center justify-center gap-2 rounded-xl py-1.5 ${low ? 'bg-risk-soft' : 'bg-good-soft'}`}
         >
           <Star size={20} color={low ? colors.risk : colors.good} fill={low ? colors.risk : colors.good} />
@@ -139,7 +139,7 @@ export function FieldScreen() {
               <Text className="font-i7 text-ap-pill text-white">Scan this tree</Text>
             </Pressable>
             <Pressable
-              onPress={() => router.push({ pathname: '/scan', params: { fieldId: field.id } })}
+              onPress={() => router.push({ pathname: '/farmer/scan', params: { fieldId: field.id } })}
               accessibilityRole="button"
               className="h-9 flex-1 items-center justify-center rounded-full border border-ink"
             >

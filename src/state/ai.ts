@@ -9,6 +9,7 @@ import {
   adviceResult,
   fruitResult,
   labelResult,
+  leafResult,
   trapResult,
   MAX_IMAGE_BASE64,
   type AdviceResult,
@@ -16,6 +17,7 @@ import {
   type AiSource,
   type FruitResult,
   type LabelResult,
+  type LeafResult,
   type TrapResult,
 } from '@/lib/ai/schemas';
 import { useRisk } from './risk';
@@ -27,6 +29,8 @@ import { useStore } from './store';
  */
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/$/, '');
 const CLIENT_TIMEOUT_MS = 20_000;
+/** The leaf model sleeps when nobody uses it: the first call can take a minute. The server stops waiting after 60 s. */
+const LEAF_TIMEOUT_MS = 65_000;
 const MAX_SIDE = 1024;
 
 let deviceId: string | null = null;
@@ -68,9 +72,9 @@ export async function prepareImage(uri: string): Promise<string | null> {
 }
 
 /** POST to our server. Returns the checked answer, or null on any problem (offline, no key, timeout, bad answer). */
-async function post<S extends z.ZodType>(path: string, body: unknown, schema: S): Promise<z.infer<S> | null> {
+async function post<S extends z.ZodType>(path: string, body: unknown, schema: S, timeoutMs = CLIENT_TIMEOUT_MS): Promise<z.infer<S> | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${API_BASE}/api/${path}`, {
       method: 'POST',
@@ -102,6 +106,12 @@ export async function diagnoseFruitAi(uri: string): Promise<FruitResult | null> 
 export async function diagnoseTrapAi(uri: string): Promise<TrapResult | null> {
   const imageBase64 = await prepareImage(uri);
   return imageBase64 ? post('diagnose-fruit-trap', { imageBase64, mode: 'trap' }, trapResult) : null;
+}
+
+/** The leaf model. Its answer has source "model", or "demo" when the model could not be reached. Null when our server is not reachable. */
+export async function diagnoseLeafAi(uri: string): Promise<LeafResult | null> {
+  const imageBase64 = await prepareImage(uri);
+  return imageBase64 ? post('diagnose-leaf', { imageBase64 }, leafResult, LEAF_TIMEOUT_MS) : null;
 }
 
 export const adviseAi = (req: AdviseRequest) => post('advise', req, adviceResult);
@@ -152,6 +162,8 @@ export function useAdvice(fieldId: string): { advice: Advice | null; loading: bo
 
   const key = request ? adviceKey(request) : null;
   const [state, setState] = useState<{ key: string; advice: Advice } | null>(null);
+  /** The key of the last request that has finished, with an answer or without. A request that failed is not "loading" any more. */
+  const [settled, setSettled] = useState<string | null>(null);
 
   useEffect(() => {
     if (!request || !key) return;
@@ -162,10 +174,12 @@ export function useAdvice(fieldId: string): { advice: Advice | null; loading: bo
     }
     let live = true;
     void adviseAi(request).then((res) => {
-      if (!res) return;
-      const advice: Advice = { summary: res.summary, actions: res.actions, whyNow: res.whyNow, source: 'gemini' };
-      adviceCache.set(key, advice);
-      if (live) setState({ key, advice });
+      if (res) {
+        const advice: Advice = { summary: res.summary, actions: res.actions, whyNow: res.whyNow, source: 'gemini' };
+        adviceCache.set(key, advice);
+        if (live) setState({ key, advice });
+      }
+      if (live) setSettled(key);
     });
     return () => {
       live = false;
@@ -174,5 +188,5 @@ export function useAdvice(fieldId: string): { advice: Advice | null; loading: bo
 
   const fallback = useMemo<Advice | null>(() => (field && view ? { ...fallbackAdvice(view.risk, field.name), source: 'demo' } : null), [field, view]);
   const ready = state && state.key === key ? state.advice : null;
-  return { advice: ready ?? fallback, loading: !ready && !!request };
+  return { advice: ready ?? fallback, loading: !ready && !!request && settled !== key };
 }

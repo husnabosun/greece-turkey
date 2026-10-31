@@ -1,9 +1,8 @@
 /** Glue between the pure libs and the device: AsyncStorage for the weather cache and the feedback answers. */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Field } from '@/data/mock';
 import { LANGUAGES, type Language } from '@/lib/ai/schemas';
 import type { FeedbackEntry } from '@/lib/feedback';
-import { getFieldWeather, type FieldWeather, type WeatherStorage } from '@/lib/weather';
+import { getFieldWeather, type FieldPoint, type FieldWeather, type WeatherStorage } from '@/lib/weather';
 
 const storage: WeatherStorage = {
   getItem: (k) => AsyncStorage.getItem(k),
@@ -13,9 +12,9 @@ const storage: WeatherStorage = {
 const memory = new Map<string, FieldWeather>();
 
 /** One weather call per field, in parallel. Each result says if it is live, cached or demo. */
-export async function loadAllWeather(fields: Field[], opts: { force?: boolean } = {}): Promise<Record<string, FieldWeather>> {
+export async function loadAllWeather(fields: FieldPoint[], opts: { force?: boolean } = {}): Promise<Record<string, FieldWeather>> {
   const entries = await Promise.all(
-    fields.map(async (f) => [f.id, await getFieldWeather({ id: f.id, lat: f.lat, lon: f.lon }, { storage, memory }, opts)] as const),
+    fields.map(async (f) => [f.id, await getFieldWeather({ id: f.id, lat: f.lat, lon: f.lon, wetness: f.wetness }, { storage, memory }, opts)] as const),
   );
   return Object.fromEntries(entries);
 }

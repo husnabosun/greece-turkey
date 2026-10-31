@@ -62,3 +62,9 @@ research/checkpoints/
 research/figures/leaf/*_edincik_photos.png
 research/figures/leaf/ds_samples_edincik.png
 research/figures/leaf/v2_preprocessing.png
+
+# Screenshots of the leaf scan (may show dataset photos)
+screens/scan/
+
+# Screenshots made by scripts/processor-screenshots.mjs
+screens/processor/

@@ -5,12 +5,14 @@
 import { createServer } from 'node:http';
 import advise from '../api/advise';
 import diagnose from '../api/diagnose-fruit-trap';
+import diagnoseLeaf from '../api/diagnose-leaf';
 import readLabel from '../api/read-label';
 
 type Handler = (req: never, res: never) => Promise<unknown>;
 const routes: Record<string, Handler> = {
   '/api/read-label': readLabel as unknown as Handler,
   '/api/diagnose-fruit-trap': diagnose as unknown as Handler,
+  '/api/diagnose-leaf': diagnoseLeaf as unknown as Handler,
   '/api/advise': advise as unknown as Handler,
 };
 
@@ -43,5 +45,5 @@ createServer((req, res) => {
     void handler(vreq as never, vres as never);
   });
 }).listen(PORT, () => {
-  console.log(`AI API on http://localhost:${PORT}  (key ${process.env.GEMINI_API_KEY ? 'found' : 'MISSING: results will be { ok: false }'})`);
+  console.log(`AI API on http://localhost:${PORT}  (Gemini key ${process.env.GEMINI_API_KEY ? 'found' : 'MISSING: results will be { ok: false }'}, HF token ${process.env.HF_TOKEN ? 'found' : 'missing: the leaf model is called without it'})`);
 });

@@ -1,15 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowRight, Check, ChevronDown, Minus, Plus, Sparkles, Trees } from 'lucide-react-native';
+import { ArrowRight, Check, ChevronDown, Minus, Plus, Trees } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Pill } from '@/components/ui';
-import { exchangePrice, tonsAvailable } from '@/data/mock';
-import { euroPrice, roundPrice } from '@/lib/market';
+import { tonsAvailable } from '@/data/mock';
+import { compareToRange, euroPrice, roundPrice } from '@/lib/market';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
-import { factoryById, useFairPrice } from './shared';
+import { ExchangeBox, factoryById, useExchangeRange, useHasBanned } from './shared';
 
 const PERIODS = ['3–10 Nov', '10–17 Nov', '17–24 Nov'];
 
@@ -22,25 +22,28 @@ export function NewListingScreen() {
   const request = params.factoryId ? factoryById(params.factoryId) : null;
   const [fieldId, setFieldId] = useState(params.fieldId && fields.some((f) => f.id === params.fieldId) ? params.fieldId : 'river');
   const field = fields.find((f) => f.id === fieldId)!;
-  const { fair, range, factors, hasBanned } = useFairPrice(fieldId);
+  const hasBanned = useHasBanned(fieldId);
+  const { range } = useExchangeRange();
   const requestPrice = request ? roundPrice((request.priceLow + request.priceHigh) / 2) : null;
 
   const [tons, setTons] = useState(tonsAvailable);
   const [period, setPeriod] = useState(PERIODS[0]);
   const [negotiable, setNegotiable] = useState(false);
   const [delivery, setDelivery] = useState<'pickup' | 'deliver'>('pickup');
-  const [custom, setCustom] = useState<number | null>(requestPrice);
-  const price = custom ?? fair;
+  // The farmer sets the price. It starts at the request price, or at the exchange average, or at €0.80 when there is no exchange data.
+  const startPrice = requestPrice ?? (range ? roundPrice(range.avg) : 0.8);
+  const [price, setPrice] = useState(startPrice);
+  const verdict = compareToRange(price, range);
 
   const changeField = () => {
     const next = fields[(fields.findIndex((f) => f.id === fieldId) + 1) % fields.length];
     setFieldId(next.id);
-    setCustom(null);
+    setPrice(startPrice);
   };
 
   const publish = () => {
     publishListing({ fieldId, tons, pricePerKg: price, period, negotiable, delivery });
-    router.replace('/market');
+    router.replace('/farmer/market');
   };
 
   const low = field.score < 70;
@@ -137,44 +140,24 @@ export function NewListingScreen() {
 
       <Label>Price</Label>
       <Card className="p-3">
-        <View className="rounded-xl bg-good-soft p-2.5">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center gap-1.5">
-              <Sparkles size={14} color={colors.good} />
-              <Text className="font-i8 text-ap-body text-good">AI suggests</Text>
-            </View>
-            <Text className="font-i8 text-ap-card text-ink">
-              {`${euroPrice(range.low)} – ${euroPrice(range.high)}`}
-              <Text className="font-i5 text-ap-small text-muted">{' /kg'}</Text>
-            </Text>
-          </View>
-          <Text className="mt-0.5 font-i5 text-ap-small text-muted">Based on your field’s quality score and current market demand.</Text>
-          <Text className="mt-0.5 font-i5 text-ap-small text-muted">{exchangePrice.source}</Text>
-        </View>
+        <ExchangeBox />
 
         <Text className="mb-1.5 mt-2.5 font-i5 text-ap-body text-muted">Your price per kg</Text>
         <View className="h-12 flex-row items-center justify-between rounded-xl border border-line px-2">
-          <RoundStep label="Lower price" onPress={() => setCustom(Math.max(0.5, roundPrice(price - 0.05)))}>
+          <RoundStep label="Lower price" onPress={() => setPrice(Math.max(0.5, roundPrice(price - 0.05)))}>
             <Minus size={18} color={colors.ink} />
           </RoundStep>
           <Text className="font-i8 text-ap-title text-ink">{euroPrice(price)}</Text>
-          <RoundStep label="Raise price" onPress={() => setCustom(roundPrice(price + 0.05))}>
+          <RoundStep label="Raise price" onPress={() => setPrice(roundPrice(price + 0.05))}>
             <Plus size={18} color={colors.ink} />
           </RoundStep>
         </View>
-        {price > range.high ? <Text className="mt-1 font-i5 text-ap-small text-warn-text">Above the suggested range. Fewer buyers may answer.</Text> : null}
+        {verdict ? (
+          <View className="mt-2">
+            <Pill tone={verdict.tone}>{verdict.label}</Pill>
+          </View>
+        ) : null}
 
-        <View className="mt-2.5 rounded-xl bg-good-soft p-2.5">
-          <Text className="mb-1 font-i8 text-ap-body text-ink">Why this price?</Text>
-          {factors.map((f) => (
-            <View key={f.label} className="min-h-6 flex-row items-center justify-between gap-2 py-0.5">
-              <Text className="flex-1 font-i5 text-ap-body text-ink">{f.label}</Text>
-              <Text className={`font-i6 text-ap-body ${f.kind === 'base' ? 'text-ink' : f.amount < 0 ? 'text-risk' : 'text-good'}`}>
-                {f.kind === 'base' ? euroPrice(f.amount) : `${f.amount < 0 ? '−' : '+'} ${euroPrice(Math.abs(f.amount))}`}
-              </Text>
-            </View>
-          ))}
-        </View>
       </Card>
 
       <Button

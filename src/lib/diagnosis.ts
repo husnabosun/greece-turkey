@@ -6,7 +6,7 @@ export interface Action {
   hint: string;
 }
 
-export type Diagnosis = Pick<Scan, 'title' | 'latin' | 'tone' | 'pill' | 'confidence' | 'photo' | 'spots' | 'flies' | 'source' | 'detail'>;
+export type Diagnosis = Pick<Scan, 'title' | 'latin' | 'tone' | 'pill' | 'confidence' | 'photo' | 'spots' | 'flies' | 'source' | 'detail' | 'modelVersion'>;
 
 export const PEACOCK_ACTIONS: Action[] = [
   { title: 'Prune for airflow', hint: 'Improve air circulation' },
@@ -30,6 +30,12 @@ const RETAKE_ACTIONS: Action[] = [
   { title: 'Take a new photo', hint: 'In daylight' },
   { title: 'Move closer', hint: 'One olive or leaf' },
   { title: 'Ask for help', hint: 'If still unsure' },
+];
+
+const MITE_ACTIONS: Action[] = [
+  { title: 'Check young shoots', hint: 'Look at buds and new leaves' },
+  { title: 'Prune badly marked shoots', hint: 'Keep the cuts clean' },
+  { title: 'Re-check in 7 days', hint: 'Monitor spread' },
 ];
 
 const HEALTHY_ACTIONS: Action[] = [
@@ -61,6 +67,9 @@ export function diagnose(mode: ScanMode, opts: { previousSpots?: number } = {}):
     source: 'demo',
   };
 }
+
+/** Shown when the leaf model is less than 60 % sure. */
+export const NOT_SURE_TEXT = 'Not sure – retake the photo in good light, or ask an agronomist';
 
 export function confidencePhrase(confidence: number): string {
   if (confidence >= 90) return 'very sure';
@@ -96,8 +105,17 @@ export function explain(scan: Pick<Scan, 'mode' | 'tone' | 'title' | 'confidence
       detail: scan.detail ?? 'The olive fly lays its egg under the skin of the fruit. Look for a small dark dot.',
     };
   }
+  if (scan.title === 'Not sure') {
+    return { headline: NOT_SURE_TEXT, detail: scan.detail ?? 'Take a new photo of one leaf, close up and in daylight.' };
+  }
   if (scan.tone === 'healthy') {
     return { headline: `We are ${sure} this leaf is healthy.`, detail: 'We found no spots or damage on the leaf.' };
+  }
+  if (scan.title === 'Olive bud mite') {
+    return {
+      headline: `We are ${sure} this leaf shows olive bud mite damage.`,
+      detail: 'The olive bud mite (Aculus olearius) can turn leaves yellow or bronze and distort them. Look at the young shoots too.',
+    };
   }
   return {
     headline: `We are ${sure} this is peacock spot.`,
@@ -106,9 +124,10 @@ export function explain(scan: Pick<Scan, 'mode' | 'tone' | 'title' | 'confidence
 }
 
 export function actionsFor(scan: Pick<Scan, 'mode' | 'tone' | 'title' | 'confidence'>): Action[] {
-  if (scan.title === 'Not clear' || (scan.mode === 'trap' && scan.confidence < 40)) return RETAKE_ACTIONS;
+  if (scan.title === 'Not clear' || scan.title === 'Not sure' || (scan.mode === 'trap' && scan.confidence < 40)) return RETAKE_ACTIONS;
   if (scan.mode === 'trap') return TRAP_ACTIONS;
   if (scan.mode === 'fruit') return scan.tone === 'healthy' ? HEALTHY_ACTIONS : FRUIT_ACTIONS;
+  if (scan.title === 'Olive bud mite') return MITE_ACTIONS;
   return scan.tone === 'healthy' ? HEALTHY_ACTIONS : PEACOCK_ACTIONS;
 }
 

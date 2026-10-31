@@ -47,7 +47,7 @@ export function CameraScreen() {
   /** Label mode leaves the camera and opens Add spray with the label scan. */
   const openLabelFlow = () => {
     selectField(fieldId);
-    router.replace({ pathname: '/logbook', params: { add: '1', label: '1' } });
+    router.replace({ pathname: '/farmer/logbook', params: { add: '1', label: '1' } });
   };
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export function CameraScreen() {
   const analyse = (uri: string | null) => {
     setCaptureUri(uri);
     router.replace({
-      pathname: '/scan/analysing',
+      pathname: '/farmer/scan/analysing',
       params: { mode, fieldId, ...(treeId ? { treeId: String(treeId) } : {}) },
     });
   };
@@ -144,7 +144,7 @@ export function CameraScreen() {
         <Pressable onPress={shutter} accessibilityRole="button" accessibilityLabel="Take photo" className="h-[76px] w-[76px] items-center justify-center rounded-full border-4 border-white">
           <View className="h-[58px] w-[58px] rounded-full bg-white" />
         </Pressable>
-        <Pressable onPress={() => router.navigate('/scan')} accessibilityLabel="Your scans" className="h-12 w-12 items-center justify-center rounded-full bg-white/15">
+        <Pressable onPress={() => router.navigate('/farmer/scan')} accessibilityLabel="Your scans" className="h-12 w-12 items-center justify-center rounded-full bg-white/15">
           <History size={22} color="#fff" />
         </Pressable>
       </View>

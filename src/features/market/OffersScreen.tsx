@@ -3,11 +3,12 @@ import { Pressable, Text, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Pill, SectionHeader } from '@/components/ui';
 import { type Offer } from '@/data/mock';
-import { euroPrice, euroTotal, offerVerdict, saleTotal } from '@/lib/market';
+import { compareToRange, euroPrice, euroTotal, saleTotal } from '@/lib/market';
+import { deliveryLabel } from '@/lib/processor';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { InProgressCard, PaidRow } from './SaleCards';
-import { FactoryLogo, factoryById, Rating, useFairPrice } from './shared';
+import { ExchangeBox, FactoryLogo, factoryById, Rating, useExchangeRange } from './shared';
 
 export function OffersScreen() {
   const sales = useStore((s) => s.sales);
@@ -22,7 +23,9 @@ export function OffersScreen() {
 
   return (
     <Screen topPadding={false}>
-      <View className="gap-2">
+      <ExchangeBox />
+
+      <View className="mt-2 gap-2">
         {inProgress.map((s) => (
           <InProgressCard key={s.id} sale={s} variant="lab" />
         ))}
@@ -78,9 +81,7 @@ function OfferCard({ offer }: { offer: Offer }) {
   const acceptOffer = useStore((s) => s.acceptOffer);
   const showToast = useStore((s) => s.showToast);
   const factory = factoryById(offer.factoryId);
-  const { fair } = useFairPrice(offer.fieldId);
-  const { label, tone, diff } = offerVerdict(offer.pricePerKg, fair);
-  const text = diff === 0 ? 'at fair price' : `${euroPrice(Math.abs(diff))} ${diff > 0 ? 'above' : 'below'} fair`;
+  const verdict = compareToRange(offer.pricePerKg, useExchangeRange().range);
 
   return (
     <Card className="p-3">
@@ -89,6 +90,7 @@ function OfferCard({ offer }: { offer: Offer }) {
         <View className="ml-2.5 flex-1">
           <Text className="font-i8 text-ap-card text-ink">{factory.name}</Text>
           <Rating value={factory.rating} extra={factory.praise} />
+          {offer.tons ? <Text className="font-i5 text-ap-small text-muted">{`${offer.tons} t · delivery ${deliveryLabel(offer.deliveryIn ?? 5)}`}</Text> : null}
         </View>
         <Text className="font-i8 text-ap-title text-ink">
           {euroPrice(offer.pricePerKg)}
@@ -96,7 +98,7 @@ function OfferCard({ offer }: { offer: Offer }) {
         </Text>
       </View>
       <View className="mt-2 flex-row items-center justify-between">
-        <Pill tone={tone}>{`${label} · ${text}`}</Pill>
+        {verdict ? <Pill tone={verdict.tone}>{verdict.label}</Pill> : <Text className="font-i5 text-ap-small text-muted">No exchange data</Text>}
         <View className="flex-row gap-2">
           <Button compact label="Counter" variant="outline" className="h-9 px-4" onPress={() => showToast(`Counter offer sent to ${factory.name}`)} />
           <Button compact label="Accept" variant="primary" className="h-9 px-4" onPress={() => acceptOffer(offer.id)} />

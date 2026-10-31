@@ -11,7 +11,6 @@ import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { NotificationBanners, PhoneFrame, Toast } from '@/components/ui';
 import { useStore } from '@/state/store';
 
 /** Refresh the weather this often. The weather lib keeps its own 1-hour cache, so most calls are free. */
@@ -33,11 +32,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <PhoneFrame>
-        <Stack screenOptions={{ headerShown: false, animation: 'fade', animationDuration: 120, contentStyle: { backgroundColor: '#FAFAF8' } }} />
-        <Toast />
-        <NotificationBanners />
-      </PhoneFrame>
+      <Stack screenOptions={{ headerShown: false, animation: 'none', contentStyle: { backgroundColor: '#FAFAF8' } }} />
       <StatusBar style="dark" />
     </SafeAreaProvider>
   );

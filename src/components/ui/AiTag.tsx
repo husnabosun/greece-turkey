@@ -7,8 +7,8 @@ import { colors } from '@/theme/tokens';
 export function AiTag({ source, className = '' }: { source: AiSource; className?: string }) {
   if (source === 'demo') {
     return (
-      <View className={`h-6 flex-row items-center self-start rounded-full bg-soft px-2.5 ${className}`}>
-        <Text className="font-i7 text-ap-small text-muted">Demo result</Text>
+      <View className={`h-6 flex-row items-center self-start rounded-full bg-warn-soft px-2.5 ${className}`}>
+        <Text className="font-i7 text-ap-small text-warn-text">Demo result</Text>
       </View>
     );
   }

@@ -4,7 +4,8 @@ emoji: 🫒
 colorFrom: green
 colorTo: yellow
 sdk: gradio
-sdk_version: 5.0.0
+sdk_version: 5.49.1
+python_version: 3.12.12
 app_file: app.py
 pinned: false
 license: mit
@@ -54,7 +55,7 @@ python app.py                                                  # opens http://12
 2. Click **New → Space** (<https://huggingface.co/new-space>).
    * Space name: `agropulse-olive-leaf`
    * SDK: **Gradio**
-   * Hardware: **CPU basic (free)**
+   * Hardware: **ZeroGPU** (CPU basic is no longer free; ZeroGPU needs the `spaces` package and a decorated function, see `app.py`)
    * Visibility: Public (or Private)
    * Click **Create Space**.
 3. In the Space, open the **Files** tab → **Add file → Upload files**.

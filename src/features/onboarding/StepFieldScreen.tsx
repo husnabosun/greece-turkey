@@ -72,7 +72,7 @@ export function StepFieldScreen() {
       showToast('Give your field a name first');
       return;
     }
-    router.push('/onboarding/crop');
+    router.push('/farmer/onboarding/crop');
   };
 
   return (

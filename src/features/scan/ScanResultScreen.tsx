@@ -43,7 +43,7 @@ export function ScanResultScreen() {
 
   const save = () => {
     saveScan();
-    router.navigate('/scan');
+    router.navigate('/farmer/scan');
   };
 
   return (
@@ -76,12 +76,19 @@ export function ScanResultScreen() {
           <Text className="font-i7 text-ap-body text-ink">{headline}</Text>
           <Text className="font-i5 text-ap-body text-muted">{detail}</Text>
         </View>
-        {scan.source ? <AiTag source={scan.source} className="mt-2" /> : null}
+        {scan.source ? (
+          <View className="mt-2 flex-row flex-wrap items-center gap-x-2 gap-y-1">
+            <AiTag source={scan.source} />
+            {scan.source !== 'demo' ? <Text className="font-i7 text-ap-small text-ink">{`Confidence ${scan.confidence} %`}</Text> : null}
+          </View>
+        ) : null}
+        {scan.source === 'demo' ? <Text className="mt-1 font-i5 text-ap-small text-muted">This is an example result, not a real diagnosis. The AI could not be reached.</Text> : null}
+        {scan.source === 'model' && scan.modelVersion ? <Text className="mt-0.5 font-i5 text-ap-small text-muted">{`Model: AgroPulse leaf ${scan.modelVersion}`}</Text> : null}
       </Card>
 
       <View className="mt-3.5 flex-row items-center justify-between">
         <Text className="font-i8 text-ap-card text-ink">What you can do now</Text>
-        {scan.mode === 'leaf' && scan.tone !== 'healthy' ? <Pill tone="good">No chemicals first</Pill> : null}
+        {scan.mode === 'leaf' && scan.tone !== 'healthy' && scan.title !== 'Not sure' ? <Pill tone="good">No chemicals first</Pill> : null}
       </View>
       <View className="mt-2 flex-row gap-2">
         {actionsFor(scan).map((a, i) => {

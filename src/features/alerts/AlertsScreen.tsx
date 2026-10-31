@@ -92,7 +92,7 @@ function AlertRow({ field, a, first }: { field: Field; a: Assessment; first: boo
   const text = a.drivers.find((d) => !/^(Protected by|Spray on)/.test(d));
   return (
     <Pressable
-      onPress={() => router.push({ pathname: '/alert/[threat]', params: { threat: a.threat, fieldId: field.id } })}
+      onPress={() => router.push({ pathname: '/farmer/alert/[threat]', params: { threat: a.threat, fieldId: field.id } })}
       accessibilityRole="link"
       className={`py-3 ${first ? '' : 'border-t border-line'}`}
     >

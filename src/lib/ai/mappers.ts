@@ -4,7 +4,7 @@ import type { Diagnosis } from '../diagnosis';
 import { euCheck, type EuCheck } from '../euCheck';
 import { THREAT_BY_ID, type Assessment, type FieldRisk } from '../risk';
 import type { FieldWeather } from '../weather';
-import type { AdviceResult, AdviseRequest, FruitResult, LabelResult, Language, TrapResult } from './schemas';
+import type { AdviceResult, AdviseRequest, FruitResult, LabelResult, Language, LeafLabel, LeafResult, TrapResult } from './schemas';
 
 /** Below this the AI says the photo was not clear enough. */
 export const LOW_CONFIDENCE = 0.4;
@@ -21,6 +21,25 @@ export function fruitToDiagnosis(r: FruitResult): Diagnosis {
   if (r.diagnosis === 'olive fly sting') return { ...base, title: 'Olive fly sting', latin: 'Bactrocera oleae', tone: 'watch', pill: 'Watch' };
   if (r.diagnosis === 'other damage') return { ...base, title: 'Other damage', tone: 'medium', pill: 'Check it' };
   return { ...base, title: 'Healthy fruit', tone: 'healthy', pill: 'Healthy' };
+}
+
+/** Below this the leaf model is not trusted: the farmer is asked to retake the photo. */
+export const LEAF_MIN_CONFIDENCE = 0.6;
+
+const LEAF_NAME: Record<LeafLabel, string> = { Healthy: 'Healthy', 'Olive Peacock Spot': 'Peacock spot', 'Aculus Olearius': 'Olive bud mite' };
+
+/** The answer of the leaf model as a scan result. A real answer only: a demo answer is replaced by the demo scan. */
+export function leafToDiagnosis(r: LeafResult): Diagnosis {
+  const confidence = percent(r.confidence);
+  const base = { confidence, source: r.source, modelVersion: r.source === 'model' ? r.modelVersion : undefined };
+  if (r.confidence < LEAF_MIN_CONFIDENCE) {
+    const guesses = r.top3.slice(0, 2).map((t) => `${LEAF_NAME[t.label]} ${percent(t.confidence)} %`).join(', ');
+    return { ...base, title: 'Not sure', tone: 'watch', pill: 'Retake photo', photo: 'leaf-spots', detail: `Best guesses: ${guesses}.` };
+  }
+  if (r.label === 'Healthy') return { ...base, title: 'Healthy leaf', tone: 'healthy', pill: 'Healthy', photo: 'leaf-healthy' };
+  if (r.label === 'Aculus Olearius') return { ...base, title: 'Olive bud mite', latin: 'Aculus olearius', tone: 'watch', pill: 'Check it', photo: 'leaf-spots' };
+  const high = r.confidence >= 0.8;
+  return { ...base, title: 'Peacock spot', latin: 'Spilocaea oleaginea', tone: high ? 'high' : 'medium', pill: high ? 'High risk' : 'Medium risk', photo: 'leaf-spots' };
 }
 
 export function trapToDiagnosis(r: TrapResult): Diagnosis {

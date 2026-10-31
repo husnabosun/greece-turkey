@@ -25,6 +25,8 @@ export const TIMEOUT_MS = 15_000;
 export interface AiEnv {
   GEMINI_API_KEY?: string;
   GEMINI_MODEL?: string;
+  /** Hugging Face read token for the leaf model Space. */
+  HF_TOKEN?: string;
 }
 
 export interface AiDeps {

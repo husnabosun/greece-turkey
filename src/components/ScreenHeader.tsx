@@ -14,7 +14,7 @@ interface Props {
 
 export function ScreenHeader({ title, subtitle, back = false, right }: Props) {
   const router = useRouter();
-  const goBack = () => (router.canGoBack() ? router.back() : router.navigate('/'));
+  const goBack = () => (router.canGoBack() ? router.back() : router.navigate('/farmer'));
   return (
     <View className="flex-row items-center">
       {back ? (

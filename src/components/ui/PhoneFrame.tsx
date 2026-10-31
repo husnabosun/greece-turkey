@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Platform, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
+import { SwitchViewLink } from '@/components/SwitchViewLink';
 import { useStore } from '@/state/store';
 import { colors, PHONE } from '@/theme/tokens';
 
@@ -21,6 +22,9 @@ export function PhoneFrame({ children }: { children: ReactNode }) {
 
   return (
     <View className="flex-1 items-center justify-center overflow-hidden bg-stage">
+      <View className="absolute left-4 top-4 z-10">
+        <SwitchViewLink />
+      </View>
       <View
         style={{
           width: OUTER_W,

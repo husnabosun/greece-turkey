@@ -7,12 +7,21 @@ Give a farmer a **first, quick hint** from one photo of one olive leaf: healthy,
 It is a decision aid for checking the tree more closely. **It does not replace a licensed agronomist.**
 
 ## Model
-* **Final model: v1.** Backbone: **EfficientNetB0** (ImageNet weights), input 224×224. Preprocessing of the final model: resized (squashed) to 256×256, centre crop 224×224.
+* **Final model: v2.** Backbone: **EfficientNetB0** (ImageNet weights), input 224×224. Preprocessing of the final model: letterbox: padded to a square with the photo own border colour, resized to 224×224 (no crop).
 * Head: global average pooling, dropout 0.3, softmax over 3 classes.
 * Training (both versions): two phases (frozen backbone, then fine-tuning of the top 30 layers), early stopping on validation loss,
   class weights, same split, same seed (42), same learning rates.
 * Classes: Healthy, Olive Peacock Spot, Aculus Olearius.
+* **Which numbers are which:** all accuracy and F1 numbers in this card come from the **Keras** model, except the table "Keras vs TFLite" below. The shipped file `leaf_disease.tflite` is quantised (dynamic range) and scores slightly differently.
 * Files: `models/leaf_disease.keras`, `models/leaf_disease.tflite` (4.6 MB), `models/labels.json`, `models/model_info.json`.
+
+## Keras vs TFLite (final model v2, full Denizli test set, 680 images)
+| Model | Accuracy on the Denizli test set |
+|---|---|
+| Keras (`leaf_disease.keras`) | 93.1 % |
+| TFLite (`leaf_disease.tflite`, shipped to the demo and the app) | 93.2 % |
+
+Keras and TFLite give the same prediction on **98.4 %** of the 680 test images.
 
 ## Versions
 | | v1 (first run) | v2 (experiment) |
@@ -27,16 +36,21 @@ No Edincik image was used for training either version. Edincik was used afterwar
 
 | Metric | v1 | v2 | Change |
 |---|---|---|---|
-| Denizli test: accuracy | 96.0 % | 93.8 % | -2.2 pts |
-| Denizli test: macro F1 | 0.960 | 0.938 | -0.022 |
-| Denizli de-duplicated: accuracy | 95.1 % | 92.7 % | -2.4 pts |
-| Denizli de-duplicated: macro F1 | 0.948 | 0.925 | -0.023 |
-| Edincik: accuracy | 63.1 % | 77.4 % | +14.3 pts |
-| Edincik: macro F1 | 0.621 | 0.774 | +0.153 |
-| Edincik: healthy recall | 39.0 % | 64.3 % | +25.3 pts |
-| Edincik: peacock spot recall | 99.2 % | 96.9 % | -2.4 pts |
+| Denizli test: accuracy | 95.4 % | 93.1 % | -2.4 pts |
+| Denizli test: macro F1 | 0.954 | 0.931 | -0.023 |
+| Denizli de-duplicated: accuracy | 94.8 % | 92.0 % | -2.8 pts |
+| Denizli de-duplicated: macro F1 | 0.944 | 0.916 | -0.027 |
+| Edincik: accuracy | 57.1 % | 75.1 % | +17.9 pts |
+| Edincik: macro F1 | 0.548 | 0.750 | +0.202 |
+| Edincik: healthy recall | 28.8 % | 60.5 % | +31.6 pts |
+| Edincik: peacock spot recall | 99.5 % | 96.9 % | -2.6 pts |
 
-**Decision:** v2 is better on Edincik but its Denizli accuracy is 93.8 %, below the 94% gate: v1 kept. Rule: v2 is kept only if it is better on Edincik (macro F1) and Denizli test accuracy stays at or above 94%.
+**Final model: v2**, chosen by hand and not by the rule.
+
+* **Original rule:** keep v2 only if it is better on Edincik (macro F1) and its Denizli test accuracy stays at or above 94%.
+* **What the rule said:** v2 is better on Edincik but its Denizli accuracy is 93.1 %, below the 94% gate: v1 kept. v2 reached 93.1 % on Denizli (gate 94%).
+* **Why we overrode it:** v2 generalises much better to a new region (Edincik macro F1 0.750 against 0.548 for v1), which matches real use on farmers phones. The price is 2.4 points of accuracy on Denizli.
+* **Caveat:** Edincik was used for this choice, so it is not a fully untouched test. Field photos are the final check.
 
 ## Data
 | | Denizli (Türkiye) | Edincik (Bandırma, Balıkesir) |
@@ -67,34 +81,34 @@ The tables below (results, per class, confidence, Grad-CAM, examples) describe *
 
 | Test set | Images | Accuracy | Macro F1 |
 |---|---|---|---|
-| Denizli test (official, 3 classes) | 680 | 96.0 % | 0.960 |
+| Denizli test (official, 3 classes) | 680 | 95.4 % | 0.954 |
 | Denizli test, only Healthy vs Peacock spot | 480 | 98.1 % | 0.981 |
-| Edincik (external, Healthy vs Peacock spot) | 954 | 63.1 % | 0.621 |
+| Edincik (external, Healthy vs Peacock spot) | 954 | 57.1 % | 0.548 |
 
-* Without the 145 Denizli test images that have a near duplicate in train: accuracy 95.1 %, macro F1 0.948.
+* Without the 145 Denizli test images that have a near duplicate in train: accuracy 94.8 %, macro F1 0.944.
 * Greek field photos: not available yet.
 
 Per class, Denizli test:
 
 | Class | precision | recall | f1-score | support |
 |---|---|---|---|---|
-| Healthy | 0.968 | 0.964 | 0.966 | 220 |
-| Olive Peacock Spot | 0.955 | 0.969 | 0.962 | 260 |
-| Aculus Olearius | 0.959 | 0.945 | 0.952 | 200 |
-| macro avg | 0.961 | 0.959 | 0.96 | 680 |
+| Healthy | 0.951 | 0.968 | 0.959 | 220 |
+| Olive Peacock Spot | 0.947 | 0.969 | 0.958 | 260 |
+| Aculus Olearius | 0.968 | 0.92 | 0.944 | 200 |
+| macro avg | 0.956 | 0.952 | 0.954 | 680 |
 
 Confidence (threshold 60%):
 
 | Test set | Images with confidence ≥ 60% | Accuracy on those | Accuracy on the rest |
 |---|---|---|---|
-| Denizli test | 98.1 % | 96.9 % | 53.8 % |
-| Edincik (2 classes) | 94.7 % | 63.7 % | 52.9 % |
+| Denizli test | 97.2 % | 96.5 % | 57.9 % |
+| Edincik (2 classes) | 93.4 % | 57.9 % | 46.0 % |
 
 Baseline, a general vision LLM on 60 test images:
 
 _Not run (no API key)._
 
-Figures (in `figures/leaf/`): `confusion_denizli_test.png`, `confusion_edincik.png`, `confusion_edincik_v2.png`, `v1_vs_v2.png`, `v2_preprocessing_edincik_photos.png`, `gradcam.png`, `examples.png`, `results_table.png`, `training_history.png`.
+Figures (in `figures/leaf/`): `confusion_denizli_test.png`, `confusion_edincik.png`, `confusion_edincik_v2.png`, `v1_vs_v2.png`, `v2_preprocessing.png`, `gradcam.png`, `examples.png`, `results_table.png`, `training_history.png`.
 
 ## Limitations
 * **Turkish data only** for training (Denizli). Other regions, varieties and cultivation methods may look different.

@@ -6,8 +6,8 @@ import { Animated, Easing, Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Scan, ScanMode } from '@/data/mock';
 import { diagnose, type Diagnosis } from '@/lib/diagnosis';
-import { fruitToDiagnosis, trapToDiagnosis } from '@/lib/ai/mappers';
-import { diagnoseFruitAi, diagnoseTrapAi } from '@/state/ai';
+import { fruitToDiagnosis, leafToDiagnosis, trapToDiagnosis } from '@/lib/ai/mappers';
+import { diagnoseFruitAi, diagnoseLeafAi, diagnoseTrapAi } from '@/state/ai';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { ScanPhoto } from './ScanPhoto';
@@ -17,9 +17,11 @@ const STEPS: Record<Exclude<ScanMode, 'label'>, string[]> = {
   fruit: ['Checking the photo is clear', 'Looking for marks on the fruit', 'Comparing with known olive problems', 'Preparing your result'],
   trap: ['Checking the photo is clear', 'Counting the flies on the trap', 'Comparing with last week', 'Preparing your result'],
 };
-/** The steps take at least this long; a real AI answer can take longer (the call times out after 20 s). */
+/** The steps take at least this long; a real AI answer can take longer (fruit and trap time out after 20 s, the leaf model after 65 s). */
 const TOTAL_MS = 1500;
 const STEP_MS = 330;
+/** After this long without an answer, the leaf model is probably asleep and we say so. */
+const WAKING_MS = 5000;
 
 const whenLabel = (d = new Date()) => `Today, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
@@ -38,6 +40,7 @@ export function AnalysingScreen() {
   const fieldId = params.fieldId ?? 'north';
 
   const [shown, setShown] = useState(0);
+  const [waking, setWaking] = useState(false);
   const line = useRef(new Animated.Value(0)).current;
   const started = useRef(false);
   const alive = useRef(true);
@@ -65,16 +68,22 @@ export function AnalysingScreen() {
       ]),
     ).start();
 
-    // Fruit and trap photos are read by the AI server. Without a photo, a server or a key, the demo result is used.
+    // Leaf photos go to our own model, fruit and trap photos to Gemini. Without a photo or a server, or when the AI cannot be reached,
+    // the demo result is used and marked as such.
     const ai: Promise<Diagnosis | null> = !captureUri
       ? Promise.resolve(null)
       : mode === 'fruit'
         ? diagnoseFruitAi(captureUri).then((r) => (r ? fruitToDiagnosis(r) : null))
         : mode === 'trap'
           ? diagnoseTrapAi(captureUri).then((r) => (r ? trapToDiagnosis(r) : null))
-          : Promise.resolve(null);
+          : diagnoseLeafAi(captureUri).then((r) => (r && r.source === 'model' ? leafToDiagnosis(r) : null));
+    let answered = false;
+    void ai.finally(() => {
+      answered = true;
+    });
 
     const timers = STEPS[mode].map((_, i) => setTimeout(() => setShown(i + 1), i * STEP_MS + 120));
+    if (mode === 'leaf' && captureUri) timers.push(setTimeout(() => !answered && setWaking(true), WAKING_MS));
     timers.push(
       setTimeout(async () => {
         const real = await ai;
@@ -92,7 +101,7 @@ export function AnalysingScreen() {
           recheckDue: false,
         };
         setPendingScan(scan);
-        router.replace(`/scan/result/${id}`);
+        router.replace(`/farmer/scan/result/${id}`);
       }, TOTAL_MS),
     );
     return () => {
@@ -119,7 +128,8 @@ export function AnalysingScreen() {
         <Sparkles size={18} color={colors.lime} />
         <Text className="font-i8 text-ap-card text-white">Analysing your photo</Text>
       </View>
-      <Text className="mt-1 font-i5 text-ap-body text-white/60">This takes a few seconds.</Text>
+      <Text className="mt-1 font-i5 text-ap-body text-white/60">{waking ? 'Waking up the AI model…' : 'This takes a few seconds.'}</Text>
+      {waking ? <Text className="mt-1 px-4 text-center font-i5 text-ap-small text-white/50">It was asleep. The first photo can take up to a minute.</Text> : null}
 
       <View className="mt-6 w-full gap-3">
         {STEPS[mode].map((label, i) => (

@@ -31,7 +31,7 @@ export function NotificationBanners() {
 
   const open = () => {
     hide();
-    router.push('/tasks');
+    router.push('/farmer/tasks');
   };
 
   return (

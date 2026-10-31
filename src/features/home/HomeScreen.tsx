@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
-import { Bell, Camera, Cloud, CloudLightning, CloudRain, Droplet, Globe, Leaf, MapPin, Plus, Settings, Sun, Tag, TriangleAlert, type LucideIcon } from 'lucide-react-native';
+import { ArrowLeftRight, Bell, Camera, Cloud, CloudLightning, CloudRain, Droplet, Globe, Leaf, MapPin, Plus, Settings, Sun, Tag, TriangleAlert, type LucideIcon } from 'lucide-react-native';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { AiTag, Button, Card, FieldChips, SectionHeader } from '@/components/ui';
 import { farmer, type Level, type ScanMode } from '@/data/mock';
@@ -103,7 +103,7 @@ export function HomeScreen() {
           <Pressable onPress={() => setMenu((v) => !v)} accessibilityLabel="Settings" className="h-10 w-10 items-center justify-center rounded-full border border-line bg-card">
             <Settings size={18} color={colors.ink} />
           </Pressable>
-          <Pressable onPress={() => router.push('/tasks')} accessibilityLabel="This week" className="h-10 w-10 items-center justify-center rounded-full border border-line bg-card">
+          <Pressable onPress={() => router.push('/farmer/tasks')} accessibilityLabel="This week" className="h-10 w-10 items-center justify-center rounded-full border border-line bg-card">
             <Bell size={18} color={colors.good} />
             <View className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-[#E5473A]" />
           </Pressable>
@@ -115,13 +115,27 @@ export function HomeScreen() {
           <Pressable
             onPress={() => {
               setMenu(false);
-              router.push('/onboarding');
+              router.push('/farmer/onboarding');
             }}
             className="h-11 flex-row items-center gap-2.5 rounded-xl px-2.5"
           >
             <Plus size={18} color={colors.ink} />
             <Text className="font-i6 text-ap-body text-ink">Add a field</Text>
           </Pressable>
+          {Platform.OS === 'web' ? (
+            <Pressable
+              onPress={() => {
+                setMenu(false);
+                useStore.getState().hideToast();
+                router.navigate('/');
+              }}
+              accessibilityRole="link"
+              className="h-11 flex-row items-center gap-2.5 rounded-xl px-2.5"
+            >
+              <ArrowLeftRight size={18} color={colors.ink} />
+              <Text className="font-i6 text-ap-body text-ink">Switch view</Text>
+            </Pressable>
+          ) : null}
           <View className="px-2.5 pb-1.5 pt-1">
             <View className="mb-1.5 flex-row items-center gap-2">
               <Globe size={16} color={colors.ink} />
@@ -197,21 +211,21 @@ export function HomeScreen() {
               onPress={() => openCamera(router, { fieldId: field.id, treeId: trees[field.id]?.find((t) => t.status === 'diseased')?.id, mode })}
             />
           ) : (
-            <Button label="See alerts" variant={tone.btn} icon={<TriangleAlert size={18} color="#fff" />} onPress={() => router.push('/alerts')} />
+            <Button label="See alerts" variant={tone.btn} icon={<TriangleAlert size={18} color="#fff" />} onPress={() => router.push('/farmer/alerts')} />
           )}
-          <Pressable onPress={() => router.push('/tasks')} className="h-8 justify-center">
+          <Pressable onPress={() => router.push('/farmer/tasks')} className="h-8 justify-center">
             <Text className={`font-i6 text-ap-small ${tone.kicker}`}>{`${done} / ${tasks.length} tasks`}</Text>
           </Pressable>
         </View>
       </View>
 
       <View className="mt-2 flex-row gap-2">
-        <StatChip label={`${risks} risks`} tone="risk" icon={<TriangleAlert size={16} color={colors.risk} />} onPress={() => router.push('/alerts')} />
-        <StatChip label={`${rechecks} re-check`} tone="warn" icon={<Leaf size={16} color={colors.warn} />} onPress={() => router.push('/tasks')} />
-        <StatChip label={`${openOffers} offers`} tone="good" icon={<Tag size={16} color={colors.good} />} onPress={() => router.push('/market/offers')} />
+        <StatChip label={`${risks} risks`} tone="risk" icon={<TriangleAlert size={16} color={colors.risk} />} onPress={() => router.push('/farmer/alerts')} />
+        <StatChip label={`${rechecks} re-check`} tone="warn" icon={<Leaf size={16} color={colors.warn} />} onPress={() => router.push('/farmer/tasks')} />
+        <StatChip label={`${openOffers} offers`} tone="good" icon={<Tag size={16} color={colors.good} />} onPress={() => router.push('/farmer/market/offers')} />
       </View>
 
-      <SectionHeader title="Your fields" action="See all" onAction={() => router.push('/field')} />
+      <SectionHeader title="Your fields" action="See all" onAction={() => router.push('/farmer/field')} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5 mt-1.5" contentContainerClassName="gap-2 px-5">
         {shown.map((f) => {
           const p = topPest(risk[f.id]);
@@ -222,7 +236,7 @@ export function HomeScreen() {
               pest={p ? { name: THREAT_BY_ID[p.threat].name, level: toLevel(p.level) } : undefined}
               onPress={() => {
                 selectField(f.id);
-                router.push('/field');
+                router.push('/farmer/field');
               }}
             />
           );

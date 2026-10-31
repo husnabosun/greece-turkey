@@ -21,7 +21,7 @@ export function endpoint(work: (body: unknown, deps: AiDeps) => Promise<ServerRe
     if (!limiter.allow(device.slice(0, 80))) return res.status(429).json({ ok: false });
 
     try {
-      const reply = await work(req.body, { env: { GEMINI_API_KEY: process.env.GEMINI_API_KEY, GEMINI_MODEL: process.env.GEMINI_MODEL } });
+      const reply = await work(req.body, { env: { GEMINI_API_KEY: process.env.GEMINI_API_KEY, GEMINI_MODEL: process.env.GEMINI_MODEL, HF_TOKEN: process.env.HF_TOKEN } });
       return res.status(reply.status).json(reply.body);
     } catch {
       return res.status(500).json({ ok: false });

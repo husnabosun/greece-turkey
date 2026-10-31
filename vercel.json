@@ -1,6 +1,11 @@
 {
   "buildCommand": "npx expo export -p web",
   "outputDirectory": "dist",
-  "functions": { "api/*.ts": { "maxDuration": 20 } },
+  "functions": {
+    "api/advise.ts": { "maxDuration": 20 },
+    "api/read-label.ts": { "maxDuration": 20 },
+    "api/diagnose-fruit-trap.ts": { "maxDuration": 20 },
+    "api/diagnose-leaf.ts": { "maxDuration": 60 }
+  },
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
 }

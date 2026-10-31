@@ -71,6 +71,8 @@ export interface FieldPoint {
   id: string;
   lat: number;
   lon: number;
+  /** Only for the offline demo forecast, see demoWeather. */
+  wetness?: number;
 }
 
 export function forecastUrl(f: FieldPoint): string {
@@ -200,8 +202,11 @@ const DEMO_RAIN: [number, number, number, number][] = [
 const pad = (n: number) => String(n).padStart(2, '0');
 const localKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-/** A believable offline forecast for the current season. Marked source "demo". */
-export function demoWeather(f: FieldPoint, now: number = Date.now()): FieldWeather {
+/**
+ * A believable offline forecast for the current season. Marked source "demo".
+ * `wetness` scales the demo rain (1 = the wet week above, 0 = a dry week), so places can differ.
+ */
+export function demoWeather(f: FieldPoint, now: number = Date.now(), wetness = 1): FieldWeather {
   const today = new Date(now);
   const base = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const days: DayWeather[] = [];
@@ -215,8 +220,8 @@ export function demoWeather(f: FieldPoint, now: number = Date.now()): FieldWeath
     for (let hr = 0; hr < 24; hr++) {
       const ts = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hr).getTime();
       const temp = seasonal + jitter + 5 * Math.sin(((hr - 9) / 24) * 2 * Math.PI);
-      const rain = DEMO_RAIN.filter(([o, start, len]) => o === off && hr >= start && hr < start + len).reduce((t, e) => t + e[3], 0);
-      const rh = Math.min(98, Math.max(35, 75 - 20 * Math.sin(((hr - 9) / 24) * 2 * Math.PI) + (rain > 0 ? 15 : 0)));
+      const rain = DEMO_RAIN.filter(([o, start, len]) => o === off && hr >= start && hr < start + len).reduce((t, e) => t + e[3] * wetness, 0);
+      const rh = Math.min(98, Math.max(35, 75 + (wetness - 1) * 25 - 20 * Math.sin(((hr - 9) / 24) * 2 * Math.PI) + (rain > 0 ? 15 : 0)));
       hours.push({
         time: `${localKey(day)}T${pad(hr)}:00`,
         ts,
@@ -297,6 +302,6 @@ export async function getFieldWeather(f: FieldPoint, deps: WeatherDeps = {}, opt
     return fresh;
   } catch {
     if (cached) return { ...cached, source: 'cached' };
-    return demoWeather(f, now);
+    return demoWeather(f, now, f.wetness);
   }
 }

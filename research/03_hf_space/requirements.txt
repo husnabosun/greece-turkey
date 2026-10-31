@@ -2,3 +2,4 @@ gradio>=5.0
 numpy
 pillow
 ai-edge-litert
+spaces

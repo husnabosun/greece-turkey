@@ -16,6 +16,8 @@ const confidence = z.number().min(0).max(1);
 
 export const readLabelRequest = z.object({ imageBase64: image });
 
+export const leafRequest = z.object({ imageBase64: image });
+
 export const diagnoseRequest = z.object({ imageBase64: image, mode: z.enum(['fruit', 'trap']) });
 
 const short = (n: number) => z.string().max(n);
@@ -70,6 +72,18 @@ export const trapResult = z.object({
   notes: z.string().max(200),
 });
 
+/** The classes of the leaf model (research/models/labels.json). */
+export const LEAF_LABELS = ['Healthy', 'Olive Peacock Spot', 'Aculus Olearius'] as const;
+export type LeafLabel = (typeof LEAF_LABELS)[number];
+
+const leafTop = z.object({ label: z.enum(LEAF_LABELS), confidence });
+
+/** What the Hugging Face Space answers: the best label, how sure it is (0 to 1), and the three best guesses. */
+export const leafSpaceAnswer = z.object({ label: z.enum(LEAF_LABELS), confidence, top3: z.array(leafTop).min(1).max(3) });
+
+/** What /api/diagnose-leaf answers. `source` is "demo" when the model could not be reached. */
+export const leafResult = leafSpaceAnswer.extend({ source: z.enum(['model', 'demo']), modelVersion: z.string().max(40) });
+
 export const adviceResult = z.object({
   summary: z.string().min(1).max(320),
   actions: z.array(z.string().min(1).max(140)).min(1).max(3),
@@ -78,6 +92,7 @@ export const adviceResult = z.object({
 
 export type ReadLabelRequest = z.infer<typeof readLabelRequest>;
 export type DiagnoseRequest = z.infer<typeof diagnoseRequest>;
+export type LeafResult = z.infer<typeof leafResult>;
 export type AdviseRequest = z.infer<typeof adviseRequest>;
 export type LabelResult = z.infer<typeof labelResult>;
 export type FruitResult = z.infer<typeof fruitResult>;

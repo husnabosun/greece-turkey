@@ -4,8 +4,9 @@ import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { Card } from '@/components/ui';
-import { factories, farmerGroups, marketTrend, tonsAvailable, type Factory } from '@/data/mock';
+import { factories, farmerGroups, marketTrend, PROCESSOR_ID, tonsAvailable, type Factory } from '@/data/mock';
 import { euroPrice, euroTotal, roundPrice, roundTotal } from '@/lib/market';
+import { requestAsFactory } from '@/lib/processor';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { FactoryLogo, priceRange, Rating } from './shared';
@@ -22,6 +23,7 @@ export function RequestsScreen() {
   const router = useRouter();
   const fields = useStore((s) => s.fields);
   const sprays = useStore((s) => s.sprays);
+  const procRequests = useStore((s) => s.procRequests);
   const [active, setActive] = useState<FilterKey[]>(['fits']);
 
   const toggle = (k: FilterKey) => setActive((a) => (a.includes(k) ? a.filter((x) => x !== k) : [...a, k]));
@@ -34,7 +36,13 @@ export function RequestsScreen() {
     (!active.includes('variety') || f.variety === 'Ayvalık' || f.variety === 'any') &&
     (!active.includes('region') || f.region === 'Aydın');
 
-  const shown = factories.filter((f) => f.requests && passes(f));
+  // Requests made in the processor panel come after the factories' own requests.
+  const demoBuyer = factories.find((f) => f.id === PROCESSOR_ID)!;
+  const all = [
+    ...factories.filter((f) => f.requests).map((f) => ({ key: f.id, factory: f })),
+    ...procRequests.filter((r) => r.shared).map((r) => ({ key: r.id, factory: requestAsFactory(r, demoBuyer) })),
+  ];
+  const shown = all.filter((x) => passes(x.factory));
 
   const lowest = fields.reduce((a, b) => (b.score < a.score ? b : a));
   const fitsLowest = factories.filter((f) => f.minScore <= lowest.score).length;
@@ -72,7 +80,7 @@ export function RequestsScreen() {
         </Pressable>
       </ScrollView>
 
-      <Pressable onPress={() => router.push('/quality')} className="mt-2 flex-row items-center rounded-[18px] bg-risk-soft p-3">
+      <Pressable onPress={() => router.push('/farmer/quality')} className="mt-2 flex-row items-center rounded-[18px] bg-risk-soft p-3">
         <ArrowUp size={20} color={colors.risk} />
         <View className="ml-3 flex-1">
           <Text className="font-i8 text-ap-body text-ink">{`${lowest.name} (quality score ${lowest.score}) fits ${fitsLowest} buyer${fitsLowest === 1 ? '' : 's'}`}</Text>
@@ -88,7 +96,7 @@ export function RequestsScreen() {
             <Text className="font-i6 text-ap-body text-muted">No requests match these filters.</Text>
           </Card>
         ) : (
-          shown.map((f) => <RequestCard key={f.id} factory={f} />)
+          shown.map((x) => <RequestCard key={x.key} factory={x.factory} />)
         )}
       </View>
     </Screen>
@@ -169,7 +177,7 @@ function RequestCard({ factory }: { factory: Factory }) {
             <Text className="font-i5 text-ap-small text-muted">{`Estimated revenue: ≈ ${euroTotal(revenue)}`}</Text>
           </View>
           <Pressable
-            onPress={() => router.push({ pathname: '/market/new', params: { fieldId: bestField, factoryId: factory.id } })}
+            onPress={() => router.push({ pathname: '/farmer/market/new', params: { fieldId: bestField, factoryId: factory.id } })}
             accessibilityRole="button"
             className="h-9 flex-row items-center gap-1 rounded-full bg-ink px-4"
           >

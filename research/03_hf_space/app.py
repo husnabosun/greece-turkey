@@ -10,6 +10,7 @@ from pathlib import Path
 
 import gradio as gr
 import numpy as np
+import spaces  # ZeroGPU; the decorator does nothing when run on your own computer
 from PIL import Image, ImageOps
 
 try:  # small runtime, no full TensorFlow needed
@@ -46,6 +47,7 @@ def letterbox(img: Image.Image, size: int) -> Image.Image:
     return Image.fromarray(canvas).resize((size, size), Image.BILINEAR)
 
 
+@spaces.GPU(duration=10)  # ZeroGPU needs one decorated function. The TFLite model itself runs on the CPU inside it.
 def predict(image: Image.Image) -> dict:
     """Classify one leaf photo."""
     if image is None:

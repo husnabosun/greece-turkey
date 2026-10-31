@@ -4,10 +4,10 @@ import { Pressable, Text, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Pill, SectionHeader } from '@/components/ui';
 import { factories, type Field } from '@/data/mock';
-import { euroPrice, pctAbove } from '@/lib/market';
+import { compareToRange, euroPrice } from '@/lib/market';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
-import { FactoryLogo, factoryById, priceRange, Rating, useFairPrice } from './shared';
+import { ExchangeBox, FactoryLogo, factoryById, priceRange, Rating, useExchangeRange, useHasBanned } from './shared';
 
 export function OverviewScreen() {
   const router = useRouter();
@@ -21,7 +21,7 @@ export function OverviewScreen() {
 
   return (
     <Screen topPadding={false}>
-      <Pressable onPress={() => router.push('/market/new')} accessibilityRole="button" className="h-14 flex-row items-center rounded-[18px] bg-ink px-3">
+      <Pressable onPress={() => router.push('/farmer/market/new')} accessibilityRole="button" className="h-14 flex-row items-center rounded-[18px] bg-ink px-3">
         <View className="h-9 w-9 items-center justify-center rounded-full bg-white/15">
           <Plus size={20} color="#fff" />
         </View>
@@ -30,6 +30,10 @@ export function OverviewScreen() {
           <ChevronRight size={18} color={colors.ink} />
         </View>
       </Pressable>
+
+      <View className="mt-3">
+        <ExchangeBox />
+      </View>
 
       <SectionHeader title="Best offer" />
       {best ? <BestOffer offerId={best.id} onAccept={() => acceptOffer(best.id)} onCounter={() => showToast('Counter offer sent')} /> : (
@@ -50,7 +54,7 @@ export function OverviewScreen() {
         {factories
           .filter((f) => f.requests && f.kind === 'food-oil')
           .map((f) => (
-            <Pressable key={f.id} onPress={() => router.replace('/market/requests')}>
+            <Pressable key={f.id} onPress={() => router.replace('/farmer/market/requests')}>
               <Card className="flex-row items-center p-2.5">
                 <FactoryLogo factory={f} />
                 <View className="ml-2.5 flex-1">
@@ -77,8 +81,7 @@ export function OverviewScreen() {
 function BestOffer({ offerId, onAccept, onCounter }: { offerId: string; onAccept: () => void; onCounter: () => void }) {
   const offer = useStore((s) => s.offers.find((o) => o.id === offerId))!;
   const factory = factoryById(offer.factoryId);
-  const { fair } = useFairPrice(offer.fieldId);
-  const pct = pctAbove(offer.pricePerKg, fair);
+  const verdict = compareToRange(offer.pricePerKg, useExchangeRange().range);
   return (
     <Card className="mt-2 p-3">
       <View className="flex-row items-center">
@@ -93,7 +96,7 @@ function BestOffer({ offerId, onAccept, onCounter }: { offerId: string; onAccept
         </Text>
       </View>
       <View className="mt-2 flex-row items-center justify-between">
-        <Pill tone={pct >= 0 ? 'good' : 'risk'}>{`${pct >= 0 ? '+' : ''}${pct}% ${pct >= 0 ? 'above' : 'below'} suggested`}</Pill>
+        {verdict ? <Pill tone={verdict.tone}>{verdict.label}</Pill> : <Text className="font-i5 text-ap-small text-muted">No exchange data</Text>}
         <View className="flex-row gap-2">
           <Button compact label="Counter" variant="outline" className="h-9 px-4" onPress={onCounter} />
           <Button compact label="Accept" className="h-9 px-4" onPress={onAccept} />
@@ -105,13 +108,13 @@ function BestOffer({ offerId, onAccept, onCounter }: { offerId: string; onAccept
 
 function FieldPriceCard({ field }: { field: Field }) {
   const router = useRouter();
-  const { fair, hasBanned } = useFairPrice(field.id);
+  const hasBanned = useHasBanned(field.id);
   const openOffers = useStore((s) => s.offers.filter((o) => o.fieldId === field.id && o.status === 'open').length);
   const listing = useStore((s) => s.listings.find((l) => l.fieldId === field.id));
   const low = field.score < 70;
 
   let action = (
-    <Pressable onPress={() => router.push({ pathname: '/market/new', params: { fieldId: field.id } })} className="h-6 flex-row items-center">
+    <Pressable onPress={() => router.push({ pathname: '/farmer/market/new', params: { fieldId: field.id } })} className="h-6 flex-row items-center">
       <Text className="font-i7 text-ap-body text-ink">List now</Text>
       <ChevronRight size={14} color={colors.ink} />
     </Pressable>
@@ -120,7 +123,7 @@ function FieldPriceCard({ field }: { field: Field }) {
     action = <Text className="font-i7 text-ap-body text-good">{`Listed · ${listing.tons} t`}</Text>;
   } else if (openOffers > 0) {
     action = (
-      <Pressable onPress={() => router.replace('/market/offers')} className="h-6 flex-row items-center">
+      <Pressable onPress={() => router.replace('/farmer/market/offers')} className="h-6 flex-row items-center">
         <Text className="font-i7 text-ap-body text-accent">{`${openOffers} offers`}</Text>
         <ChevronRight size={14} color={colors.accent} />
       </Pressable>
@@ -138,11 +141,15 @@ function FieldPriceCard({ field }: { field: Field }) {
           <Text className={`font-i8 text-ap-body ${low ? 'text-risk' : 'text-good'}`}>{field.score}</Text>
         </View>
       </View>
-      <Text className="mt-1 font-i8 text-ap-title text-ink">
-        {euroPrice(fair)}
-        <Text className="font-i5 text-ap-small text-muted">{' /kg'}</Text>
-      </Text>
-      {hasBanned ? <Text className="font-i7 text-ap-small text-risk">1 issue lowers price</Text> : null}
+      {listing ? (
+        <Text className="mt-1 font-i8 text-ap-title text-ink">
+          {euroPrice(listing.pricePerKg)}
+          <Text className="font-i5 text-ap-small text-muted">{' /kg'}</Text>
+        </Text>
+      ) : (
+        <Text className="mt-1 font-i7 text-ap-body text-muted">Not listed yet</Text>
+      )}
+      {hasBanned ? <Text className="font-i7 text-ap-small text-risk">Banned product used</Text> : null}
       <View className="mt-1">{action}</View>
     </Card>
   );

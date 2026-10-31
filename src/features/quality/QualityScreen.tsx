@@ -3,24 +3,10 @@ import { Pressable, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Screen } from '@/components/Screen';
-import { Card, FieldChips, Pill, type PillTone } from '@/components/ui';
-import type { Breakdown } from '@/data/mock';
+import { Card, FieldChips, Pill } from '@/components/ui';
 import { useActiveField, useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
-
-const ROWS: { key: keyof Breakdown; title: string; hint: string }[] = [
-  { key: 'tree', title: 'Tree health', hint: 'Leaf condition and disease status' },
-  { key: 'spray', title: 'Safe spraying', hint: 'Recent spray choice and safety compliance' },
-  { key: 'harvest', title: 'Harvest timing', hint: 'Timing suitability for harvest' },
-  { key: 'records', title: 'Records kept', hint: 'Spray and field records are complete' },
-];
-
-function status(value: number): { label: string; tone: PillTone } {
-  if (value >= 90) return { label: 'Excellent', tone: 'good' };
-  if (value >= 80) return { label: 'Very good', tone: 'good' };
-  if (value >= 60) return { label: 'Good', tone: 'good' };
-  return { label: 'Needs improvement', tone: 'warn' };
-}
+import { BREAKDOWN_ROWS, breakdownStatus } from './breakdown';
 
 function Ring({ score }: { score: number }) {
   const r = 47;
@@ -88,9 +74,9 @@ export function QualityScreen() {
             <Info size={18} color={colors.muted} />
           </Pressable>
         </View>
-        {ROWS.map((row) => {
+        {BREAKDOWN_ROWS.map((row) => {
           const value = field.breakdown[row.key];
-          const st = status(value);
+          const st = breakdownStatus(value);
           return (
             <View key={row.key} className="mt-2 flex-row items-center border-t border-line pt-2">
               <View className="flex-1">

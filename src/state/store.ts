@@ -1,24 +1,38 @@
 import { create } from 'zustand';
 import {
+  areas,
+  deliveries as seedDeliveries,
   factories,
+  farmer,
   fields as seedFields,
+  incomingOffers as seedIncoming,
   initialNotifications,
   initialScans,
   initialTrees,
   LOCATION_RISK_PENALTY,
+  lots as otherLots,
   offers as seedOffers,
+  PROCESSOR_ID,
+  procRequests as seedRequests,
   sales as seedSales,
+  season,
   sprays as seedSprays,
   tasks as seedTasks,
   tonsAvailable,
+  type Delivery,
   type Field,
+  type IncomingOffer,
   type Offer,
+  type ProcRequest,
   type Scan,
   type Sale,
+  type SentOffer,
   type Spray,
   type Task,
   type Tree,
 } from '@/data/mock';
+import { formatDay } from '@/lib/dates';
+import { AFTER_LAB, AFTER_WEIGHING, deliveryStepToSaleStep, lotHasBanned, PAID_STEP } from '@/lib/processor';
 import type { Language } from '@/lib/ai/schemas';
 import { createFeedback, upsertFeedback, type FeedbackAnswer, type FeedbackEntry } from '@/lib/feedback';
 import type { Assessment } from '@/lib/risk';
@@ -115,9 +129,20 @@ interface AppState {
   notificationsSeen: boolean;
   toast: ToastMsg | null;
 
+  // Processor panel (web). The same store, so both views stay in step.
+  procRequests: ProcRequest[];
+  /** Farmers' offers to the processor. */
+  incomingOffers: IncomingOffer[];
+  /** Processor offers for lots of other farmers (offers for the demo farmer's fields are in `offers`). */
+  sentOffers: SentOffer[];
+  deliveries: Delivery[];
+  /** Live, cached or demo weather per region, for the supply outlook. Key: region name. */
+  areaWeather: Record<string, FieldWeather>;
+
   selectField: (id: string | 'all') => void;
   selectTree: (id: number | null) => void;
   loadWeather: (opts?: { force?: boolean }) => Promise<void>;
+  loadAreaWeather: (opts?: { force?: boolean }) => Promise<void>;
   answerFeedback: (a: { fieldId: string; assessment: Assessment; answer: FeedbackAnswer; reason?: string }) => void;
   hydrateFeedback: () => Promise<void>;
   setLanguage: (language: Language) => void;
@@ -139,9 +164,20 @@ interface AppState {
   hideBanners: () => void;
   showToast: (text: string) => void;
   hideToast: () => void;
+
+  createRequest: (input: Omit<ProcRequest, 'id' | 'filledTons' | 'farmers' | 'shared'>) => void;
+  makeOffer: (input: { lotId: string; tons: number; pricePerKg: number; deliveryIn: number }) => void;
+  acceptIncomingOffer: (id: string) => void;
+  recordWeighbridge: (deliveryId: string, kg: number) => void;
+  /** Lab check passed, then paid. */
+  advanceDelivery: (deliveryId: string) => void;
 }
 
 let toastId = 0;
+let idSeq = 0;
+/** Unique id, also for two actions in the same millisecond. */
+const uid = (prefix: string) => `${prefix}${Date.now()}${++idSeq}`;
+const todayWithYear = () => `${formatDay(0)} ${season}`;
 
 export const useStore = create<AppState>((set, get) => ({
   fields: seedFields,
@@ -169,6 +205,11 @@ export const useStore = create<AppState>((set, get) => ({
   banners: null,
   notificationsSeen: false,
   toast: null,
+  procRequests: seedRequests,
+  incomingOffers: seedIncoming,
+  sentOffers: [],
+  deliveries: seedDeliveries,
+  areaWeather: {},
 
   selectField: (id) => set({ selectedFieldId: id, selectedTreeId: null }),
   selectTree: (id) => set({ selectedTreeId: id }),
@@ -178,6 +219,11 @@ export const useStore = create<AppState>((set, get) => ({
     const fields = get().fields;
     const results = await loadAllWeather(fields, opts);
     set((s) => ({ weather: { ...s.weather, ...results }, weatherLoading: false }));
+  },
+
+  loadAreaWeather: async (opts) => {
+    const results = await loadAllWeather(areas.map((a) => ({ id: `area:${a.region}`, lat: a.lat, lon: a.lon, wetness: a.wetness })), opts);
+    set({ areaWeather: Object.fromEntries(areas.map((a) => [a.region, results[`area:${a.region}`]])) });
   },
 
   /** Saves a "Was this right?" answer with the prediction, the weather and the field signals. */
@@ -260,15 +306,19 @@ export const useStore = create<AppState>((set, get) => ({
   acceptOffer: (id) => {
     const offer = get().offers.find((o) => o.id === id);
     if (!offer) return;
+    if (offer.status === 'accepted') return;
     const factory = factories.find((f) => f.id === offer.factoryId);
+    const tons = offer.tons ?? tonsAvailable;
+    const saleId = uid('a');
+    const field = get().fields.find((f) => f.id === offer.fieldId);
     set((s) => ({
       offers: s.offers.map((o) => (o.id === id ? { ...o, status: 'accepted' } : o)),
       sales: [
         {
-          id: `a${Date.now()}`,
+          id: saleId,
           fieldId: offer.fieldId,
           factoryId: offer.factoryId,
-          tons: tonsAvailable,
+          tons,
           pricePerKg: offer.pricePerKg,
           status: 'inProgress',
           step: 0,
@@ -276,6 +326,27 @@ export const useStore = create<AppState>((set, get) => ({
         },
         ...s.sales,
       ],
+      // An offer of the processor panel becomes a delivery there.
+      deliveries:
+        offer.factoryId === PROCESSOR_ID
+          ? [
+              {
+                id: uid('d'),
+                saleId,
+                lotId: offer.fieldId,
+                farmerName: farmer.name,
+                place: farmer.place,
+                variety: field?.variety ?? '',
+                tons,
+                pricePerKg: offer.pricePerKg,
+                scheduledIn: offer.deliveryIn ?? 5,
+                step: 0,
+                score: field?.score,
+                bannedFree: !s.sprays.some((sp) => sp.fieldId === offer.fieldId && sp.banned),
+              },
+              ...s.deliveries,
+            ]
+          : s.deliveries,
     }));
     get().showToast(`Offer from ${factory?.name} accepted`);
   },
@@ -286,7 +357,14 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   publishListing: (listing) => {
-    set((s) => ({ listings: [{ ...listing, id: `l${Date.now()}` }, ...s.listings.filter((l) => l.fieldId !== listing.fieldId)] }));
+    set((s) => ({
+      listings: [{ ...listing, id: uid('l') }, ...s.listings.filter((l) => l.fieldId !== listing.fieldId)],
+      // The processor panel sees the listing as an incoming offer (a newer listing replaces the older open one).
+      incomingOffers: [
+        { id: uid('io'), lotId: listing.fieldId, tons: listing.tons, pricePerKg: listing.pricePerKg, status: 'open' },
+        ...s.incomingOffers.filter((o) => !(o.lotId === listing.fieldId && o.status === 'open')),
+      ],
+    }));
     get().showToast('Listing published');
   },
 
@@ -323,6 +401,94 @@ export const useStore = create<AppState>((set, get) => ({
 
   showToast: (text) => set({ toast: { id: ++toastId, text } }),
   hideToast: () => set({ toast: null }),
+
+  createRequest: (input) => {
+    set((s) => ({ procRequests: [{ ...input, id: uid('r'), filledTons: 0, farmers: 0, shared: true }, ...s.procRequests] }));
+    get().showToast('Request created. Farmers can see it');
+  },
+
+  /** An offer for the demo farmer's field goes to the farmer's Market > Offers; others are only kept here. */
+  makeOffer: ({ lotId, tons, pricePerKg, deliveryIn }) => {
+    const forDemoFarmer = get().fields.some((f) => f.id === lotId);
+    if (forDemoFarmer) {
+      set((s) => ({
+        offers: [
+          { id: uid('o'), fieldId: lotId, factoryId: PROCESSOR_ID, pricePerKg, status: 'open', tons, deliveryIn },
+          ...s.offers.filter((o) => !(o.factoryId === PROCESSOR_ID && o.fieldId === lotId && o.status === 'open')),
+        ],
+      }));
+    } else {
+      set((s) => ({ sentOffers: [{ id: uid('so'), lotId, tons, pricePerKg, deliveryIn }, ...s.sentOffers.filter((o) => o.lotId !== lotId)] }));
+    }
+    get().showToast('Offer sent to the farmer');
+  },
+
+  /** Accepting a farmer's offer unlocks the farmer's name and starts a delivery. A listing of the demo farmer also becomes a sale in the farmer app. */
+  acceptIncomingOffer: (id) => {
+    const s = get();
+    const offer = s.incomingOffers.find((o) => o.id === id);
+    if (!offer || offer.status !== 'open') return;
+    const field = s.fields.find((f) => f.id === offer.lotId);
+    const lot = field ? undefined : otherLots.find((l) => l.id === offer.lotId);
+    if (!field && !lot) return;
+    const farmerName = field ? farmer.name : lot!.farmerName;
+    const saleId = field ? uid('a') : undefined;
+    set((st) => ({
+      incomingOffers: st.incomingOffers.map((o) => (o.id === id ? { ...o, status: 'accepted' } : o)),
+      sales: field
+        ? [{ id: saleId!, fieldId: field.id, factoryId: PROCESSOR_ID, tons: offer.tons, pricePerKg: offer.pricePerKg, status: 'inProgress', step: 0, note: 'agreed today' }, ...st.sales]
+        : st.sales,
+      deliveries: [
+        {
+          id: uid('d'),
+          saleId,
+          lotId: offer.lotId,
+          farmerName,
+          place: field ? farmer.place : `${lot!.town}, ${lot!.region}`,
+          variety: field?.variety ?? lot!.variety,
+          tons: offer.tons,
+          pricePerKg: offer.pricePerKg,
+          scheduledIn: 5,
+          step: 0,
+          score: field?.score ?? lot!.score,
+          bannedFree: field ? !st.sprays.some((sp) => sp.fieldId === field.id && sp.banned) : !lotHasBanned(lot!),
+        },
+        ...st.deliveries,
+      ],
+    }));
+    get().showToast(`Offer accepted. ${farmerName} is now visible`);
+  },
+
+  recordWeighbridge: (deliveryId, kg) => {
+    const d = get().deliveries.find((x) => x.id === deliveryId);
+    if (!d || d.step >= AFTER_WEIGHING || !(kg > 0)) return;
+    set((s) => ({
+      deliveries: s.deliveries.map((x) => (x.id === deliveryId ? { ...x, actualKg: kg, step: AFTER_WEIGHING } : x)),
+      sales: d.saleId
+        ? s.sales.map((x) => (x.id === d.saleId ? { ...x, tons: kg / 1000, actualKg: kg, step: deliveryStepToSaleStep(AFTER_WEIGHING), note: 'weighed' } : x))
+        : s.sales,
+    }));
+    get().showToast(`Weighbridge recorded: ${kg.toLocaleString('en-US')} kg`);
+  },
+
+  advanceDelivery: (deliveryId) => {
+    const d = get().deliveries.find((x) => x.id === deliveryId);
+    if (!d || d.step < AFTER_WEIGHING || d.step >= PAID_STEP) return;
+    if (d.step === AFTER_WEIGHING) {
+      set((s) => ({
+        deliveries: s.deliveries.map((x) => (x.id === deliveryId ? { ...x, step: AFTER_LAB, labResult: 'passed' } : x)),
+        sales: d.saleId ? s.sales.map((x) => (x.id === d.saleId ? { ...x, step: deliveryStepToSaleStep(AFTER_LAB), labResult: 'passed', note: 'lab check passed' } : x)) : s.sales,
+      }));
+      get().showToast('Lab check passed');
+      return;
+    }
+    const paidDate = todayWithYear();
+    set((s) => ({
+      deliveries: s.deliveries.map((x) => (x.id === deliveryId ? { ...x, step: PAID_STEP, paidDate, paidAgo: 0 } : x)),
+      sales: d.saleId ? s.sales.map((x) => (x.id === d.saleId ? { ...x, status: 'paid', step: deliveryStepToSaleStep(PAID_STEP), paidDate, note: '' } : x)) : s.sales,
+    }));
+    get().showToast('Marked as paid');
+  },
 }));
 
 /** The field shown on single-field screens: the selected one, or the first when "All fields" is on. */

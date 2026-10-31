@@ -7,10 +7,10 @@ import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 
 const TABS = [
-  { label: 'Overview', path: '/market' },
-  { label: 'Requests', path: '/market/requests' },
-  { label: 'Offers', path: '/market/offers' },
-  { label: 'Sales', path: '/market/sales' },
+  { label: 'Overview', path: '/farmer/market' },
+  { label: 'Requests', path: '/farmer/market/requests' },
+  { label: 'Offers', path: '/farmer/market/offers' },
+  { label: 'Sales', path: '/farmer/market/sales' },
 ] as const;
 
 /** Title and sub-tabs shared by the four Market screens. Switching only swaps the content below. */
@@ -33,7 +33,7 @@ export function MarketHeader() {
       />
       <View className="mt-2.5 h-10 flex-row rounded-full bg-soft p-1">
         {TABS.map((t) => {
-          const on = pathname === t.path || (t.path === '/market' && pathname === '/market/');
+          const on = pathname === t.path || (t.path === '/farmer/market' && pathname === '/farmer/market/');
           return (
             <Pressable
               key={t.path}

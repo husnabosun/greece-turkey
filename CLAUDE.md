@@ -2,7 +2,7 @@
 
 AgroPulse is a mobile app for small olive farmers in Türkiye and Greece.
 Farmers record their field care (sprays, photos, checks); the app turns these records
-into a quality score and an AI fair price, and sells the olives directly to olive oil
+into a quality score, and sells the olives directly to olive oil
 factories through a marketplace.
 
 Right now this is a **clickable demo on mock data** for a hackathon, published as a website.
@@ -30,18 +30,22 @@ The same code must later become an iOS/Android app without rewriting the UI.
 ## Project structure
 ```
 app/                     expo-router routes (thin: only compose feature components)
-  _layout.tsx            fonts, providers, web phone frame
-  (tabs)/_layout.tsx     bottom navigation
-  (tabs)/index.tsx       Home
-  (tabs)/field.tsx  (tabs)/scan.tsx  (tabs)/logbook.tsx
-  (tabs)/market/_layout.tsx  index.tsx  requests.tsx  offers.tsx  sales.tsx
-  market/new.tsx  quality.tsx  alerts.tsx  tasks.tsx  onboarding/index.tsx  onboarding/crop.tsx
+  _layout.tsx            fonts, providers
+  index.web.tsx          web landing page: choose "Farmer app" or "Processor panel"
+  index.tsx              iOS/Android: redirect to /farmer
+  farmer/_layout.tsx     the farmer app: web phone frame, toast
+  farmer/(tabs)/_layout.tsx  bottom navigation
+  farmer/(tabs)/index.tsx    Home
+  farmer/(tabs)/field.tsx  scan.tsx  logbook.tsx
+  farmer/(tabs)/market/_layout.tsx  index.tsx  requests.tsx  offers.tsx  sales.tsx
+  farmer/market/new.tsx  quality.tsx  alerts.tsx  tasks.tsx  onboarding/index.tsx  onboarding/crop.tsx
+  processor/             processor (B2B) panel, web only: index, lots, lots/[id], requests, deliveries
 src/
   components/ui/         Card, Pill, Button, SectionHeader, AIBox, FieldChips, StatusSteps, Toast, PhoneFrame
   features/<feature>/    screen-specific components (home, field, scan, logbook, market, quality, alerts, onboarding)
   data/mock.ts           seed data
   state/store.ts         zustand store + actions (addSpray, acceptOffer, joinGroup, completeTask …)
-  lib/score.ts           quality score + fair price engine (pure TS)
+  lib/score.ts           quality score engine (pure TS); no price engine: the farmer sets the price, the app shows the exchange range (src/lib/market.ts)
   lib/score.test.ts
   theme/tokens.ts
 ```
@@ -52,6 +56,9 @@ src/
 - Bottom tab bar on the 5 main tabs: Home, Field, Scan, Logbook, Market. The active tab shows a black circle
   behind its icon. Detail screens (New listing, Quality score, Alerts, Tasks, Onboarding) have a back button
   and no tab bar.
+- The phone frame is only for `/farmer`. The processor panel (`/processor`, web only) is a desktop website: left sidebar,
+  content up to 1200 px; under 900 px the sidebar becomes a top bar. It uses the same tokens and UI components, shows only the
+  public "Demo price" and never a fair or recommended price.
 - Screen transitions must feel instant: no heavy images on first load, lazy-load screens.
 
 ## Design tokens

@@ -29,7 +29,7 @@ function TaskCard({ task }: { task: Task }) {
   const yes = () => {
     completeTask(task.id, 'Spray noted. Add it to your logbook. Score +1');
     selectField(task.fieldId);
-    router.push({ pathname: '/logbook', params: { add: '1' } });
+    router.push({ pathname: '/farmer/logbook', params: { add: '1' } });
   };
 
   return (
@@ -82,7 +82,7 @@ export function TasksScreen() {
         back
         title="This week"
         right={
-          <RoundButton label="Alerts" onPress={() => router.push('/alerts')}>
+          <RoundButton label="Alerts" onPress={() => router.push('/farmer/alerts')}>
             <Bell size={18} color={colors.ink} />
           </RoundButton>
         }

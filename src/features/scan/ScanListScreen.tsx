@@ -27,7 +27,7 @@ function BeforeAfterCard({ card, fieldName }: { card: BeforeAfter; fieldName: st
     </View>
   );
   return (
-    <Pressable onPress={() => router.push(`/scan/result/${card.after.id}`)} accessibilityRole="button">
+    <Pressable onPress={() => router.push(`/farmer/scan/result/${card.after.id}`)} accessibilityRole="button">
       <Card className="mt-2 p-3">
         <View className="flex-row items-start justify-between">
           <View className="flex-1">
@@ -49,7 +49,7 @@ function ScanRow({ scan, due }: { scan: Scan; due: boolean }) {
   const router = useRouter();
   const sub = due ? `Due today · ${scan.date}` : scan.mode === 'trap' ? `${scan.date} · counted by AI` : `${scan.date} · ${scan.confidence}% sure`;
   return (
-    <Pressable onPress={() => router.push(`/scan/result/${scan.id}`)} accessibilityLabel={scanTitle(scan)} className="mt-2">
+    <Pressable onPress={() => router.push(`/farmer/scan/result/${scan.id}`)} accessibilityLabel={scanTitle(scan)} className="mt-2">
       <Card className="flex-row items-center p-2.5">
         <View className="h-12 w-12 overflow-hidden rounded-[10px]">
           <ScanPhoto photo={scan.photo} spots={scan.spots} flies={scan.flies} uri={scan.uri} />

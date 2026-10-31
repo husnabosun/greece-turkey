@@ -103,7 +103,7 @@ export function StepCropScreen() {
       ],
     });
     resetDraft();
-    router.replace('/');
+    router.replace('/farmer');
     showToast(`${name} added. Starting score ${score}`);
   };
 
@@ -142,6 +142,7 @@ export function StepCropScreen() {
             ))}
           </View>
         </Card>
+        <Text className="mt-1 px-1 font-i5 text-ap-small text-muted">B-Reçete: the official pesticide prescription (Türkiye).</Text>
 
         <Label>{`Proof for ${STAGE_TITLE[draft.stage]}`}</Label>
         <View className="flex-row flex-wrap gap-2">
