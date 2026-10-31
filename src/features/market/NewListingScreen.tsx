@@ -6,10 +6,10 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { Screen } from '@/components/Screen';
 import { Button, Card, Pill } from '@/components/ui';
 import { tonsAvailable } from '@/data/mock';
-import { compareToRange, euroPrice, roundPrice } from '@/lib/market';
+import { euroPrice, exchangeSpan, roundPrice } from '@/lib/market';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
-import { ExchangeBox, factoryById, useExchangeRange, useHasBanned } from './shared';
+import { factoryById, useExchangeRange, useHasBanned } from './shared';
 
 const PERIODS = ['3–10 Nov', '10–17 Nov', '17–24 Nov'];
 
@@ -33,7 +33,6 @@ export function NewListingScreen() {
   // The farmer sets the price. It starts at the request price, or at the exchange average, or at €0.80 when there is no exchange data.
   const startPrice = requestPrice ?? (range ? roundPrice(range.avg) : 0.8);
   const [price, setPrice] = useState(startPrice);
-  const verdict = compareToRange(price, range);
 
   const changeField = () => {
     const next = fields[(fields.findIndex((f) => f.id === fieldId) + 1) % fields.length];
@@ -140,7 +139,16 @@ export function NewListingScreen() {
 
       <Label>Price</Label>
       <Card className="p-3">
-        <ExchangeBox />
+        <View className="rounded-xl bg-good-soft p-2.5">
+          <View className="flex-row items-center justify-between">
+            <Text className="font-i8 text-ap-body text-good">Exchange price range</Text>
+            <Text className="font-i8 text-ap-card text-ink">
+              {range ? exchangeSpan(range) : '–'}
+              <Text className="font-i5 text-ap-small text-muted">{' /kg'}</Text>
+            </Text>
+          </View>
+          <Text className="mt-0.5 font-i5 text-ap-small text-muted">{range ? 'Min–max at the local commodity exchange today · sample data' : 'No exchange data for this area'}</Text>
+        </View>
 
         <Text className="mb-1.5 mt-2.5 font-i5 text-ap-body text-muted">Your price per kg</Text>
         <View className="h-12 flex-row items-center justify-between rounded-xl border border-line px-2">
@@ -152,11 +160,9 @@ export function NewListingScreen() {
             <Plus size={18} color={colors.ink} />
           </RoundStep>
         </View>
-        {verdict ? (
-          <View className="mt-2">
-            <Pill tone={verdict.tone}>{verdict.label}</Pill>
-          </View>
-        ) : null}
+        <Text className="mt-1 font-i5 text-ap-small text-muted">{range ? `Exchange range today: ${exchangeSpan(range)} /kg` : 'No exchange data for this area'}</Text>
+
+        <Text className="mt-2.5 font-i5 text-ap-small text-muted">Set by the market, not by AgroPulse.</Text>
 
       </Card>
 

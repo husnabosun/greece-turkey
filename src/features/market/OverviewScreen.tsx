@@ -7,7 +7,7 @@ import { factories, type Field } from '@/data/mock';
 import { compareToRange, euroPrice } from '@/lib/market';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
-import { ExchangeBox, FactoryLogo, factoryById, priceRange, Rating, useExchangeRange, useHasBanned } from './shared';
+import { FactoryLogo, factoryById, priceRange, Rating, useExchangeRange, useHasBanned } from './shared';
 
 export function OverviewScreen() {
   const router = useRouter();
@@ -30,10 +30,6 @@ export function OverviewScreen() {
           <ChevronRight size={18} color={colors.ink} />
         </View>
       </Pressable>
-
-      <View className="mt-3">
-        <ExchangeBox />
-      </View>
 
       <SectionHeader title="Best offer" />
       {best ? <BestOffer offerId={best.id} onAccept={() => acceptOffer(best.id)} onCounter={() => showToast('Counter offer sent')} /> : (
@@ -96,7 +92,7 @@ function BestOffer({ offerId, onAccept, onCounter }: { offerId: string; onAccept
         </Text>
       </View>
       <View className="mt-2 flex-row items-center justify-between">
-        {verdict ? <Pill tone={verdict.tone}>{verdict.label}</Pill> : <Text className="font-i5 text-ap-small text-muted">No exchange data</Text>}
+        {verdict ? <Pill tone={verdict.tone}>{verdict.label}</Pill> : <Pill tone="neutral">No exchange data</Pill>}
         <View className="flex-row gap-2">
           <Button compact label="Counter" variant="outline" className="h-9 px-4" onPress={onCounter} />
           <Button compact label="Accept" className="h-9 px-4" onPress={onAccept} />
@@ -109,6 +105,7 @@ function BestOffer({ offerId, onAccept, onCounter }: { offerId: string; onAccept
 function FieldPriceCard({ field }: { field: Field }) {
   const router = useRouter();
   const hasBanned = useHasBanned(field.id);
+  const { range } = useExchangeRange();
   const openOffers = useStore((s) => s.offers.filter((o) => o.fieldId === field.id && o.status === 'open').length);
   const listing = useStore((s) => s.listings.find((l) => l.fieldId === field.id));
   const low = field.score < 70;
@@ -141,15 +138,11 @@ function FieldPriceCard({ field }: { field: Field }) {
           <Text className={`font-i8 text-ap-body ${low ? 'text-risk' : 'text-good'}`}>{field.score}</Text>
         </View>
       </View>
-      {listing ? (
-        <Text className="mt-1 font-i8 text-ap-title text-ink">
-          {euroPrice(listing.pricePerKg)}
-          <Text className="font-i5 text-ap-small text-muted">{' /kg'}</Text>
-        </Text>
-      ) : (
-        <Text className="mt-1 font-i7 text-ap-body text-muted">Not listed yet</Text>
-      )}
-      {hasBanned ? <Text className="font-i7 text-ap-small text-risk">Banned product used</Text> : null}
+      <Text className="mt-2 font-i8 text-ap-card text-ink">
+        {range ? `${euroPrice(range.min)}–${euroPrice(range.max)}` : '–'}
+      </Text>
+      <Text className="font-i5 text-[10px] text-muted">{range ? '/kg · exchange price range' : 'No exchange data'}</Text>
+      {hasBanned ? <Text className="font-i7 text-ap-small text-risk">1 issue: banned product</Text> : null}
       <View className="mt-1">{action}</View>
     </Card>
   );

@@ -8,7 +8,7 @@ import { deliveryLabel } from '@/lib/processor';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { InProgressCard, PaidRow } from './SaleCards';
-import { ExchangeBox, FactoryLogo, factoryById, Rating, useExchangeRange } from './shared';
+import { FactoryLogo, factoryById, Rating, useExchangeRange } from './shared';
 
 export function OffersScreen() {
   const sales = useStore((s) => s.sales);
@@ -23,9 +23,7 @@ export function OffersScreen() {
 
   return (
     <Screen topPadding={false}>
-      <ExchangeBox />
-
-      <View className="mt-2 gap-2">
+      <View className="gap-2">
         {inProgress.map((s) => (
           <InProgressCard key={s.id} sale={s} variant="lab" />
         ))}
@@ -98,7 +96,7 @@ function OfferCard({ offer }: { offer: Offer }) {
         </Text>
       </View>
       <View className="mt-2 flex-row items-center justify-between">
-        {verdict ? <Pill tone={verdict.tone}>{verdict.label}</Pill> : <Text className="font-i5 text-ap-small text-muted">No exchange data</Text>}
+        {verdict ? <Pill tone={verdict.tone}>{verdict.label}</Pill> : <Pill tone="neutral">No exchange data</Pill>}
         <View className="flex-row gap-2">
           <Button compact label="Counter" variant="outline" className="h-9 px-4" onPress={() => showToast(`Counter offer sent to ${factory.name}`)} />
           <Button compact label="Accept" variant="primary" className="h-9 px-4" onPress={() => acceptOffer(offer.id)} />

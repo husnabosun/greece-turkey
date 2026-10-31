@@ -1,9 +1,8 @@
-import { Landmark, Star } from 'lucide-react-native';
+import { Star } from 'lucide-react-native';
 import { useMemo } from 'react';
 import { Text, View } from 'react-native';
-import { Pill } from '@/components/ui';
-import { exchangeName, exchangePrice, exchangeRanges, factories, farmer, type Factory } from '@/data/mock';
-import { exchangeLine, hasBannedLast12Months, type ExchangeRange } from '@/lib/market';
+import { exchangeRanges, factories, farmer, type Factory } from '@/data/mock';
+import { hasBannedLast12Months, type ExchangeRange } from '@/lib/market';
 import { regionOf } from '@/lib/processor';
 import { useStore } from '@/state/store';
 
@@ -23,28 +22,6 @@ export function useHasBanned(fieldId: string): boolean {
 export function useExchangeRange(): { area: string; range: ExchangeRange | null } {
   const area = regionOf(farmer.place);
   return { area, range: exchangeRanges[area] ?? null };
-}
-
-/** "Today at the commodity exchange": the official range of the farmer's area, labelled as sample data. No suggestion. */
-export function ExchangeBox() {
-  const { area, range } = useExchangeRange();
-  return (
-    <View className="rounded-[18px] border border-line bg-card p-3">
-      <View className="flex-row items-center justify-between gap-2">
-        <View className="flex-row items-center gap-1.5">
-          <Landmark size={14} color="#6B6B6B" />
-          <Text className="font-i8 text-ap-body text-ink">Today at the commodity exchange</Text>
-        </View>
-        <Pill tone="neutral">Sample data</Pill>
-      </View>
-      {range ? (
-        <Text className="mt-1 font-i8 text-ap-card text-ink">{exchangeLine(range)}</Text>
-      ) : (
-        <Text className="mt-1 font-i7 text-ap-card text-muted">No exchange data for this area</Text>
-      )}
-      <Text className="mt-0.5 font-i5 text-ap-small text-muted">{`${exchangeName} · ${area} · ${exchangePrice.date}`}</Text>
-    </View>
-  );
 }
 
 /** Wordmark in place of a real logo. */

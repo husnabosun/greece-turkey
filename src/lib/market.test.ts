@@ -1,5 +1,5 @@
 import { exchangeRanges } from '../data/mock';
-import { compareToRange, exchangeLine, hasBannedLast12Months, roundPrice, roundTotal } from './market';
+import { compareToRange, exchangeSpan, hasBannedLast12Months, roundPrice, roundTotal } from './market';
 
 const range = { min: 0.75, max: 0.9, avg: 0.8 };
 
@@ -13,16 +13,16 @@ describe('rounding', () => {
 });
 
 describe('exchange range', () => {
-  it('writes the range as min, max and average', () => {
-    expect(exchangeLine(range)).toBe('min €0.75 – max €0.90 /kg (avg €0.80)');
+  it('writes the range as min – max', () => {
+    expect(exchangeSpan(range)).toBe('€0.75 – €0.90');
   });
 
   it('says within, above or below the range, and nothing else', () => {
-    expect(compareToRange(0.8, range)?.label).toBe('Within exchange range');
-    expect(compareToRange(0.75, range)?.label).toBe('Within exchange range');
-    expect(compareToRange(0.9, range)?.label).toBe('Within exchange range');
-    expect(compareToRange(0.95, range)?.label).toBe('Above exchange range');
-    expect(compareToRange(0.7, range)?.label).toBe('Below exchange range');
+    expect(compareToRange(0.8, range)?.label).toBe('Within range');
+    expect(compareToRange(0.75, range)?.label).toBe('Within range');
+    expect(compareToRange(0.9, range)?.label).toBe('Within range');
+    expect(compareToRange(0.95, range)?.label).toBe('Above range');
+    expect(compareToRange(0.7, range)?.label).toBe('Below range');
   });
 
   it('gives no verdict when the area has no exchange data', () => {

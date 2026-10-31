@@ -22,10 +22,10 @@ export interface ExchangeRange {
   avg: number;
 }
 
-/** "min €0.75 – max €0.90 /kg (avg €0.80)" */
-export const exchangeLine = (r: ExchangeRange) => `min ${euroPrice(r.min)} – max ${euroPrice(r.max)} /kg (avg ${euroPrice(r.avg)})`;
+/** "€0.75 – €0.90" */
+export const exchangeSpan = (r: ExchangeRange) => `${euroPrice(r.min)} – ${euroPrice(r.max)}`;
 
-export type RangeVerdict = { id: 'above' | 'within' | 'below'; label: 'Above exchange range' | 'Within exchange range' | 'Below exchange range'; tone: 'good' | 'neutral' | 'warn' };
+export type RangeVerdict = { id: 'above' | 'within' | 'below'; label: 'Above range' | 'Within range' | 'Below range'; tone: 'good' | 'warn' | 'risk' };
 
 /**
  * Where an offer or a price sits against today's exchange range. This is the only comparison the farmer app makes:
@@ -33,9 +33,9 @@ export type RangeVerdict = { id: 'above' | 'within' | 'below'; label: 'Above exc
  */
 export function compareToRange(price: number, range: ExchangeRange | null | undefined): RangeVerdict | null {
   if (!range) return null;
-  if (price > range.max) return { id: 'above', label: 'Above exchange range', tone: 'good' };
-  if (price < range.min) return { id: 'below', label: 'Below exchange range', tone: 'warn' };
-  return { id: 'within', label: 'Within exchange range', tone: 'neutral' };
+  if (price > range.max) return { id: 'above', label: 'Above range', tone: 'good' };
+  if (price < range.min) return { id: 'below', label: 'Below range', tone: 'risk' };
+  return { id: 'within', label: 'Within range', tone: 'warn' };
 }
 
 /** True when a banned spray was applied to the field within the last 12 months. */
