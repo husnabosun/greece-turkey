@@ -1,70 +1,48 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
 # dependencies
-node_modules/
+/node_modules
+/node_modules_legacy_expo
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
-# Expo
-.expo/
-dist/
-web-build/
-expo-env.d.ts
+# testing
+/coverage
 
-# Native
-.kotlin/
-*.orig.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
+# next.js
+/.next/
+/out/
 
-# Metro
-.metro-health-check*
+# production
+/build
+/dist
 
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
+# misc
 .DS_Store
 *.pem
+.expo/
 
-# typescript
-*.tsbuildinfo
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 
-# generated native folders
-/ios
-/android
-
-# --- added by git-ship ---
-__pycache__/
-
-# Backtest downloads (re-created by research/scripts/backtest.ts)
-research/data/raw/
-
-# Leaf datasets (large, downloaded from Kaggle)
-research/data/olive_leaves/
-research/data/edincik/
-research/data/field_photos/
-
-# secrets (GEMINI_API_KEY lives here, never commit)
+# env files
 .env
 .env.*
 !.env.example
+
+# vercel
 .vercel
 
-# trained model (large, rebuilt by the notebook); the .tflite stays in git
-research/models/*.keras
-research/checkpoints/
+# typescript
+*.tsbuildinfo
+next-env.d.ts
 
-# Figures that show Edincik dataset photos (the notebook saves them under *_edincik_photos.png)
-research/figures/leaf/*_edincik_photos.png
-research/figures/leaf/ds_samples_edincik.png
-research/figures/leaf/v2_preprocessing.png
-
-# Screenshots of the leaf scan (may show dataset photos)
-screens/scan/
-
-# Screenshots made by scripts/processor-screenshots.mjs
-screens/processor/
+# python / legacy research caches (if present under _legacy)
+__pycache__/
+*.pyc

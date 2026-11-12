@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "title": "Agro Pulse AI",
+    "description": "AgriTech & B2B olive oil supply-chain platform for Greece and Turkey."
+  },
+  "landing": {
+    "badge": "Greece–Türkiye Hackathon",
+    "headline": "Olive quality. Transparent market. One system.",
+    "subhead": "Farmers log sprays and scans; AI computes risk and a quality score; mills buy with full traceability.",
+    "ctaFarmer": "Farmer workspace",
+    "ctaProcessor": "Processor portal",
+    "ctaAuth": "Sign in / Register",
+    "phaseNote": "Phase 1: infrastructure. Feature modules unlock in later phases."
+  },
+  "nav": {
+    "farmer": "Farmer",
+    "processor": "Processor",
+    "language": "Language"
+  },
+  "roles": {
+    "farmer": "Farmer",
+    "processor": "Processor"
+  }
+}

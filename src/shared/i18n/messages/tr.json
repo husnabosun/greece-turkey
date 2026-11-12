@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "title": "Agro Pulse AI",
+    "description": "Yunanistan ve Türkiye için AgriTech ve B2B zeytinyağı tedarik zinciri platformu."
+  },
+  "landing": {
+    "badge": "Greece–Türkiye Hackathon",
+    "headline": "Zeytin kalitesi. Şeffaf pazar. Tek sistem.",
+    "subhead": "Çiftçiler ilaçlama ve taramaları kaydeder; yapay zeka risk ve kalite skorunu hesaplar; fabrikalar izlenebilirlikle satın alır.",
+    "ctaFarmer": "Çiftçi girişi",
+    "ctaProcessor": "İşleyici paneli",
+    "ctaAuth": "Giriş / Kayıt",
+    "phaseNote": "Aşama 1: altyapı. Özellikler sonraki aşamalarda açılacak."
+  },
+  "nav": {
+    "farmer": "Çiftçi",
+    "processor": "İşleyici",
+    "language": "Dil"
+  },
+  "roles": {
+    "farmer": "Çiftçi",
+    "processor": "İşleyici"
+  }
+}
