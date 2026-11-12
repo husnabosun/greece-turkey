@@ -5,6 +5,12 @@ import type { FieldWeather } from "@/features/weather-risk/weather";
 import { assessField, highestRisk, type FieldRisk } from "@/features/weather-risk/risk";
 import { EMPTY_SIGNALS } from "@/features/weather-risk/risk/signals";
 
+export type WeatherPoint = {
+  fieldId: string;
+  lat: number;
+  lon: number;
+};
+
 type State = {
   weather: FieldWeather | null;
   risk: FieldRisk | null;
@@ -12,14 +18,24 @@ type State = {
   error: string | null;
 };
 
-const DEFAULT_POINT = { fieldId: "preview", lat: 39.325, lon: 26.7 };
-
-/** Loads live Open-Meteo weather and runs the agronomic risk engine in the browser. */
-export function useFieldWeather(point = DEFAULT_POINT) {
-  const [state, setState] = useState<State>({ weather: null, risk: null, loading: true, error: null });
+/** Loads live Open-Meteo weather for a real field point. Pass `null` when the farmer has no field yet. */
+export function useFieldWeather(point: WeatherPoint | null) {
+  const [state, setState] = useState<State>({
+    weather: null,
+    risk: null,
+    loading: Boolean(point),
+    error: null,
+  });
 
   useEffect(() => {
+    if (!point) {
+      setState({ weather: null, risk: null, loading: false, error: null });
+      return;
+    }
+
     let cancelled = false;
+    setState((prev) => ({ ...prev, loading: true, error: null }));
+
     (async () => {
       try {
         const qs = new URLSearchParams({
@@ -44,10 +60,11 @@ export function useFieldWeather(point = DEFAULT_POINT) {
         }
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [point.fieldId, point.lat, point.lon]);
+  }, [point?.fieldId, point?.lat, point?.lon]);
 
   const top = state.risk ? highestRisk(state.risk, 3) : null;
   return { ...state, top };

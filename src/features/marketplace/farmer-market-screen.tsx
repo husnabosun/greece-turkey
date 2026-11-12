@@ -15,8 +15,8 @@ const RANGE = { min: 0.75, max: 0.95, avg: 0.85 };
 
 export function FarmerMarketScreen() {
   const t = useTranslations("farmerMarket");
-  const [tons, setTons] = useState("2.5");
-  const [price, setPrice] = useState("0.90");
+  const [tons, setTons] = useState("");
+  const [price, setPrice] = useState("");
   const [listed, setListed] = useState<{ tons: number; price: number; total: number } | null>(null);
 
   function publish(e: React.FormEvent) {

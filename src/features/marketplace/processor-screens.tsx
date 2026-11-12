@@ -26,11 +26,8 @@ type LotCard = {
   records: number;
 };
 
-const SEED_LOTS: LotCard[] = [
-  { id: "lot-ay1", region: "Balıkesir", variety: "Ayvalık", tons: 6, score: 88, priceHint: 0.95, hasBanned: false, records: 85 },
-  { id: "lot-gr1", region: "Messinia", variety: "Koroneiki", tons: 9, score: 85, priceHint: 1.0, hasBanned: false, records: 82 },
-  { id: "lot-ay4", region: "Aydın", variety: "Memecik", tons: 3, score: 64, priceHint: 0.7, hasBanned: true, records: 66 },
-];
+/** Live lots only — no seeded marketplace mock rows. */
+const LIVE_LOTS: LotCard[] = [];
 
 type OfferRow = {
   id: string;
@@ -54,13 +51,16 @@ export function ProcessorOverviewScreen() {
   const supply = useMemo(
     () =>
       Object.entries(
-        SEED_LOTS.reduce<Record<string, number>>((acc, lot) => {
+        LIVE_LOTS.reduce<Record<string, number>>((acc, lot) => {
           acc[lot.region] = (acc[lot.region] ?? 0) + lot.tons;
           return acc;
         }, {}),
       ),
     [],
   );
+  const totalTons = LIVE_LOTS.reduce((s, l) => s + l.tons, 0);
+  const avgScore =
+    LIVE_LOTS.length === 0 ? 0 : Math.round(LIVE_LOTS.reduce((s, l) => s + l.score, 0) / LIVE_LOTS.length);
 
   return (
     <div className="space-y-4">
@@ -70,23 +70,19 @@ export function ProcessorOverviewScreen() {
           <CardHeader>
             <CardTitle className="text-sm">{t("openLots")}</CardTitle>
           </CardHeader>
-          <CardContent className="text-3xl font-extrabold">{SEED_LOTS.length}</CardContent>
+          <CardContent className="text-3xl font-extrabold">{LIVE_LOTS.length}</CardContent>
         </Card>
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">{t("supplyTons")}</CardTitle>
           </CardHeader>
-          <CardContent className="text-3xl font-extrabold">
-            {SEED_LOTS.reduce((s, l) => s + l.tons, 0)}
-          </CardContent>
+          <CardContent className="text-3xl font-extrabold">{totalTons}</CardContent>
         </Card>
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">{t("avgScore")}</CardTitle>
           </CardHeader>
-          <CardContent className="text-3xl font-extrabold">
-            {Math.round(SEED_LOTS.reduce((s, l) => s + l.score, 0) / SEED_LOTS.length)}
-          </CardContent>
+          <CardContent className="text-3xl font-extrabold">{avgScore}</CardContent>
         </Card>
       </div>
       <Card>
@@ -94,12 +90,16 @@ export function ProcessorOverviewScreen() {
           <CardTitle className="text-base">{t("byRegion")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {supply.map(([region, tons]) => (
-            <div key={region} className="flex justify-between text-sm">
-              <span>{region}</span>
-              <span className="font-medium">{tons} t</span>
-            </div>
-          ))}
+          {supply.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("noLotsYet")}</p>
+          ) : (
+            supply.map(([region, tons]) => (
+              <div key={region} className="flex justify-between text-sm">
+                <span>{region}</span>
+                <span className="font-medium">{tons} t</span>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
       <Button asChild>
@@ -115,7 +115,10 @@ export function ProcessorLotsScreen() {
     <div className="space-y-4">
       <PageHeader title={t("lotsTitle")} description={t("lotsSubtitle")} />
       <div className="grid gap-3">
-        {SEED_LOTS.map((lot) => {
+        {LIVE_LOTS.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("noLotsYet")}</p>
+        ) : null}
+        {LIVE_LOTS.map((lot) => {
           const badges = trustBadges({
             records: lot.records,
             hasBanned: lot.hasBanned,
@@ -155,9 +158,20 @@ export function ProcessorLotsScreen() {
 
 export function ProcessorLotDetailScreen({ lotId }: { lotId: string }) {
   const t = useTranslations("processor");
-  const lot = SEED_LOTS.find((l) => l.id === lotId) ?? SEED_LOTS[0];
-  const [tons, setTons] = useState(String(lot.tons));
-  const [price, setPrice] = useState(String(lot.priceHint));
+  const lot = LIVE_LOTS.find((l) => l.id === lotId) ?? null;
+  const [tons, setTons] = useState(lot ? String(lot.tons) : "");
+  const [price, setPrice] = useState(lot ? String(lot.priceHint) : "");
+
+  if (!lot) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title={t("lotsTitle")} description={t("noLotsYet")} />
+        <Button asChild variant="outline">
+          <Link href="/processor/lots">{t("back")}</Link>
+        </Button>
+      </div>
+    );
+  }
 
   function bid(e: React.FormEvent) {
     e.preventDefault();

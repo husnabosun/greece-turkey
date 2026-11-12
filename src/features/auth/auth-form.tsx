@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
+import { homePathForRole } from "@/core/auth/routing";
 import type { UserRole } from "@/core/config/constants";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -11,6 +12,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/sha
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useRouter } from "@/shared/i18n/navigation";
 import { toast } from "sonner";
+
+async function resolveHomePath(
+  supabase: NonNullable<ReturnType<typeof tryCreateBrowserClient>>,
+  fallbackRole?: UserRole,
+) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return homePathForRole(fallbackRole ?? "farmer");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const role =
+    profile?.role === "farmer" || profile?.role === "processor"
+      ? profile.role
+      : ((user.user_metadata?.role as UserRole | undefined) ?? fallbackRole ?? "farmer");
+
+  return homePathForRole(role);
+}
 
 export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
   const t = useTranslations("auth");
@@ -32,13 +56,15 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
     }
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       toast.error(error.message);
       return;
     }
+    const home = await resolveHomePath(supabase);
+    setLoading(false);
     toast.success(t("loginOk"));
-    router.push(role === "processor" ? "/processor/overview" : "/farmer/dashboard");
+    router.replace(home);
   }
 
   async function onRegister(e: React.FormEvent) {
@@ -53,46 +79,60 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          role,
-          locale,
-          display_name: displayName || email.split("@")[0],
-          company_name: role === "processor" ? companyName : null,
-        },
-      },
+
+    // Server creates an already-confirmed user (no email gate), then we sign in.
+    const registerRes = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        password,
+        role,
+        locale,
+        display_name: displayName || email.split("@")[0],
+        company_name: role === "processor" ? companyName : null,
+      }),
     });
-    setLoading(false);
-    if (error) {
-      toast.error(error.message);
+    const registerJson = (await registerRes.json().catch(() => null)) as
+      | { error?: string }
+      | null;
+    if (!registerRes.ok) {
+      setLoading(false);
+      toast.error(registerJson?.error || t("registerFailed"));
       return;
     }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    if (signInError) {
+      setLoading(false);
+      toast.error(signInError.message);
+      return;
+    }
+
+    await new Promise((r) => setTimeout(r, 250));
+    const home = await resolveHomePath(supabase, role);
+    setLoading(false);
     toast.success(t("registerOk"));
-    router.push(role === "processor" ? "/processor/overview" : "/farmer/dashboard");
+    router.replace(home);
   }
 
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle>{mode === "login" ? t("loginTitle") : t("registerTitle")}</CardTitle>
-        <CardDescription>{t("subtitle")}</CardDescription>
+        <CardDescription>{mode === "login" ? t("loginSubtitle") : t("registerSubtitle")}</CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs
-          value={role}
-          onValueChange={(v) => setRole(v as UserRole)}
-          className="mb-4"
-        >
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="farmer">{t("roleFarmer")}</TabsTrigger>
-            <TabsTrigger value="processor">{t("roleProcessor")}</TabsTrigger>
-          </TabsList>
-          <TabsContent value="farmer" />
-          <TabsContent value="processor" />
-        </Tabs>
+        {mode === "register" ? (
+          <Tabs value={role} onValueChange={(v) => setRole(v as UserRole)} className="mb-4">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="farmer">{t("roleFarmer")}</TabsTrigger>
+              <TabsTrigger value="processor">{t("roleProcessor")}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="farmer" />
+            <TabsContent value="processor" />
+          </Tabs>
+        ) : null}
 
         <form onSubmit={mode === "login" ? onLogin : onRegister} className="space-y-3">
           {mode === "register" ? (

@@ -305,9 +305,14 @@ async function readStored(storage: WeatherStorage | undefined, id: string): Prom
 
 /**
  * Weather for one field. A cache younger than 1 hour is used as is ("cached"). Otherwise the
- * forecast is fetched ("live"). If that fails, the last cache is used ("cached"), then demo data ("demo").
+ * forecast is fetched ("live"). If that fails, the last cache is used ("cached").
+ * Demo fallback is opt-in only (`allowDemo`) — never used for real farmer sessions by default.
  */
-export async function getFieldWeather(f: FieldPoint, deps: WeatherDeps = {}, opts: { force?: boolean } = {}): Promise<FieldWeather> {
+export async function getFieldWeather(
+  f: FieldPoint,
+  deps: WeatherDeps = {},
+  opts: { force?: boolean; allowDemo?: boolean } = {},
+): Promise<FieldWeather> {
   const now = deps.now ?? Date.now();
   const memory = deps.memory;
   const cached = memory?.get(f.id) ?? (await readStored(deps.storage, f.id));
@@ -327,8 +332,9 @@ export async function getFieldWeather(f: FieldPoint, deps: WeatherDeps = {}, opt
       // Storage is optional.
     }
     return fresh;
-  } catch {
+  } catch (err) {
     if (cached) return { ...cached, source: 'cached' };
-    return demoWeather(f, now, f.wetness);
+    if (opts.allowDemo) return demoWeather(f, now, f.wetness);
+    throw err instanceof Error ? err : new Error('Weather unavailable');
   }
 }

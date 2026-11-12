@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { useFieldWeather } from "@/features/weather-risk/use-field-weather";
 import { PageHeader } from "@/shared/components/page-header";
+import { EmptyState } from "@/shared/components/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { Link } from "@/shared/i18n/navigation";
 
 type ScorePayload = {
   score: number;
@@ -16,12 +20,20 @@ type ScorePayload = {
 
 export function QualityScreen() {
   const t = useTranslations("farmerQuality");
-  const { top, loading: weatherLoading } = useFieldWeather();
+  const { fields, primary, loading: fieldsLoading } = useFarmerFields();
+  const point = useMemo(() => {
+    if (primary?.lat == null || primary?.lon == null) return null;
+    return { fieldId: primary.id, lat: primary.lat, lon: primary.lon };
+  }, [primary]);
+  const { top, loading: weatherLoading } = useFieldWeather(point);
   const [data, setData] = useState<ScorePayload | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (weatherLoading) return;
+    if (fieldsLoading || !primary || weatherLoading) {
+      setData(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -30,14 +42,15 @@ export function QualityScreen() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            scanHealth: 82,
-            healthyTreeShare: 0.9,
-            sprayCount12m: 2,
+            // Real inputs only — zeros until scans/logbook exist for this field.
+            scanHealth: 0,
+            healthyTreeShare: 0,
+            sprayCount12m: 0,
             hasBannedSpray: false,
-            daysSinceLastRecord: 7,
-            proofLevel: "evidence_based",
-            peakRiskScore: top?.score ?? 30,
-            stage: "almost",
+            daysSinceLastRecord: 999,
+            proofLevel: primary.proof_level ?? "self_reported",
+            peakRiskScore: top?.score ?? 0,
+            stage: "start",
           }),
         });
         const json = await res.json();
@@ -49,11 +62,25 @@ export function QualityScreen() {
     return () => {
       cancelled = true;
     };
-  }, [weatherLoading, top?.score]);
+  }, [fieldsLoading, primary, weatherLoading, top?.score]);
 
   return (
     <div className="space-y-4">
       <PageHeader title={t("title")} description={t("subtitle")} />
+
+      {fieldsLoading ? <Skeleton className="h-40 w-full rounded-xl" /> : null}
+
+      {!fieldsLoading && fields.length === 0 ? (
+        <EmptyState
+          title={t("noFieldsTitle")}
+          description={t("noFieldsBody")}
+          action={
+            <Button asChild>
+              <Link href="/farmer/fields">{t("ctaFields")}</Link>
+            </Button>
+          }
+        />
+      ) : null}
 
       {loading ? <Skeleton className="h-40 w-full rounded-xl" /> : null}
 
@@ -69,7 +96,7 @@ export function QualityScreen() {
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             {Object.entries(data.breakdown).map(([key, value]) => (
               <Card key={key}>
                 <CardHeader className="pb-2">
@@ -80,19 +107,20 @@ export function QualityScreen() {
             ))}
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t("plan")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {data.plan.map((item) => (
-                <div key={item.text} className="rounded-lg border px-3 py-2 text-sm">
-                  <p>{item.text}</p>
-                  <p className="text-xs text-muted-foreground">+{item.points} pts</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          {data.plan.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">{t("plan")}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {data.plan.map((item) => (
+                  <p key={item.text}>
+                    +{item.points} · {item.text}
+                  </p>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
         </>
       ) : null}
     </div>

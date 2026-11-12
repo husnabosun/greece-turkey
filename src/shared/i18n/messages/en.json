@@ -24,7 +24,9 @@
   "auth": {
     "loginTitle": "Sign in",
     "registerTitle": "Create account",
-    "subtitle": "Choose a role and enter Agro Pulse.",
+    "loginSubtitle": "Sign in to open your workspace.",
+    "registerSubtitle": "Choose a role and create your account.",
+    "subtitle": "Enter Agro Pulse.",
     "roleFarmer": "Farmer",
     "roleProcessor": "Processor",
     "displayName": "Display name",
@@ -37,6 +39,9 @@
     "loading": "Please wait…",
     "loginOk": "Welcome back.",
     "registerOk": "Account created.",
+    "registerFailed": "Registration failed.",
+    "registerCheckEmail": "Check your email to confirm, then sign in.",
+    "logout": "Sign out",
     "missingSupabase": "Supabase keys are missing in .env.local.",
     "noAccount": "No account yet?",
     "hasAccount": "Already have an account?",
@@ -52,7 +57,7 @@
   },
   "farmerHome": {
     "title": "Today",
-    "subtitle": "Weather and agronomic risk for your area.",
+    "subtitle": "Weather and agronomic risk for your fields.",
     "weather": "Weather",
     "risk": "Risk",
     "score": "Score {n}",
@@ -60,7 +65,11 @@
     "next": "Next steps",
     "ctaScan": "Take a scan",
     "ctaFields": "Field map",
-    "ctaQuality": "Quality score"
+    "ctaQuality": "Quality score",
+    "noFieldsTitle": "No fields yet",
+    "noFieldsBody": "Draw your first grove polygon to see real weather and risk — no demo data.",
+    "noLocationTitle": "Missing coordinates",
+    "noLocationBody": "Save the field polygon again so we can derive its location."
   },
   "farmerFields": {
     "title": "Fields",
@@ -114,7 +123,10 @@
     "title": "Quality score",
     "subtitle": "Dynamic score and improvement plan.",
     "scoreLabel": "Field score",
-    "plan": "Improvement plan"
+    "plan": "Improvement plan",
+    "noFieldsTitle": "Field required",
+    "noFieldsBody": "Add a field to compute score from real data.",
+    "ctaFields": "Go to fields"
   },
   "farmerMarket": {
     "title": "Market",
@@ -145,6 +157,7 @@
     "browseLots": "Browse lots",
     "lotsTitle": "Lots",
     "lotsSubtitle": "Verified lots with badges and score.",
+    "noLotsYet": "No lots available yet.",
     "openLot": "Open",
     "lotDetailSubtitle": "Bid without seeing the farmer name until accept.",
     "back": "Back",

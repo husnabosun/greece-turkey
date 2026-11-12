@@ -123,7 +123,10 @@ export function FieldMapEditor({ token, onPolygonChange }: Props) {
 
   return (
     <div className="space-y-2">
-      <div ref={containerRef} className="h-96 w-full overflow-hidden rounded-xl border bg-muted" />
+      <div
+        ref={containerRef}
+        className="h-80 w-full overflow-hidden rounded-xl border bg-muted md:h-[min(70vh,40rem)]"
+      />
       {mapError ? <p className="text-sm text-destructive">{t("mapError")}</p> : null}
       {areaHa != null ? (
         <p className="text-sm font-medium">

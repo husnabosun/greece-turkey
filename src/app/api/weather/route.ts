@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 const memory = new Map<string, import("@/features/weather-risk/weather").FieldWeather>();
 
-/** Open-Meteo proxy with 1h cache (live → cached → demo). */
+/** Open-Meteo proxy with 1h cache (live → cached). No demo fallback. */
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);

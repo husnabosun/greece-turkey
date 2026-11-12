@@ -24,7 +24,9 @@
   "auth": {
     "loginTitle": "Σύνδεση",
     "registerTitle": "Εγγραφή",
-    "subtitle": "Επίλεξε ρόλο και μπες στο Agro Pulse.",
+    "loginSubtitle": "Συνδέσου για να μπεις στον χώρο εργασίας σου.",
+    "registerSubtitle": "Διάλεξε ρόλο και δημιούργησε λογαριασμό.",
+    "subtitle": "Μπες στο Agro Pulse.",
     "roleFarmer": "Παραγωγός",
     "roleProcessor": "Επεξεργαστής",
     "displayName": "Όνομα",
@@ -37,6 +39,9 @@
     "loading": "Περίμενε…",
     "loginOk": "Καλώς ήρθες.",
     "registerOk": "Ο λογαριασμός δημιουργήθηκε.",
+    "registerFailed": "Η εγγραφή απέτυχε.",
+    "registerCheckEmail": "Έλεγχος email για επιβεβαίωση, μετά συνδέσου.",
+    "logout": "Αποσύνδεση",
     "missingSupabase": "Λείπουν τα Supabase keys στο .env.local.",
     "noAccount": "Δεν έχεις λογαριασμό;",
     "hasAccount": "Έχεις ήδη λογαριασμό;",
@@ -52,7 +57,7 @@
   },
   "farmerHome": {
     "title": "Σήμερα",
-    "subtitle": "Καιρός και αγρονομικό ρίσκο για την περιοχή σου.",
+    "subtitle": "Καιρός και αγρονομικό ρίσκο για τα χωράφια σου.",
     "weather": "Καιρός",
     "risk": "Κίνδυνος",
     "score": "Σκορ {n}",
@@ -60,7 +65,11 @@
     "next": "Επόμενα βήματα",
     "ctaScan": "Κάνε scan",
     "ctaFields": "Χάρτης χωραφιών",
-    "ctaQuality": "Quality score"
+    "ctaQuality": "Quality score",
+    "noFieldsTitle": "Δεν έχεις χωράφια ακόμα",
+    "noFieldsBody": "Σχεδίασε το πρώτο πολύγωνο για να δεις πραγματικό καιρό και ρίσκο — χωρίς demo δεδομένα.",
+    "noLocationTitle": "Λείπουν συντεταγμένες",
+    "noLocationBody": "Αποθήκευσε ξανά το πολύγωνο του χωραφιού για να υπολογιστεί τοποθεσία."
   },
   "farmerFields": {
     "title": "Χωράφια",
@@ -114,7 +123,10 @@
     "title": "Quality score",
     "subtitle": "Δυναμικό σκορ ποιότητας και πλάνο βελτίωσης.",
     "scoreLabel": "Σκορ χωραφιού",
-    "plan": "Πλάνο βελτίωσης"
+    "plan": "Πλάνο βελτίωσης",
+    "noFieldsTitle": "Χρειάζεται χωράφι",
+    "noFieldsBody": "Πρόσθεσε χωράφι για υπολογισμό score από πραγματικά δεδομένα.",
+    "ctaFields": "Πήγαινε στα χωράφια"
   },
   "farmerMarket": {
     "title": "Αγορά",
@@ -145,6 +157,7 @@
     "browseLots": "Δες τα lots",
     "lotsTitle": "Lots",
     "lotsSubtitle": "Επαληθευμένα lots με badges και score.",
+    "noLotsYet": "Δεν υπάρχουν διαθέσιμα lots ακόμα.",
     "openLot": "Άνοιγμα",
     "lotDetailSubtitle": "Προσφορά αγοράς χωρίς αποκάλυψη ονόματος μέχρι αποδοχή.",
     "back": "Πίσω",

@@ -16,7 +16,9 @@ import type { FieldPolygon } from "./field-map-editor";
 
 const FieldMapEditor = dynamic(() => import("./field-map-editor").then((m) => m.FieldMapEditor), {
   ssr: false,
-  loading: () => <div className="h-72 animate-pulse rounded-xl bg-muted" />,
+  loading: () => (
+    <div className="h-80 animate-pulse rounded-xl bg-muted md:h-[min(70vh,40rem)]" />
+  ),
 });
 
 export function FieldsScreen() {
@@ -72,41 +74,51 @@ export function FieldsScreen() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 md:space-y-6">
       <PageHeader title={t("title")} description={t("subtitle")} />
 
       {!token ? (
         <EmptyState title={t("needMapboxTitle")} description={t("needMapboxBody")} />
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("drawTitle")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="field-name">{t("nameLabel")}</Label>
-              <Input
-                id="field-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={t("namePlaceholder")}
-              />
-            </div>
-            <FieldMapEditor
-              token={token}
-              onPolygonChange={(next) => setPolygon(next)}
-            />
-            <p className="text-xs text-muted-foreground">{t("drawHint")}</p>
-            <Button
-              type="button"
-              className="w-full"
-              disabled={saving || !polygon}
-              onClick={onSave}
-            >
-              {saving ? t("saving") : t("save")}
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+          <Card className="overflow-hidden">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">{t("drawTitle")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <FieldMapEditor token={token} onPolygonChange={(next) => setPolygon(next)} />
+              <p className="text-xs text-muted-foreground md:hidden">{t("drawHint")}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t("nameLabel")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="field-name" className="sr-only">
+                  {t("nameLabel")}
+                </Label>
+                <Input
+                  id="field-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={t("namePlaceholder")}
+                />
+              </div>
+              <p className="hidden text-xs text-muted-foreground lg:block">{t("drawHint")}</p>
+              <Button
+                type="button"
+                className="w-full"
+                disabled={saving || !polygon}
+                onClick={onSave}
+              >
+                {saving ? t("saving") : t("save")}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );
