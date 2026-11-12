@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import mapboxgl from "mapbox-gl";
+import mapboxgl, { type StyleSpecification } from "mapbox-gl";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import { useTranslations } from "next-intl";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -17,22 +17,44 @@ type Props = {
   onPolygonChange?: (polygon: FieldPolygon | null, areaHa: number | null) => void;
 };
 
-type MapboxAjaxLike = { status?: number; message?: string; statusText?: string };
+/**
+ * True satellite basemap without Mapbox raster tiles.
+ * Mapbox free-tier was returning 429 on mapbox.satellite → black map + false "rate limit" UI.
+ * Esri World Imagery serves real orthophoto tiles (Mapbox GL still needs a token for the JS SDK).
+ */
+const SATELLITE_STYLE: StyleSpecification = {
+  version: 8,
+  name: "AgroPulse Satellite",
+  sources: {
+    "esri-world-imagery": {
+      type: "raster",
+      tiles: [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      ],
+      tileSize: 256,
+      attribution:
+        "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+      maxzoom: 19,
+    },
+  },
+  layers: [
+    {
+      id: "esri-world-imagery",
+      type: "raster",
+      source: "esri-world-imagery",
+      minzoom: 0,
+      maxzoom: 22,
+    },
+  ],
+};
 
-function isMapboxRateLimit(error: unknown): boolean {
-  const e = error as MapboxAjaxLike | string | undefined;
-  if (!e) return false;
-  if (typeof e === "string") return /too many requests|429/i.test(e);
-  return e.status === 429 || /too many requests/i.test(e.message ?? e.statusText ?? "");
-}
-
-/** Interactive Mapbox polygon drawer for olive grove boundaries. */
+/** Interactive satellite polygon drawer for olive grove boundaries. */
 export function FieldMapEditor({ token, onPolygonChange }: Props) {
   const t = useTranslations("farmerFields");
   const containerRef = useRef<HTMLDivElement | null>(null);
   const onPolygonChangeRef = useRef(onPolygonChange);
   const [areaHa, setAreaHa] = useState<number | null>(null);
-  const [mapError, setMapError] = useState<"rate-limit" | "generic" | null>(null);
+  const [mapError, setMapError] = useState(false);
 
   useEffect(() => {
     onPolygonChangeRef.current = onPolygonChange;
@@ -42,26 +64,17 @@ export function FieldMapEditor({ token, onPolygonChange }: Props) {
     const container = containerRef.current;
     if (!container || !token) return;
 
-    // Mapbox calls console.error on every failed tile; Next.js 15 turns that into a
-    // full-screen "Console Error" overlay. Suppress only rate-limit noise while the map lives.
-    const prevConsoleError = console.error;
-    console.error = (...args: unknown[]) => {
-      if (args.some((arg) => isMapboxRateLimit(arg))) return;
-      prevConsoleError(...(args as Parameters<typeof console.error>));
-    };
-
+    let removed = false;
     mapboxgl.accessToken = token;
-    // Fewer parallel satellite tiles → less likely to trip free-tier 429s.
-    if (mapboxgl.config) {
-      mapboxgl.config.MAX_PARALLEL_IMAGE_REQUESTS = 6;
-    }
 
     const map = new mapboxgl.Map({
       container,
-      style: "mapbox://styles/mapbox/satellite-streets-v12",
+      style: SATELLITE_STYLE,
       center: [26.7, 39.325],
-      zoom: 13,
+      zoom: 14,
       attributionControl: true,
+      // No Mapbox-hosted styles/tiles → no Mapbox 429 storm on load.
+      collectResourceTiming: false,
     });
 
     const draw = new MapboxDraw({
@@ -69,9 +82,6 @@ export function FieldMapEditor({ token, onPolygonChange }: Props) {
       controls: { polygon: true, trash: true },
       defaultMode: "draw_polygon",
     });
-
-    map.addControl(draw);
-    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: false }), "top-right");
 
     const onChange = () => {
       const data = draw.getAll();
@@ -90,36 +100,31 @@ export function FieldMapEditor({ token, onPolygonChange }: Props) {
       );
     };
 
-    const onMapError = (event: { error?: Error }) => {
-      if (isMapboxRateLimit(event.error)) {
-        setMapError("rate-limit");
-        return;
-      }
-      setMapError("generic");
+    const onMapError = () => {
+      if (!removed) setMapError(true);
     };
 
-    map.on("draw.create", onChange);
-    map.on("draw.update", onChange);
-    map.on("draw.delete", onChange);
+    map.on("load", () => {
+      if (removed) return;
+      setMapError(false);
+      map.addControl(draw);
+      map.addControl(new mapboxgl.NavigationControl({ visualizePitch: false }), "top-right");
+      map.on("draw.create", onChange);
+      map.on("draw.update", onChange);
+      map.on("draw.delete", onChange);
+    });
     map.on("error", onMapError);
-    map.once("load", () => setMapError(null));
 
     return () => {
-      console.error = prevConsoleError;
-      map.off("error", onMapError);
+      removed = true;
       map.remove();
     };
   }, [token]);
 
   return (
     <div className="space-y-2">
-      <div ref={containerRef} className="h-72 w-full overflow-hidden rounded-xl border" />
-      {mapError === "rate-limit" ? (
-        <p className="text-sm text-amber-800">{t("mapRateLimit")}</p>
-      ) : null}
-      {mapError === "generic" ? (
-        <p className="text-sm text-destructive">{t("mapError")}</p>
-      ) : null}
+      <div ref={containerRef} className="h-96 w-full overflow-hidden rounded-xl border bg-muted" />
+      {mapError ? <p className="text-sm text-destructive">{t("mapError")}</p> : null}
       {areaHa != null ? (
         <p className="text-sm font-medium">
           ≈ {areaHa} ha · {(areaHa * 10).toFixed(1)} stremmata
