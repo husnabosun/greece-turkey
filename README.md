@@ -54,3 +54,13 @@ Apply with `npx supabase db push` — details in [`supabase/README.md`](supabase
 
 Domain ports from `_legacy`: `features/weather-risk`, `features/logbook`, `features/marketplace`.  
 `npm test` runs Vitest (risk, EU check, quality, safety).
+
+### UI (Phase 4)
+
+| Area | Routes |
+|---|---|
+| Auth | `/[locale]/login`, `/[locale]/register` |
+| Farmer PWA | `/farmer/dashboard`, `fields`, `scan`, `logbook`, `quality`, `market` |
+| Processor B2B | `/processor/overview`, `lots`, `lots/[id]`, `offers`, `deliveries` |
+
+Open [http://localhost:3000/el](http://localhost:3000/el). Weather/risk/scan/quality hit live APIs; Mapbox/Supabase need keys.

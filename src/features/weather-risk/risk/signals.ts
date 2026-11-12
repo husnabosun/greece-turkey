@@ -26,6 +26,13 @@ export type SignalField = {
   locationRisks?: FieldSignals["locationRisks"];
 };
 
+export const EMPTY_SIGNALS: FieldSignals = {
+  scans: [],
+  sprays: [],
+  locationRisks: [],
+  locationMitigated: false,
+};
+
 /** Collects what we know about one field from its scans, sprays and field data. */
 export function buildSignals(
   field: SignalField,

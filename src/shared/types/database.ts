@@ -286,6 +286,10 @@ export type Database = {
       current_user_role: { Args: Record<string, never>; Returns: UserRole };
       is_farmer: { Args: Record<string, never>; Returns: boolean };
       is_processor: { Args: Record<string, never>; Returns: boolean };
+      create_field_from_geojson: {
+        Args: { p_name: string; p_geojson: string; p_variety?: string | null };
+        Returns: Field;
+      };
     };
     Enums: {
       user_role: UserRole;
