@@ -1,9 +1,23 @@
-import { NextResponse } from "next/server";
+import { ZodError } from "zod";
+import { ndviRequest } from "@/features/diagnostics/schemas";
+import { fetchNdviHistory } from "@/features/fields/agromonitoring";
+import { fromZodError, jsonError, jsonOk } from "@/shared/lib/api/http";
 
-/** Phase 3: AgroMonitoring NDVI/EVI for field polygons. */
-export async function POST() {
-  return NextResponse.json(
-    { ok: false, error: "Not implemented yet — Phase 3" },
-    { status: 501 },
-  );
+export const runtime = "nodejs";
+
+/** AgroMonitoring NDVI/EVI history for a field polygon (demo fallback without key). */
+export async function POST(request: Request) {
+  try {
+    const body = ndviRequest.parse(await request.json());
+    const data = await fetchNdviHistory({
+      name: body.name,
+      coordinates: body.coordinates,
+      start: body.start,
+      end: body.end,
+    });
+    return jsonOk(data);
+  } catch (err) {
+    if (err instanceof ZodError) return fromZodError(err);
+    return jsonError("NDVI lookup failed", 500);
+  }
 }

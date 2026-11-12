@@ -40,3 +40,17 @@ See feature-based layout under `src/` (`app/`, `features/`, `shared/`, `core/`) 
 
 PostGIS-enabled schema with RLS for `farmer` / `processor`, storage buckets, and Realtime on offers/deliveries/lots.  
 Apply with `npx supabase db push` — details in [`supabase/README.md`](supabase/README.md).
+
+### APIs & engines (Phase 3)
+
+| Endpoint | Engine |
+|---|---|
+| `GET/POST /api/weather` | Open-Meteo (+ 1h cache, demo fallback) |
+| `POST /api/satellite/ndvi` | AgroMonitoring (demo without key) |
+| `POST /api/ai/diagnose` | Gemini 2.5 Flash · leaf / fruit / trap |
+| `POST /api/ai/read-label` | Gemini OCR + EU `euCheck` |
+| `POST /api/ai/advise` | Gemini advisor + safety filter |
+| `POST /api/quality/score` | Pure TS quality score engine |
+
+Domain ports from `_legacy`: `features/weather-risk`, `features/logbook`, `features/marketplace`.  
+`npm test` runs Vitest (risk, EU check, quality, safety).
