@@ -34,7 +34,9 @@ import {
   TextField,
 } from "./processor-kit";
 
-const VARIETIES = ["Ayvalık", "Gemlik", "Kalamon", "Koroneiki", "Memecik"];
+import { defaultVarietySlug, marketplaceVarietyOptions, resolveOliveCountry } from "@/features/fields/olive-varieties";
+import { useLocale } from "next-intl";
+
 const PROVINCES = ["Aydın", "Balıkesir", "Crete", "İzmir", "Messinia"];
 const MIN_SCORES = [
   { value: "0", label: "Any" },
@@ -104,6 +106,8 @@ export function ProcessorOverviewScreen() {
 }
 
 export function ProcessorLotsScreen() {
+  const locale = useLocale();
+  const varietyOptions = useMemo(() => marketplaceVarietyOptions(locale), [locale]);
   const [useFilter, setUseFilter] = useState<"all" | "oil" | "table">("all");
   const [variety, setVariety] = useState("all");
   const [province, setProvince] = useState("all");
@@ -131,7 +135,10 @@ export function ProcessorLotsScreen() {
           label="Variety"
           value={variety}
           onChange={setVariety}
-          options={[{ value: "all", label: "All" }, ...VARIETIES.map((v) => ({ value: v, label: v }))]}
+          options={[
+            { value: "all", label: "All" },
+            ...varietyOptions.map((v) => ({ value: v.value, label: v.label })),
+          ]}
         />
         <ChipGroup
           label="Province"
@@ -163,8 +170,10 @@ export function ProcessorLotsScreen() {
 }
 
 export function ProcessorRequestsScreen() {
+  const locale = useLocale();
+  const varietyOptions = useMemo(() => marketplaceVarietyOptions(locale), [locale]);
   const [open, setOpen] = useState(false);
-  const [variety, setVariety] = useState("Ayvalık");
+  const [variety, setVariety] = useState(() => defaultVarietySlug(resolveOliveCountry({ locale }).country));
   const [tons, setTons] = useState("10");
   const [minScore, setMinScore] = useState("75");
   const [window, setWindow] = useState(WINDOWS[1]!);
@@ -203,7 +212,7 @@ export function ProcessorRequestsScreen() {
             label="Variety"
             value={variety}
             onChange={setVariety}
-            options={VARIETIES.map((v) => ({ value: v, label: v }))}
+            options={varietyOptions.map((v) => ({ value: v.value, label: v.label }))}
           />
           <TextField label="Tonnes needed" value={tons} onChange={setTons} suffix="t" inputMode="decimal" />
           <ChipGroup

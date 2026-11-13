@@ -65,6 +65,8 @@ export interface FieldSignals {
   locationRisks: LocationSignal[];
   /** The farmer marked the location risk as done (e.g. washed the olives). */
   locationMitigated: boolean;
+  /** olive_varieties.slug — scales disease/drought scores softly. */
+  varietySlug?: string | null;
 }
 
 export interface AssessInput {

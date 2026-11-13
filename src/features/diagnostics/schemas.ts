@@ -25,6 +25,17 @@ export const diagnoseRequest = z.object({
     .object({
       fieldName: short(60).optional(),
       variety: short(40).optional(),
+      varietySlug: short(40).optional(),
+      primaryUse: z.enum(["OIL", "TABLE", "DUAL"]).optional(),
+      droughtTolerance: z.number().int().min(1).max(5).optional(),
+      diseaseSusceptibility: z
+        .object({
+          bactrocera_oleae: z.number().min(1).max(5).optional(),
+          spilocaea_oleagina: z.number().min(1).max(5).optional(),
+          colletotrichum: z.number().min(1).max(5).optional(),
+          pseudomonas_savastanoi: z.number().min(1).max(5).optional(),
+        })
+        .optional(),
       temperatureC: z.number().optional(),
       recentRisk: short(80).optional(),
     })
@@ -36,6 +47,11 @@ export const adviseRequest = z.object({
   field: z.object({
     name: short(60),
     variety: short(40).optional(),
+    varietySlug: short(40).optional(),
+    primaryUse: z.enum(["OIL", "TABLE", "DUAL"]).optional(),
+    avgOilYieldPct: z.tuple([z.number(), z.number()]).optional(),
+    droughtTolerance: z.number().int().min(1).max(5).optional(),
+    diseaseSusceptibility: z.record(z.string(), z.number()).optional(),
     trees: z.number().optional(),
     ha: z.number().optional(),
   }),

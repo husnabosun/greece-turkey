@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
+import { varietyAgronomyContext } from "@/features/fields/olive-varieties";
 import { AiTag, ApButton, Chip, FieldChips, Pill, PrivacyLine, type PillTone } from "@/shared/components/brand";
 import { Link } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
@@ -95,6 +96,7 @@ export function ScanScreen() {
         name: f.name,
         color: FIELD_DOTS[i % FIELD_DOTS.length],
         variety: f.variety,
+        variety_slug: f.variety_slug ?? null,
       })),
     [fields],
   );
@@ -150,10 +152,21 @@ export function ScanScreen() {
     setAnalysing(true);
     try {
       const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+      const agro = activeField
+        ? varietyAgronomyContext(activeField.variety_slug ?? activeField.variety)
+        : null;
       const context = activeField
         ? {
             fieldName: activeField.name.slice(0, 60),
             ...(activeField.variety ? { variety: activeField.variety.slice(0, 40) } : {}),
+            ...(agro
+              ? {
+                  varietySlug: agro.slug,
+                  primaryUse: agro.primary_use,
+                  droughtTolerance: agro.drought_tolerance_1to5,
+                  diseaseSusceptibility: agro.disease_susceptibility_1to5,
+                }
+              : {}),
           }
         : undefined;
       const res = await fetch("/api/ai/diagnose", {

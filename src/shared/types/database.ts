@@ -42,11 +42,40 @@ export type Profile = {
   avatar_url: string | null;
 } & Timestamps;
 
+export type OliveOriginCountry = "GR" | "TR" | "BOTH";
+export type OlivePrimaryUse = "OIL" | "TABLE" | "DUAL";
+
+export type OliveVarietyDiseaseSusceptibility = {
+  bactrocera_oleae?: number;
+  spilocaea_oleagina?: number;
+  colletotrichum?: number;
+  pseudomonas_savastanoi?: number;
+  [key: string]: number | undefined;
+};
+
+export type OliveVarietyRow = {
+  slug: string;
+  name_en: string;
+  name_el: string;
+  name_tr: string;
+  origin_country: OliveOriginCountry;
+  primary_use: OlivePrimaryUse;
+  avg_oil_yield_min: number;
+  avg_oil_yield_max: number;
+  harvest_window_months: number[];
+  disease_susceptibility: OliveVarietyDiseaseSusceptibility;
+  drought_tolerance: number;
+  sort_order: number;
+  created_at: string;
+};
+
 export type Field = {
   id: string;
   farmer_id: string;
   name: string;
   variety: string | null;
+  /** FK → olive_varieties.slug (nullable for legacy rows / pre-migration). */
+  variety_slug?: string | null;
   irrigated: boolean;
   tree_count: number | null;
   proof_level: ProofLevel;
@@ -264,6 +293,7 @@ export type Database = {
   public: {
     Tables: {
       profiles: TableDef<Profile, Omit<Profile, "created_at" | "updated_at"> & { created_at?: string; updated_at?: string }>;
+      olive_varieties: TableDef<OliveVarietyRow, Omit<OliveVarietyRow, "created_at"> & { created_at?: string }>;
       fields: TableDef<Field>;
       field_trees: TableDef<FieldTree>;
       scans: TableDef<Scan, Omit<Scan, "id" | "created_at"> & { id?: string; created_at?: string }>;
@@ -287,7 +317,16 @@ export type Database = {
       is_farmer: { Args: Record<string, never>; Returns: boolean };
       is_processor: { Args: Record<string, never>; Returns: boolean };
       create_field_from_geojson: {
-        Args: { p_name: string; p_geojson: string; p_variety?: string | null };
+        Args: {
+          p_name: string;
+          p_geojson: string;
+          p_variety?: string | null;
+          p_tree_count?: number | null;
+          p_irrigated?: boolean;
+          p_proof_level?: ProofLevel;
+          p_notes?: string | null;
+          p_variety_slug?: string | null;
+        };
         Returns: Field;
       };
     };
@@ -295,6 +334,8 @@ export type Database = {
       user_role: UserRole;
       locale_code: LocaleCode;
       country_code: CountryCode;
+      olive_origin_country: OliveOriginCountry;
+      olive_primary_use: OlivePrimaryUse;
       proof_level: ProofLevel;
       scan_mode: ScanMode;
       tree_status: TreeStatus;

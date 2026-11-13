@@ -18,6 +18,7 @@ import {
   Trees,
   TriangleAlert,
 } from "lucide-react";
+import { formatStremmata } from "@/features/fields/area";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { THREAT_BY_ID } from "@/features/weather-risk/risk";
 import { useFieldWeather } from "@/features/weather-risk/use-field-weather";
@@ -72,6 +73,7 @@ function greeting(locale: string) {
 
 export function DashboardScreen() {
   const t = useTranslations("farmerHome");
+  const tFields = useTranslations("farmerFields");
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
@@ -332,7 +334,9 @@ export function DashboardScreen() {
                           <p className="truncate text-ap-card text-ink">{f.name}</p>
                           <p className="text-ap-small text-muted-foreground">
                             {f.tree_count != null ? `${f.tree_count}` : "—"}
-                            {f.area_ha != null ? ` · ${Number(f.area_ha).toFixed(1)} ha` : ""}
+                            {f.area_ha != null
+                              ? ` · ${tFields("haCount", { n: formatStremmata(Number(f.area_ha)) })}`
+                              : ""}
                           </p>
                         </div>
                         <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-soft text-ap-body font-extrabold text-muted-foreground">

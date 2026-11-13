@@ -32,6 +32,7 @@ Choose exactly one label:
 - "Olive Peacock Spot" for Spilocaea / Venturia oleagina (round dark spots, often with a yellow halo)
 - "Aculus Olearius" for mite damage (dull, dusty, deformed leaf surface)
 Also return confidence 0–1, top3 guesses with confidence, and up to 4 short visible symptoms.
+When context includes variety disease_susceptibility (1–5), weigh peacock spot (spilocaea_oleagina) and knot (pseudomonas_savastanoi) accordingly — higher score means the cultivar is more prone, but still judge only from the photo.
 ${SAFETY_RULES}`;
 
 export const FRUIT_PROMPT = `You look at a photo of one olive fruit (olives on the tree or in a hand) and decide if it shows olive fly damage.
@@ -39,6 +40,7 @@ The olive fly (Bactrocera oleae) lays its egg under the skin of the fruit. A sti
 - diagnosis: "olive fly sting" if you see such marks, "other damage" for other problems (bird, hail, rot, disease), "healthy" if the fruit looks clean, "unclear" if you cannot judge.
 - confidence: 0 to 1.
 - symptoms: up to 4 short things you can actually see in the photo.
+When context includes variety disease_susceptibility.bactrocera_oleae (1–5) or primary_use TABLE vs OIL, note that table cultivars and high fly scores are more at risk — still judge only from the photo.
 ${SAFETY_RULES}`;
 
 export const TRAP_PROMPT = `You look at a photo of a yellow sticky trap for olive flies and count the olive flies stuck on it.
@@ -57,6 +59,7 @@ Your job is ONLY to explain these numbers in simple words. You must not:
 - change a level or a score, or make up any other number (flies, days, temperatures, percentages). Use only numbers that are in the data below,
 - say that something is certain.
 Write in ${lang}.
+If the field includes variety agronomy (drought_tolerance, disease_susceptibility, primary_use, avg oil yield), use it only to explain why a listed risk matters for this cultivar — do not invent a new risk.
 Return:
 - summary: at most 2 short sentences. Start with the most important risk and its level.
 - actions: 1 to 3 short actions. Non-chemical first (pruning, cleaning, traps, checking, picking up fallen fruit), or "ask a licensed agronomist". Never name a pesticide, an active substance or a dose.

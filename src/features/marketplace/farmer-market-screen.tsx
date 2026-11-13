@@ -45,7 +45,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const filterChips: { key: FilterKey; label: string }[] = [
     { key: "fits", label: t("fits") },
     { key: "near", label: t("near") },
-    { key: "variety", label: t("ayvalik") },
+    { key: "variety", label: t("variety") },
     { key: "region", label: t("aydin") },
   ];
 

@@ -4,15 +4,19 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { ArrowRight, Check, ChevronDown, ChevronLeft, Minus, Plus, Trees } from "lucide-react";
+import { formatStremmata } from "@/features/fields/area";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
+import { varietyAgronomyContext, varietyLabelFromStored } from "@/features/fields/olive-varieties";
 import { euroPrice, roundPrice } from "@/features/marketplace/pricing";
 import { Link, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
+import { useLocale } from "next-intl";
 
 const PERIODS = ["3–10 Nov", "10–17 Nov", "17–24 Nov", "24 Nov–1 Dec"];
 
 export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: string }) {
   const t = useTranslations("farmerMarket");
+  const locale = useLocale();
   const router = useRouter();
   const { fields, loading } = useFarmerFields();
   const [currentId, setCurrentId] = useState(fieldId ?? "");
@@ -83,9 +87,20 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
             </button>
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1">
-            {field?.variety ? (
-              <span className="rounded-full bg-soft px-2 py-0.5 text-ap-pill font-bold text-ink">{field.variety}</span>
+            {field?.variety || field?.variety_slug ? (
+              <span className="rounded-full bg-soft px-2 py-0.5 text-ap-pill font-bold text-ink">
+                {varietyLabelFromStored(field.variety_slug ?? field.variety, locale)}
+              </span>
             ) : null}
+            {(() => {
+              const agro = varietyAgronomyContext(field?.variety_slug ?? field?.variety);
+              if (!agro) return null;
+              return (
+                <span className="rounded-full bg-soft px-2 py-0.5 text-ap-pill font-bold text-muted-foreground">
+                  {agro.primary_use} · {agro.avg_oil_yield_pct[0]}–{agro.avg_oil_yield_pct[1]}%
+                </span>
+              );
+            })()}
             {field?.tree_count != null ? (
               <span className="rounded-full bg-soft px-2 py-0.5 text-ap-pill font-bold text-ink">
                 {t("treesPill", { n: field.tree_count })}
@@ -93,7 +108,7 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
             ) : null}
             {field?.area_ha != null ? (
               <span className="rounded-full bg-soft px-2 py-0.5 text-ap-pill font-bold text-ink">
-                {t("haPill", { n: Number(field.area_ha).toFixed(1) })}
+                {t("haPill", { n: formatStremmata(Number(field.area_ha)) })}
               </span>
             ) : null}
           </div>
