@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Home, Map, ScanLine, BookOpen, ShoppingBag } from "lucide-react";
+import { House, Sprout, Camera, ScrollText, ShoppingBasket } from "lucide-react";
 import { AppShell } from "@/shared/components/app-shell";
 
 export function FarmerShell({ children }: { children: ReactNode }) {
@@ -10,13 +10,13 @@ export function FarmerShell({ children }: { children: ReactNode }) {
 
   return (
     <AppShell
-      brand="Agro Pulse"
+      brand="AgroPulse"
       links={[
-        { href: "/farmer/dashboard", label: t("home"), icon: Home },
-        { href: "/farmer/fields", label: t("fields"), icon: Map },
-        { href: "/farmer/scan", label: t("scan"), icon: ScanLine },
-        { href: "/farmer/logbook", label: t("logbook"), icon: BookOpen },
-        { href: "/farmer/market", label: t("market"), icon: ShoppingBag },
+        { href: "/farmer/dashboard", label: t("home"), icon: House, circle: "primary" },
+        { href: "/farmer/fields", label: t("fields"), icon: Sprout, circle: "primary" },
+        { href: "/farmer/scan", label: t("scan"), icon: Camera, circle: "primary" },
+        { href: "/farmer/logbook", label: t("logbook"), icon: ScrollText, circle: "ink" },
+        { href: "/farmer/market", label: t("market"), icon: ShoppingBasket, circle: "ink" },
       ]}
     >
       {children}

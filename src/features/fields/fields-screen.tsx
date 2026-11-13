@@ -1,125 +1,187 @@
 "use client";
 
-import { useState } from "react";
-import dynamic from "next/dynamic";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { hasSupabaseConfig, publicEnv } from "@/core/config/env";
-import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
-import { PageHeader } from "@/shared/components/page-header";
-import { EmptyState } from "@/shared/components/empty-state";
-import { Button } from "@/shared/components/ui/button";
-import { Input } from "@/shared/components/ui/input";
-import { Label } from "@/shared/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
-import type { FieldPolygon } from "./field-map-editor";
-
-const FieldMapEditor = dynamic(() => import("./field-map-editor").then((m) => m.FieldMapEditor), {
-  ssr: false,
-  loading: () => (
-    <div className="h-80 animate-pulse rounded-xl bg-muted md:h-[min(70vh,40rem)]" />
-  ),
-});
+import {
+  Calendar,
+  Camera,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+  RefreshCw,
+  Star,
+} from "lucide-react";
+import { useFarmerFields } from "@/features/fields/use-farmer-fields";
+import { FieldHealthMap } from "@/features/fields/field-health-map";
+import { Chip, FieldChips } from "@/shared/components/brand";
+import { Link, useRouter } from "@/shared/i18n/navigation";
+import { FIELD_DOTS, colors } from "@/shared/theme/tokens";
 
 export function FieldsScreen() {
   const t = useTranslations("farmerFields");
-  const token = publicEnv.NEXT_PUBLIC_MAPBOX_TOKEN;
-  const supabaseReady = hasSupabaseConfig();
-  const [name, setName] = useState("");
-  const [polygon, setPolygon] = useState<FieldPolygon | null>(null);
-  const [saving, setSaving] = useState(false);
+  const router = useRouter();
+  const { fields, loading } = useFarmerFields();
+  const [showHealth, setShowHealth] = useState(true);
+  const [selectedId, setSelectedId] = useState<string>("");
 
-  async function onSave() {
-    if (!supabaseReady) {
-      toast.error(t("needSupabase"));
-      return;
-    }
-    if (!polygon) {
-      toast.error(t("needPolygon"));
-      return;
-    }
-    const fieldName = name.trim() || t("defaultName");
-    const supabase = tryCreateBrowserClient();
-    if (!supabase) {
-      toast.error(t("needSupabase"));
-      return;
-    }
+  const viewFields = useMemo(
+    () =>
+      fields.map((f, i) => ({
+        id: f.id,
+        name: f.name,
+        color: FIELD_DOTS[i % FIELD_DOTS.length],
+        trees: f.tree_count,
+        ha: f.area_ha,
+      })),
+    [fields],
+  );
 
-    setSaving(true);
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-    if (userError || !user) {
-      setSaving(false);
-      toast.error(t("needLogin"));
-      return;
+  useEffect(() => {
+    if (!selectedId && viewFields[0]) setSelectedId(viewFields[0].id);
+    if (selectedId && !viewFields.some((f) => f.id === selectedId)) {
+      setSelectedId(viewFields[0]?.id ?? "");
     }
+  }, [selectedId, viewFields]);
 
-    const { error } = await supabase.rpc("create_field_from_geojson", {
-      p_name: fieldName,
-      p_geojson: JSON.stringify(polygon),
-      p_variety: null,
-    });
-    setSaving(false);
-
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-
-    toast.success(t("saveOk"));
-    setName("");
-    setPolygon(null);
-  }
+  const active = viewFields.find((f) => f.id === selectedId) ?? viewFields[0];
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      <PageHeader title={t("title")} description={t("subtitle")} />
-
-      {!token ? (
-        <EmptyState title={t("needMapboxTitle")} description={t("needMapboxBody")} />
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
-          <Card className="overflow-hidden">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">{t("drawTitle")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <FieldMapEditor token={token} onPolygonChange={(next) => setPolygon(next)} />
-              <p className="text-xs text-muted-foreground md:hidden">{t("drawHint")}</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t("nameLabel")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="field-name" className="sr-only">
-                  {t("nameLabel")}
-                </Label>
-                <Input
-                  id="field-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={t("namePlaceholder")}
-                />
-              </div>
-              <p className="hidden text-xs text-muted-foreground lg:block">{t("drawHint")}</p>
-              <Button
-                type="button"
-                className="w-full"
-                disabled={saving || !polygon}
-                onClick={onSave}
-              >
-                {saving ? t("saving") : t("save")}
-              </Button>
-            </CardContent>
-          </Card>
+    <div className="fixed inset-0 z-40 flex flex-col bg-background md:left-60">
+      <div className="shrink-0 space-y-2.5 px-4 pt-3 pb-2 md:px-6 md:pt-4">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/farmer/dashboard"
+            aria-label={t("back")}
+            className="flex size-10 items-center justify-center rounded-full border border-line bg-card"
+          >
+            <ChevronLeft className="size-5" aria-hidden />
+          </Link>
+          <h1 className="flex-1 text-[22px] font-extrabold tracking-tight text-ink">{t("myField")}</h1>
+          <button
+            type="button"
+            aria-label={t("layers")}
+            onClick={() => toast(t("layersOn"))}
+            className="flex size-10 items-center justify-center rounded-full border border-line bg-card"
+          >
+            <Layers className="size-[18px]" aria-hidden />
+          </button>
         </div>
-      )}
+
+        {loading ? (
+          <div className="h-8 animate-pulse rounded-full bg-soft" />
+        ) : (
+          <FieldChips
+            fields={viewFields.map((f) => ({ id: f.id, name: f.name, color: f.color }))}
+            selected={active?.id ?? ""}
+            onSelect={(id) => {
+              if (id === "all") return;
+              setSelectedId(id);
+            }}
+            trailing={
+              <Chip on={false} onClick={() => router.push("/farmer/fields/new")}>
+                <span className="text-ap-pill font-bold text-ink">{t("add")}</span>
+              </Chip>
+            }
+          />
+        )}
+
+        <div className="flex items-center rounded-[18px] border border-line bg-card p-2.5">
+          <div className="flex-1 text-center">
+            <p className="text-ap-card text-ink">
+              {active?.trees != null ? t("treesCount", { n: active.trees }) : "—"}
+            </p>
+            <p className="text-ap-small font-medium text-muted-foreground">{t("treeCount")}</p>
+          </div>
+          <div className="h-8 w-px bg-line" />
+          <div className="flex-1 text-center">
+            <p className="text-ap-card text-ink">
+              {active?.ha != null ? t("haCount", { n: Number(active.ha).toFixed(1) }) : "—"}
+            </p>
+            <p className="text-ap-small font-medium text-muted-foreground">{t("fieldSize")}</p>
+          </div>
+          <Link
+            href="/farmer/quality"
+            className="flex flex-[1.4] items-center justify-center gap-2 rounded-xl bg-soft py-1.5"
+          >
+            <Star className="size-5" fill={colors.muted} color={colors.muted} aria-hidden />
+            <span>
+              <span className="block text-ap-small font-semibold text-ink">{t("qualityScore")}</span>
+              <span className="text-ap-card text-ink">
+                —
+                <span className="text-ap-small font-medium text-muted-foreground">{t("perHundred")}</span>
+              </span>
+            </span>
+          </Link>
+        </div>
+      </div>
+
+      <div className="relative min-h-0 flex-1 px-0 md:px-6">
+        <FieldHealthMap
+          className="h-full rounded-none md:rounded-[18px]"
+          trees={[]}
+          selectedId={null}
+          onSelect={() => undefined}
+          showHealth={showHealth}
+          onToggleHealth={setShowHealth}
+          onLocate={() => toast(t("located"))}
+          labels={{
+            aiLayer: t("aiLayer"),
+            healthy: t("healthy"),
+            suspicious: t("suspicious"),
+            diseased: t("diseased"),
+            locate: t("myLocation"),
+            zoomIn: t("zoomIn"),
+            zoomOut: t("zoomOut"),
+            tree: (id) => t("treeN", { id }),
+          }}
+        />
+      </div>
+
+      <div className="shrink-0 space-y-2.5 border-t border-line bg-background px-4 pt-2.5 pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:px-6 md:pb-4">
+        <button
+          type="button"
+          className="flex h-10 w-full items-center rounded-xl bg-risk-soft px-3 text-left"
+        >
+          <RefreshCw className="size-[18px] text-risk" aria-hidden />
+          <span className="ml-2.5 flex-1 text-ap-body font-bold text-ink">{t("followUp", { n: 0 })}</span>
+          <span className="text-ap-body font-bold text-risk">{t("view")}</span>
+          <ChevronRight className="size-4 text-risk" aria-hidden />
+        </button>
+
+        <div className="rounded-[18px] border border-line bg-card p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-ap-card text-ink">{t("treeN", { id: "—" })}</p>
+            <span className="rounded-full bg-soft px-2.5 py-1 text-ap-pill font-bold text-muted-foreground">
+              {t("selectTree")}
+            </span>
+          </div>
+          <p className="mt-2 text-ap-body text-muted-foreground">{t("noTreeYet")}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-ap-small text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <Camera className="size-3.5" /> —
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Calendar className="size-3.5" /> —
+            </span>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Link
+              href="/farmer/scan"
+              className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-primary text-ap-btn font-bold text-white"
+            >
+              <Camera className="size-4" />
+              {t("scanTree")}
+            </Link>
+            <button
+              type="button"
+              className="inline-flex h-11 flex-1 items-center justify-center rounded-full border border-line bg-card text-ap-btn font-bold text-ink"
+            >
+              {t("seeScans")}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
