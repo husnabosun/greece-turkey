@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { ArrowLeftRight, ClipboardList, LayoutDashboard, Search, Truck, type LucideIcon } from "lucide-react";
-import { createClient } from "@/core/supabase/client";
+import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { Initials, initialsOf } from "@/features/marketplace/processor-kit";
 import { Link, usePathname } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 
-const NAV: { label: string; href: string; Icon: LucideIcon }[] = [
-  { label: "Overview", href: "/processor/overview", Icon: LayoutDashboard },
-  { label: "Find olives", href: "/processor/lots", Icon: Search },
-  { label: "My requests", href: "/processor/requests", Icon: ClipboardList },
-  { label: "Deliveries", href: "/processor/deliveries", Icon: Truck },
+type NavItem = { labelKey: "overview" | "findOlives" | "requests" | "deliveries"; href: string; Icon: LucideIcon };
+
+const NAV: NavItem[] = [
+  { labelKey: "overview", href: "/processor/overview", Icon: LayoutDashboard },
+  { labelKey: "findOlives", href: "/processor/lots", Icon: Search },
+  { labelKey: "requests", href: "/processor/requests", Icon: ClipboardList },
+  { labelKey: "deliveries", href: "/processor/deliveries", Icon: Truck },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -44,20 +47,20 @@ function Logo({ size = 36 }: { size?: number }) {
   );
 }
 
-function NavPill({ item, active }: { item: (typeof NAV)[number]; active: boolean }) {
+function NavPill({ href, label, Icon, active }: { href: string; label: string; Icon: LucideIcon; active: boolean }) {
   return (
     <Link
-      href={item.href}
+      href={href}
       aria-current={active ? "page" : undefined}
       className={cn("flex h-11 shrink-0 items-center gap-2.5 rounded-full px-3.5", active ? "bg-ink" : "hover:bg-soft")}
     >
-      <item.Icon className={cn("size-[18px]", active ? "text-white" : "text-ink")} strokeWidth={active ? 2.2 : 1.9} aria-hidden />
-      <span className={cn("text-[14px] leading-[18px] font-bold", active ? "text-white" : "text-ink")}>{item.label}</span>
+      <Icon className={cn("size-[18px]", active ? "text-white" : "text-ink")} strokeWidth={active ? 2.2 : 1.9} aria-hidden />
+      <span className={cn("text-[14px] leading-[18px] font-bold", active ? "text-white" : "text-ink")}>{label}</span>
     </Link>
   );
 }
 
-function SwitchView({ className }: { className?: string }) {
+function SwitchView({ label, className }: { label: string; className?: string }) {
   return (
     <Link
       href="/farmer/dashboard"
@@ -67,18 +70,30 @@ function SwitchView({ className }: { className?: string }) {
       )}
     >
       <ArrowLeftRight className="size-3.5" aria-hidden />
-      Switch view
+      {label}
     </Link>
   );
 }
 
 export function ProcessorShell({ children }: { children: ReactNode }) {
+  const t = useTranslations("processorNav");
   const pathname = usePathname();
-  const [company, setCompany] = useState("Processor");
+  const fallback = t("processorFallback");
+  const [company, setCompany] = useState(fallback);
   const [initials, setInitials] = useState("PR");
 
+  const nav = useMemo(
+    () =>
+      NAV.map((item) => ({
+        ...item,
+        label: t(item.labelKey),
+      })),
+    [t],
+  );
+
   useEffect(() => {
-    const supabase = createClient();
+    const supabase = tryCreateBrowserClient();
+    if (!supabase) return;
     void (async () => {
       const { data: auth } = await supabase.auth.getUser();
       const user = auth.user;
@@ -92,46 +107,60 @@ export function ProcessorShell({ children }: { children: ReactNode }) {
         (profile?.company_name as string | null)?.trim() ||
         (profile?.display_name as string | null)?.trim() ||
         user.email?.split("@")[0] ||
-        "Processor";
+        fallback;
       setCompany(name);
       setInitials(initialsOf(name) || "PR");
     })();
-  }, []);
+  }, [fallback]);
+
+  const panel = t("processorPanel");
 
   return (
     <div className="min-h-dvh bg-background text-ink">
       <aside
         className="fixed inset-y-0 left-0 z-30 hidden w-[240px] flex-col border-r border-line bg-card px-4 py-5 min-[900px]:flex"
-        aria-label="Processor"
+        aria-label={panel}
       >
         <Logo />
         <div className="mt-6 flex items-center gap-2.5 rounded-2xl bg-background p-2.5">
           <Initials text={initials} size={40} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] leading-[18px] font-extrabold text-ink">{company}</p>
-            <p className="text-[11px] leading-[14px] font-medium text-muted-foreground">Processor panel</p>
+            <p className="text-[11px] leading-[14px] font-medium text-muted-foreground">{panel}</p>
           </div>
         </div>
         <nav className="mt-5 flex flex-col gap-1">
-          {NAV.map((item) => (
-            <NavPill key={item.href} item={item} active={isActive(pathname, item.href)} />
+          {nav.map((item) => (
+            <NavPill
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              Icon={item.Icon}
+              active={isActive(pathname, item.href)}
+            />
           ))}
         </nav>
         <div className="flex-1" />
-        <SwitchView className="self-start px-0" />
+        <SwitchView label={t("switchView")} className="self-start px-0" />
       </aside>
 
       <div className="border-b border-line bg-card px-4 pt-3 pb-3 min-[900px]:hidden">
         <div className="flex items-center justify-between">
           <Logo size={30} />
-          <SwitchView className="px-2" />
+          <SwitchView label={t("switchView")} className="px-2" />
         </div>
         <p className="mt-1 truncate text-[11px] leading-[14px] font-medium text-muted-foreground">
-          {`${company} · Processor panel`}
+          {`${company} · ${panel}`}
         </p>
         <nav className="-mx-4 mt-2.5 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {NAV.map((item) => (
-            <NavPill key={item.href} item={item} active={isActive(pathname, item.href)} />
+          {nav.map((item) => (
+            <NavPill
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              Icon={item.Icon}
+              active={isActive(pathname, item.href)}
+            />
           ))}
         </nav>
       </div>

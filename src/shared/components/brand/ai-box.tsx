@@ -1,4 +1,7 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { colors } from "@/shared/theme/tokens";
@@ -20,25 +23,27 @@ export function AIBox({ title, children, className }: { title: string; children?
 }
 
 export function AiTag({ source, className }: { source: "gemini" | "model" | "demo"; className?: string }) {
+  const t = useTranslations("common");
   if (source === "demo") {
     return (
       <span className={cn("inline-flex h-6 items-center self-start rounded-full bg-warn-soft px-2.5 text-ap-small font-bold text-warn-text", className)}>
-        Demo
+        {t("aiDemo")}
       </span>
     );
   }
   return (
     <span className={cn("inline-flex h-6 items-center gap-1 self-start rounded-full bg-good-soft px-2.5 text-ap-small font-bold text-good", className)}>
       <Sparkles className="size-2.5" aria-hidden />
-      AI · {source === "gemini" ? "Gemini" : "Model"}
+      {source === "gemini" ? t("aiGemini") : t("aiModel")}
     </span>
   );
 }
 
 export function PrivacyLine({ className }: { className?: string }) {
+  const t = useTranslations("farmerScan");
   return (
     <p className={cn("text-center text-ap-small font-medium text-muted-foreground", className)}>
-      Photos are sent to an AI service only to analyse them.
+      {t("privacy")}
     </p>
   );
 }

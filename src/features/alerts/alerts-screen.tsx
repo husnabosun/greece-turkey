@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ChevronRight, Info } from "lucide-react";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
+import { riskLevelLabel, threatLabel, threatTip } from "@/features/weather-risk/threat-labels";
 import { useFieldWeather } from "@/features/weather-risk/use-field-weather";
 import { PageHeader } from "@/shared/components/page-header";
 import { EmptyState } from "@/shared/components/empty-state";
@@ -18,6 +19,7 @@ const PILL: Record<string, PillTone> = { High: "risk", Medium: "warn", Low: "goo
 
 export function AlertsScreen() {
   const t = useTranslations("farmerAlerts");
+  const tThreats = useTranslations("riskThreats");
   const { fields, loading } = useFarmerFields();
   const [selected, setSelected] = useState<string | "all">("all");
   const [tab, setTab] = useState<(typeof TABS)[number]>("pests");
@@ -97,10 +99,12 @@ export function AlertsScreen() {
                   <p className="text-ap-small font-bold tracking-wide text-muted-foreground uppercase">
                     {t("topAlert")}
                   </p>
-                  <p className="mt-1 text-ap-card capitalize text-ink">{top.threat.replaceAll("-", " ")}</p>
-                  <p className="mt-1 text-ap-body text-muted-foreground">{top.drivers[0]}</p>
+                  <p className="mt-1 text-ap-card text-ink">{threatLabel(top.threat, tThreats)}</p>
+                  <p className="mt-1 text-ap-body text-muted-foreground">
+                    {threatTip(top.threat, tThreats) || riskLevelLabel(top.level, tThreats)}
+                  </p>
                 </div>
-                <Pill tone={PILL[top.level] ?? "neutral"}>{top.level}</Pill>
+                <Pill tone={PILL[top.level] ?? "neutral"}>{riskLevelLabel(top.level, tThreats)}</Pill>
               </div>
             </ApCard>
           ) : null}
@@ -113,12 +117,12 @@ export function AlertsScreen() {
               <ApCard key={`${a.threat}-${a.day}`} className="flex items-center gap-3 p-3">
                 <Info className="size-4 text-ap-accent" aria-hidden />
                 <div className="min-w-0 flex-1">
-                  <p className="text-ap-body font-extrabold capitalize text-ink">{a.threat.replaceAll("-", " ")}</p>
+                  <p className="text-ap-body font-extrabold text-ink">{threatLabel(a.threat, tThreats)}</p>
                   <p className="text-ap-small text-muted-foreground">
-                    {a.day} · score {a.score}
+                    {a.day} · {tThreats("scoreLabel", { n: a.score })}
                   </p>
                 </div>
-                <Pill tone={PILL[a.level] ?? "neutral"}>{a.level}</Pill>
+                <Pill tone={PILL[a.level] ?? "neutral"}>{riskLevelLabel(a.level, tThreats)}</Pill>
                 <ChevronRight className="size-4 text-muted-foreground" aria-hidden />
               </ApCard>
             ))}

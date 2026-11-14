@@ -31,6 +31,7 @@ function isTab(value: string | undefined): value is Tab {
 
 export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const t = useTranslations("farmerMarket");
+  const tFields = useTranslations("farmerFields");
   const router = useRouter();
   const { fields, loading, error } = useFarmerFields();
   const [tab, setTab] = useState<Tab>(isTab(initialTab) ? initialTab : "overview");
@@ -45,7 +46,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const filterChips: { key: FilterKey; label: string }[] = [
     { key: "fits", label: t("fits") },
     { key: "near", label: t("near") },
-    { key: "variety", label: t("variety") },
+    { key: "variety", label: t("ayvalik") },
     { key: "region", label: t("aydin") },
   ];
 
@@ -131,7 +132,11 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               <div className="h-28 animate-pulse rounded-[18px] bg-soft" />
             </div>
           ) : null}
-          {error ? <p className="mt-2 text-ap-small text-risk">{error}</p> : null}
+          {error ? (
+            <p className="mt-2 text-ap-small text-risk">
+              {error === "needSupabase" || error === "needLogin" ? tFields(error) : error}
+            </p>
+          ) : null}
           {!loading && fields.length === 0 ? (
             <div className="mt-2 rounded-[18px] border border-line bg-card px-4 py-6 text-center text-ap-body font-semibold text-muted-foreground">
               {t("noFieldScores")}

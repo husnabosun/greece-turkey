@@ -4,7 +4,6 @@ import type { ComponentType, ReactNode } from "react";
 import { Leaf } from "lucide-react";
 import { Link, usePathname } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
-import { LocaleSwitcher } from "@/shared/components/locale-switcher";
 import { SignOutButton } from "@/features/auth/sign-out-button";
 
 export type AppShellLink = {
@@ -25,6 +24,7 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/** Farmer chrome: no top app bar (demo). Language + sign-out live in Home settings. */
 export function AppShell({ brand, links, children }: Props) {
   const pathname = usePathname();
 
@@ -63,20 +63,6 @@ export function AppShell({ brand, links, children }: Props) {
       </aside>
 
       <div className="flex min-h-dvh w-full flex-1 flex-col md:pl-60">
-        <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-2 border-b border-line bg-background/95 px-4 py-3 backdrop-blur">
-          <div className="flex min-w-0 items-center gap-2 font-extrabold md:hidden">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-              <Leaf className="size-4" aria-hidden />
-            </span>
-            <span className="truncate">{brand}</span>
-          </div>
-          <p className="hidden text-sm font-medium text-muted-foreground md:block">AgroPulse</p>
-          <div className="flex shrink-0 items-center gap-1 md:gap-2">
-            <LocaleSwitcher />
-            <SignOutButton />
-          </div>
-        </header>
-
         <main className="flex w-full min-h-0 flex-1 flex-col px-4 pt-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:px-6 md:pt-4 md:pb-6">
           {children}
         </main>

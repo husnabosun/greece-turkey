@@ -193,6 +193,8 @@ export function FieldsScreen() {
                 zoomOut: t("zoomOut"),
                 tree: (id) => t("treeN", { id }),
                 needToken: t("needMapboxBody"),
+                loading: t("mapLoading"),
+                failed: t("mapFailed"),
               }}
             />
           </div>

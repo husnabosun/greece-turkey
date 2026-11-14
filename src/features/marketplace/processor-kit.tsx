@@ -11,6 +11,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { ApButton } from "@/shared/components/brand/ap-button";
 import { ApCard } from "@/shared/components/brand/ap-card";
 import { Chip } from "@/shared/components/brand/chip";
@@ -147,10 +148,11 @@ export const initialsOf = (name: string) =>
     .join("");
 
 export function ScoreBox({ score, large = false }: { score: number; large?: boolean }) {
+  const t = useTranslations("processor");
   const low = score < 70;
   return (
     <div className={cn("flex flex-col items-center", large ? "rounded-xl px-3 py-2" : "rounded-lg px-2 py-1", low ? "bg-risk-soft" : "bg-good-soft")}>
-      <span className={cn("text-[10px] leading-3 font-semibold", low ? "text-risk" : "text-good")}>Quality score</span>
+      <span className={cn("text-[10px] leading-3 font-semibold", low ? "text-risk" : "text-good")}>{t("qualityScore")}</span>
       <span className={cn("font-extrabold", large ? "text-[24px] leading-7" : "text-[16px] leading-5", low ? "text-risk" : "text-good")}>{score}</span>
     </div>
   );
@@ -287,6 +289,8 @@ export function Dialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  const t = useTranslations("processor");
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onClick={onClose} role="presentation">
@@ -305,7 +309,7 @@ export function Dialog({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close dialog"
+            aria-label={t("closeDialog")}
             className="flex size-10 items-center justify-center rounded-full border border-line bg-card"
           >
             <X className="size-[18px] text-ink" />
@@ -313,7 +317,7 @@ export function Dialog({
         </div>
         <div className="mt-4 flex flex-col gap-3">{children}</div>
         <div className="mt-5 flex justify-end gap-2">
-          <ApButton label="Cancel" variant="outline" onClick={onClose} />
+          <ApButton label={t("cancel")} variant="outline" onClick={onClose} />
           <ApButton label={actionLabel} onClick={onAction} disabled={actionDisabled} />
         </div>
       </div>

@@ -91,13 +91,14 @@ export function forecastUrl(f: FieldPoint): string {
 }
 
 /** WMO weather code to a short label and icon. */
+/** `label` is a stable i18n key: storm | snow | rain | sunny | cloudy */
 export function describeWeather(code: number): { label: string; icon: WeatherIcon } {
-  if (code >= 95) return { label: 'Storm', icon: 'storm' };
-  if (code >= 71 && code <= 77) return { label: 'Snow', icon: 'rain' };
-  if (code === 85 || code === 86) return { label: 'Snow', icon: 'rain' };
-  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return { label: 'Rain', icon: 'rain' };
-  if (code === 0 || code === 1) return { label: 'Sunny', icon: 'sunny' };
-  return { label: 'Cloudy', icon: 'cloudy' };
+  if (code >= 95) return { label: 'storm', icon: 'storm' };
+  if (code >= 71 && code <= 77) return { label: 'snow', icon: 'rain' };
+  if (code === 85 || code === 86) return { label: 'snow', icon: 'rain' };
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return { label: 'rain', icon: 'rain' };
+  if (code === 0 || code === 1) return { label: 'sunny', icon: 'sunny' };
+  return { label: 'cloudy', icon: 'cloudy' };
 }
 
 const num = (v: unknown, fallback = 0): number => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);

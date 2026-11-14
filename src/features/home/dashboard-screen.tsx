@@ -21,9 +21,11 @@ import {
 import { formatStremmata } from "@/features/fields/area";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { THREAT_BY_ID } from "@/features/weather-risk/risk";
+import { riskLevelLabel, threatLabel, threatTip } from "@/features/weather-risk/threat-labels";
 import { useFieldWeather } from "@/features/weather-risk/use-field-weather";
 import { LOCALES, type Locale } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
+import { SignOutButton } from "@/features/auth/sign-out-button";
 import { ApButton, ApCard, FieldChips, Pill, SectionHeader } from "@/shared/components/brand";
 import { FIELD_DOTS, colors } from "@/shared/theme/tokens";
 import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
@@ -54,25 +56,31 @@ const TONE = {
   },
 };
 
-function greeting(locale: string) {
+function greetingKey() {
   const h = new Date().getHours();
-  if (locale.startsWith("el")) {
-    if (h < 12) return "Καλημέρα";
-    if (h < 18) return "Καλό απόγευμα";
-    return "Καλησπέρα";
+  if (h < 12) return "greetingMorning" as const;
+  if (h < 18) return "greetingAfternoon" as const;
+  return "greetingEvening" as const;
+}
+
+function weatherLabelKey(label: string) {
+  switch (label) {
+    case "storm":
+      return "weatherStorm" as const;
+    case "snow":
+      return "weatherSnow" as const;
+    case "rain":
+      return "weatherRain" as const;
+    case "sunny":
+      return "weatherSunny" as const;
+    default:
+      return "weatherCloudy" as const;
   }
-  if (locale.startsWith("tr")) {
-    if (h < 12) return "Günaydın";
-    if (h < 18) return "İyi günler";
-    return "İyi akşamlar";
-  }
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
 }
 
 export function DashboardScreen() {
   const t = useTranslations("farmerHome");
+  const tThreats = useTranslations("riskThreats");
   const tFields = useTranslations("farmerFields");
   const locale = useLocale();
   const pathname = usePathname();
@@ -153,7 +161,7 @@ export function DashboardScreen() {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-ap-title text-ink">
-            {greeting(locale)},
+            {t(greetingKey())},
             <br />
             {displayName || t("farmerFallback")}
           </h1>
@@ -214,12 +222,21 @@ export function DashboardScreen() {
                   ))}
                 </div>
               </div>
+              <div className="border-t border-line pt-1">
+                <SignOutButton className="h-11 w-full justify-start rounded-xl px-2.5" />
+              </div>
             </div>
           ) : null}
         </div>
       </div>
 
-      {fieldsError ? <p className="mt-4 text-sm text-risk">{fieldsError}</p> : null}
+      {fieldsError ? (
+        <p className="mt-4 text-sm text-risk">
+          {fieldsError === "needSupabase" || fieldsError === "needLogin"
+            ? tFields(fieldsError)
+            : fieldsError}
+        </p>
+      ) : null}
 
       {loading ? (
         <div className="mt-4 space-y-3">
@@ -245,7 +262,9 @@ export function DashboardScreen() {
           <div className="mt-3.5 flex h-11 items-center gap-2 rounded-2xl border border-line bg-card px-3 text-ap-body font-semibold">
             <WeatherIcon className="size-[18px] shrink-0 text-warn" aria-hidden />
             <span>{weather ? `${Math.round(weather.current.temp)}°C` : "—"}</span>
-            <span className="truncate font-medium text-muted-foreground">{weather?.current.label ?? ""}</span>
+            <span className="truncate font-medium text-muted-foreground">
+              {weather ? t(weatherLabelKey(weather.current.label)) : ""}
+            </span>
             <span className="mx-1 h-5 w-px shrink-0 bg-line" />
             <Droplet className="size-4 shrink-0 text-ap-accent" aria-hidden />
             <span className="truncate font-medium text-muted-foreground">{rainText}</span>
@@ -263,16 +282,17 @@ export function DashboardScreen() {
             <h2 className="mt-1.5 max-w-[240px] text-[23px] leading-tight font-extrabold tracking-tight text-ink">
               {elevated && threat
                 ? t("riskIs", {
-                    threat: threat.name,
-                    level: elevated.level === "High" ? t("levelHigh") : t("levelMedium"),
+                    threat: threatLabel(elevated.threat, tThreats),
+                    level: riskLevelLabel(elevated.level, tThreats),
                   })
                 : weather
                   ? t("noBigRisks")
                   : t("noWeatherYet")}
             </h2>
             <p className="mt-1.5 max-w-[260px] text-ap-body text-[#5a5a5a]">
-              {elevated?.actions?.[0] ||
-                elevated?.drivers?.[0] ||
+              {(elevated
+                ? threatTip(elevated.threat, tThreats)
+                : "") ||
                 (weather ? t("keepChecks") : fields.length === 0 ? t("noFieldsBody") : t("noLocationBody"))}
             </p>
             <div
@@ -349,8 +369,12 @@ export function DashboardScreen() {
                             className="size-2 rounded-full"
                             style={{ backgroundColor: live.level === "High" ? colors.risk : colors.warn }}
                           />
-                          <span className="flex-1 truncate text-ap-body font-semibold text-ink">{liveThreat.name}</span>
-                          <Pill tone={live.level === "High" ? "risk" : "warn"}>{live.level}</Pill>
+                          <span className="flex-1 truncate text-ap-body font-semibold text-ink">
+                            {threatLabel(live.threat, tThreats)}
+                          </span>
+                          <Pill tone={live.level === "High" ? "risk" : "warn"}>
+                            {riskLevelLabel(live.level, tThreats)}
+                          </Pill>
                         </div>
                       ) : null}
                     </ApCard>

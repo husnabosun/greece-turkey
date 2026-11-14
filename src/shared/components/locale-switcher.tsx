@@ -1,6 +1,6 @@
 "use client";
 
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { usePathname, useRouter } from "@/shared/i18n/navigation";
 import { LOCALES, type Locale } from "@/core/config/constants";
 import {
@@ -18,6 +18,7 @@ const LABELS: Record<Locale, string> = {
 };
 
 export function LocaleSwitcher() {
+  const t = useTranslations("common");
   const locale = useLocale() as Locale;
   const pathname = usePathname();
   const router = useRouter();
@@ -29,7 +30,7 @@ export function LocaleSwitcher() {
         router.replace(pathname, { locale: next as Locale });
       }}
     >
-      <SelectTrigger className="w-[140px]" aria-label="Language">
+      <SelectTrigger className="w-[140px]" aria-label={t("language")}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

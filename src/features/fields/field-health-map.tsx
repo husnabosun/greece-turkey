@@ -63,6 +63,8 @@ type Props = {
     zoomOut: string;
     tree: (id: number) => string;
     needToken?: string;
+    loading?: string;
+    failed?: string;
   };
   className?: string;
 };
@@ -294,13 +296,13 @@ export function FieldHealthMap({
 
       {token && !ready && !mapError ? (
         <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center bg-[#1a1a1a]/70">
-          <p className="text-ap-body font-semibold text-white/80">Loading map…</p>
+          <p className="text-ap-body font-semibold text-white/80">{labels.loading ?? "…"}</p>
         </div>
       ) : null}
 
       {mapError ? (
         <div className="absolute inset-0 z-[5] flex items-center justify-center bg-[#1a1a1a] px-6 text-center">
-          <p className="text-ap-body font-semibold text-white/80">Map failed to load. Try refresh.</p>
+          <p className="text-ap-body font-semibold text-white/80">{labels.failed ?? labels.needToken}</p>
         </div>
       ) : null}
 

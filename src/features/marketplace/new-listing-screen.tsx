@@ -12,7 +12,14 @@ import { Link, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 import { useLocale } from "next-intl";
 
-const PERIODS = ["3–10 Nov", "10–17 Nov", "17–24 Nov", "24 Nov–1 Dec"];
+const PERIOD_KEYS = ["period1", "period2", "period3", "period4"] as const;
+
+function useLabel(use: string, t: (key: "useOil" | "useDual" | "useTable") => string) {
+  if (use === "OIL") return t("useOil");
+  if (use === "DUAL") return t("useDual");
+  if (use === "TABLE") return t("useTable");
+  return use;
+}
 
 export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: string }) {
   const t = useTranslations("farmerMarket");
@@ -32,7 +39,7 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
   }, [fields, fieldId, currentId]);
 
   const [tons, setTons] = useState(2.5);
-  const [period, setPeriod] = useState(PERIODS[0]!);
+  const [periodIdx, setPeriodIdx] = useState(0);
   const [negotiable, setNegotiable] = useState(false);
   const [delivery, setDelivery] = useState<"pickup" | "deliver">("pickup");
   const [price, setPrice] = useState(0.8);
@@ -97,7 +104,7 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
               if (!agro) return null;
               return (
                 <span className="rounded-full bg-soft px-2 py-0.5 text-ap-pill font-bold text-muted-foreground">
-                  {agro.primary_use} · {agro.avg_oil_yield_pct[0]}–{agro.avg_oil_yield_pct[1]}%
+                  {useLabel(agro.primary_use, t)} · {agro.avg_oil_yield_pct[0]}–{agro.avg_oil_yield_pct[1]}%
                 </span>
               );
             })()}
@@ -136,10 +143,10 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
           <p className="text-ap-body text-muted-foreground">{t("harvestPeriod")}</p>
           <button
             type="button"
-            onClick={() => setPeriod(PERIODS[(PERIODS.indexOf(period) + 1) % PERIODS.length]!)}
+            onClick={() => setPeriodIdx((i) => (i + 1) % PERIOD_KEYS.length)}
             className="mt-1.5 flex h-10 w-full items-center justify-between rounded-xl border border-line bg-background px-3 text-ap-body font-semibold text-ink"
           >
-            <span className="truncate">{period}</span>
+            <span className="truncate">{t(PERIOD_KEYS[periodIdx]!)}</span>
             <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
           </button>
         </div>

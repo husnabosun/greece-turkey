@@ -64,7 +64,7 @@ export function useFieldWeather(point: WeatherPoint | null) {
     return () => {
       cancelled = true;
     };
-  }, [point?.fieldId, point?.lat, point?.lon]);
+  }, [point]);
 
   const top = state.risk ? highestRisk(state.risk, 3) : null;
   return { ...state, top };

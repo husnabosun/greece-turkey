@@ -19,7 +19,7 @@ export function useFarmerFields() {
     (async () => {
       const supabase = tryCreateBrowserClient();
       if (!supabase) {
-        if (!cancelled) setState({ fields: [], loading: false, error: "Supabase not configured" });
+        if (!cancelled) setState({ fields: [], loading: false, error: "needSupabase" });
         return;
       }
       const {
@@ -27,7 +27,7 @@ export function useFarmerFields() {
         error: userError,
       } = await supabase.auth.getUser();
       if (userError || !user) {
-        if (!cancelled) setState({ fields: [], loading: false, error: "Not signed in" });
+        if (!cancelled) setState({ fields: [], loading: false, error: "needLogin" });
         return;
       }
 

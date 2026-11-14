@@ -19,7 +19,7 @@ type ScorePayload = {
   engineVersion: string;
 };
 
-function ScoreRing({ score }: { score: number }) {
+function ScoreRing({ score, qualityLabel }: { score: number; qualityLabel: string }) {
   const r = 54;
   const c = 2 * Math.PI * r;
   const pct = Math.max(0, Math.min(100, score)) / 100;
@@ -42,18 +42,21 @@ function ScoreRing({ score }: { score: number }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <p className={`text-3xl font-extrabold tabular-nums ${low ? "text-risk" : "text-good"}`}>{score}</p>
-        <p className="text-[11px] font-bold text-muted-foreground">Quality</p>
+        <p className="text-[11px] font-bold text-muted-foreground">{qualityLabel}</p>
       </div>
     </div>
   );
 }
 
-function barTone(v: number): { label: string; pill: "good" | "warn" | "risk" | "accent"; bar: string } {
-  if (v >= 85) return { label: "Excellent", pill: "accent", bar: "bg-ap-accent" };
-  if (v >= 75) return { label: "Very good", pill: "good", bar: "bg-good" };
-  if (v >= 60) return { label: "Good", pill: "good", bar: "bg-good" };
-  if (v >= 40) return { label: "Needs improvement", pill: "warn", bar: "bg-warn" };
-  return { label: "Needs improvement", pill: "risk", bar: "bg-risk" };
+function barTone(
+  v: number,
+  t: (key: "toneExcellent" | "toneVeryGood" | "toneGood" | "toneNeedsWork") => string,
+): { label: string; pill: "good" | "warn" | "risk" | "accent"; bar: string } {
+  if (v >= 85) return { label: t("toneExcellent"), pill: "accent", bar: "bg-ap-accent" };
+  if (v >= 75) return { label: t("toneVeryGood"), pill: "good", bar: "bg-good" };
+  if (v >= 60) return { label: t("toneGood"), pill: "good", bar: "bg-good" };
+  if (v >= 40) return { label: t("toneNeedsWork"), pill: "warn", bar: "bg-warn" };
+  return { label: t("toneNeedsWork"), pill: "risk", bar: "bg-risk" };
 }
 
 export function QualityScreen() {
@@ -133,7 +136,7 @@ export function QualityScreen() {
       {data ? (
         <>
           <ApCard className="p-5">
-            <ScoreRing score={data.score} />
+            <ScoreRing score={data.score} qualityLabel={t("qualityShort")} />
             <p className="mt-3 text-center text-ap-body font-medium text-muted-foreground">
               {primary?.name ? `${primary.name} · ` : null}
               {t("scoreLabel")}
@@ -142,7 +145,7 @@ export function QualityScreen() {
 
           <ApCard className="space-y-4 p-4">
             {rows.map((row) => {
-              const tone = barTone(row.value);
+              const tone = barTone(row.value, t);
               return (
                 <div key={row.key}>
                   <div className="mb-1.5 flex items-center justify-between gap-2">
