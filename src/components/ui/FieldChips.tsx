@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { Field } from '@/data/mock';
+import { useT } from '@/state/i18n';
 import { useFieldColors } from '@/state/risk';
 
 interface Props {
@@ -18,12 +19,13 @@ interface Props {
 
 export function FieldChips({ fields, selected, onSelect, showAll = false, allLabel, tone = 'green', trailing }: Props) {
   const colorOf = useFieldColors();
+  const t = useT();
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5" contentContainerClassName="gap-2 px-5">
       {showAll ? (
         <Chip on={selected === 'all'} tone={tone} onPress={() => onSelect('all')}>
           <Text className={`font-i7 text-ap-pill ${selected === 'all' ? 'text-white' : 'text-ink'}`}>
-            {allLabel ?? `All fields · ${fields.length}`}
+            {allLabel ?? t('All fields · {n}', { n: fields.length })}
           </Text>
         </Chip>
       ) : null}

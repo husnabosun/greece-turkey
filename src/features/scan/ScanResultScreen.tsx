@@ -6,6 +6,7 @@ import { Screen } from '@/components/Screen';
 import { AiTag, Button, Card, Pill, type PillTone } from '@/components/ui';
 import type { ScanTone } from '@/data/mock';
 import { actionsFor, explain, PHOTO_LABEL } from '@/lib/diagnosis';
+import { useT } from '@/state/i18n';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { openCamera } from './nav';
@@ -27,19 +28,20 @@ export function ScanResultScreen() {
   const field = useStore((s) => s.fields.find((f) => f.id === scan?.fieldId));
   const saveScan = useStore((s) => s.saveScan);
   const showToast = useStore((s) => s.showToast);
+  const t = useT();
 
   if (!scan) {
     return (
       <Screen tabs={false}>
-        <ScreenHeader back title="Scan result" subtitle="This scan was not found." />
+        <ScreenHeader back title={t('Scan result')} subtitle={t('This scan was not found.')} />
       </Screen>
     );
   }
 
   const tone = TONE[scan.tone];
   const { headline, detail } = explain(scan);
-  const where = [field?.name, scan.treeId ? `Tree #${scan.treeId}` : undefined, scan.when].filter(Boolean).join(' · ');
-  const target = scan.treeId ? `Tree #${scan.treeId}` : field?.name;
+  const where = [field?.name, scan.treeId ? t('Tree #{id}', { id: scan.treeId }) : undefined, scan.when ? t(scan.when) : undefined].filter(Boolean).join(' · ');
+  const target = scan.treeId ? t('Tree #{id}', { id: scan.treeId }) : field?.name;
 
   const save = () => {
     saveScan();
@@ -48,47 +50,47 @@ export function ScanResultScreen() {
 
   return (
     <Screen tabs={false}>
-      <ScreenHeader back title="Scan result" subtitle={where} />
+      <ScreenHeader back title={t('Scan result')} subtitle={where} />
 
       <View className="mt-2.5 h-[170px] overflow-hidden rounded-[18px]">
         <ScanPhoto photo={scan.photo} spots={scan.spots} flies={scan.flies} uri={scan.uri} />
         <View className="absolute left-[38%] top-[14%] items-center">
           <View className={`h-6 justify-center rounded-full px-3 ${tone.tag}`}>
-            <Text className="font-i7 text-ap-pill text-ink">{scan.title}</Text>
+            <Text className="font-i7 text-ap-pill text-ink">{t(scan.title)}</Text>
           </View>
           {scan.tone !== 'healthy' ? <View className="mt-1.5 h-[64px] w-[64px] rounded-lg border-2 border-white" /> : null}
         </View>
         <View className="absolute bottom-2 left-2 h-8 flex-row items-center gap-1.5 rounded-full bg-white px-3">
           <Camera size={16} color={colors.ink} />
-          <Text className="font-i7 text-ap-pill text-ink">{PHOTO_LABEL[scan.mode]}</Text>
+          <Text className="font-i7 text-ap-pill text-ink">{t(PHOTO_LABEL[scan.mode])}</Text>
         </View>
       </View>
 
       <Card className="mt-2 p-3">
         <View className="flex-row items-start justify-between">
           <View className="flex-1 pr-2">
-            <Text className="font-i8 text-ap-card text-ink">{scan.title}</Text>
-            {scan.latin ? <Text className="font-i5 text-ap-body italic text-muted">{scan.latin}</Text> : null}
+            <Text className="font-i8 text-ap-card text-ink">{t(scan.title)}</Text>
+            {scan.latin ? <Text className="font-i5 text-ap-body italic text-muted">{t(scan.latin)}</Text> : null}
           </View>
-          <Pill tone={tone.pill}>{scan.pill}</Pill>
+          <Pill tone={tone.pill}>{t(scan.pill)}</Pill>
         </View>
         <View className={`mt-2 rounded-xl p-2.5 ${tone.box}`}>
-          <Text className="font-i7 text-ap-body text-ink">{headline}</Text>
-          <Text className="font-i5 text-ap-body text-muted">{detail}</Text>
+          <Text className="font-i7 text-ap-body text-ink">{t(headline)}</Text>
+          <Text className="font-i5 text-ap-body text-muted">{t(detail)}</Text>
         </View>
         {scan.source ? (
           <View className="mt-2 flex-row flex-wrap items-center gap-x-2 gap-y-1">
             <AiTag source={scan.source} />
-            {scan.source !== 'demo' ? <Text className="font-i7 text-ap-small text-ink">{`Confidence ${scan.confidence} %`}</Text> : null}
+            {scan.source !== 'demo' ? <Text className="font-i7 text-ap-small text-ink">{t('Confidence {n} %', { n: scan.confidence })}</Text> : null}
           </View>
         ) : null}
-        {scan.source === 'demo' ? <Text className="mt-1 font-i5 text-ap-small text-muted">This is an example result, not a real diagnosis. The AI could not be reached.</Text> : null}
-        {scan.source === 'model' && scan.modelVersion ? <Text className="mt-0.5 font-i5 text-ap-small text-muted">{`Model: AgroPulse leaf ${scan.modelVersion}`}</Text> : null}
+        {scan.source === 'demo' ? <Text className="mt-1 font-i5 text-ap-small text-muted">{t('This is an example result, not a real diagnosis. The AI could not be reached.')}</Text> : null}
+        {scan.source === 'model' && scan.modelVersion ? <Text className="mt-0.5 font-i5 text-ap-small text-muted">{t('Model: AgroPulse leaf {v}', { v: scan.modelVersion })}</Text> : null}
       </Card>
 
       <View className="mt-3.5 flex-row items-center justify-between">
-        <Text className="font-i8 text-ap-card text-ink">What you can do now</Text>
-        {scan.mode === 'leaf' && scan.tone !== 'healthy' && scan.title !== 'Not sure' ? <Pill tone="good">No chemicals first</Pill> : null}
+        <Text className="font-i8 text-ap-card text-ink">{t('What you can do now')}</Text>
+        {scan.mode === 'leaf' && scan.tone !== 'healthy' && scan.title !== 'Not sure' ? <Pill tone="good">{t('No chemicals first')}</Pill> : null}
       </View>
       <View className="mt-2 flex-row gap-2">
         {actionsFor(scan).map((a, i) => {
@@ -99,8 +101,8 @@ export function ScanResultScreen() {
                 <View className="h-9 w-9 items-center justify-center rounded-full bg-good-soft">
                   <Icon size={18} color={i === 2 ? colors.accent : colors.good} />
                 </View>
-                <Text className="mt-1.5 text-center font-i7 text-ap-body text-ink">{a.title}</Text>
-                <Text className="text-center font-i5 text-ap-small text-muted">{a.hint}</Text>
+                <Text className="mt-1.5 text-center font-i7 text-ap-body text-ink">{t(a.title)}</Text>
+                <Text className="text-center font-i5 text-ap-small text-muted">{t(a.hint)}</Text>
               </Card>
             </Pressable>
           );
@@ -109,18 +111,18 @@ export function ScanResultScreen() {
 
       <View className="mt-2.5 flex-row gap-2">
         {pending ? (
-          <Button compact className="flex-1" variant="primary" label={`Save to ${target}`} icon={<Check size={18} color="#fff" strokeWidth={2.6} />} onPress={save} />
+          <Button compact className="flex-1" variant="primary" label={t('Save to {target}', { target: target ?? '' })} icon={<Check size={18} color="#fff" strokeWidth={2.6} />} onPress={save} />
         ) : (
           <Button
             compact
             className="flex-1"
             variant="primary"
-            label="Re-check"
+            label={t('Re-check')}
             icon={<Camera size={16} color="#fff" />}
             onPress={() => openCamera(router, { fieldId: scan.fieldId, treeId: scan.treeId, mode: scan.mode })}
           />
         )}
-        <Button compact className="flex-1" variant="outline" label="Ask an agronomist" icon={<User size={16} color={colors.ink} />} onPress={() => showToast('An agronomist will call you today')} />
+        <Button compact className="flex-1" variant="outline" label={t('Ask an agronomist')} icon={<User size={16} color={colors.ink} />} onPress={() => showToast('An agronomist will call you today')} />
       </View>
     </Screen>
   );

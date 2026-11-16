@@ -1,12 +1,14 @@
 import { View } from 'react-native';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { useT } from '@/state/i18n';
 
 /** Back button, title and three progress dashes. */
 export function OnboardingHeader({ title, step }: { title: string; step: 1 | 2 | 3 }) {
+  const t = useT();
   return (
     <ScreenHeader
       back
-      title={title}
+      title={t(title)}
       right={
         <View className="flex-row gap-1">
           {[1, 2, 3].map((n) => (

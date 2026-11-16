@@ -5,6 +5,7 @@ import { Pressable } from 'react-native';
 import { Card, StatusSteps } from '@/components/ui';
 import { SALE_STEPS, type Sale } from '@/data/mock';
 import { euroPrice, euroTotal, saleTotal } from '@/lib/market';
+import { useT } from '@/state/i18n';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { factoryById } from './shared';
@@ -19,30 +20,31 @@ export function InProgressCard({ sale, variant }: { sale: Sale; variant: 'lab' |
   const field = useFieldName(sale.fieldId);
   const factory = factoryById(sale.factoryId);
   const labStep = sale.step >= 3;
+  const t = useT();
 
   return (
     <Card className="p-3">
       <View className="flex-row items-start justify-between">
         <View className="flex-1">
-          <Text className="font-i7 text-ap-small tracking-[1px] text-accent">IN PROGRESS</Text>
+          <Text className="font-i7 text-ap-small tracking-[1px] text-accent">{t('IN PROGRESS')}</Text>
           <Text className="font-i8 text-ap-card text-ink">{`${field} → ${factory.name}`}</Text>
-          <Text className="font-i5 text-ap-body text-muted">{`${sale.tons} t · ${euroPrice(sale.pricePerKg)}/kg · ${sale.note}`}</Text>
+          <Text className="font-i5 text-ap-body text-muted">{`${sale.tons} t · ${euroPrice(sale.pricePerKg)}/kg · ${t(sale.note)}`}</Text>
         </View>
         <View className="items-end">
           <Text className="font-i8 text-ap-title text-ink">{euroTotal(saleTotal(sale.tons, sale.pricePerKg))}</Text>
-          <Text className="font-i5 text-ap-small text-muted">you’ll get</Text>
+          <Text className="font-i5 text-ap-small text-muted">{t('you’ll get')}</Text>
         </View>
       </View>
       <View className="mt-2">
-        <StatusSteps steps={SALE_STEPS} current={sale.step} />
+        <StatusSteps steps={SALE_STEPS.map((s) => t(s))} current={sale.step} />
       </View>
       {variant === 'lab' ? (
         <Pressable onPress={() => showToast('Lab results are not ready yet')} className="mt-2 flex-row items-center rounded-xl bg-accent-soft p-2.5">
           <FlaskConical size={20} color={colors.accent} />
           <View className="ml-2.5 flex-1">
-            <Text className="font-i7 text-ap-body text-ink">{labStep ? 'Lab check in progress' : 'Next: pick-up'}</Text>
+            <Text className="font-i7 text-ap-body text-ink">{t(labStep ? 'Lab check in progress' : 'Next: pick-up')}</Text>
             <Text className="font-i5 text-ap-small text-muted">
-              {labStep ? 'Payment will be released after the lab results are confirmed.' : 'The factory will contact you to pick up the olives.'}
+              {t(labStep ? 'Payment will be released after the lab results are confirmed.' : 'The factory will contact you to pick up the olives.')}
             </Text>
           </View>
           <ChevronRight size={16} color={colors.muted} />
@@ -51,8 +53,8 @@ export function InProgressCard({ sale, variant }: { sale: Sale; variant: 'lab' |
         <View className="mt-2 flex-row items-center rounded-xl bg-accent-soft p-2.5">
           <Lock size={20} color={colors.accent} />
           <View className="ml-2.5 flex-1">
-            <Text className="font-i7 text-ap-body text-ink">Your money is safe</Text>
-            <Text className="font-i5 text-ap-small text-accent">{`${factory.name} already paid in. Yours after the lab check.`}</Text>
+            <Text className="font-i7 text-ap-body text-ink">{t('Your money is safe')}</Text>
+            <Text className="font-i5 text-ap-small text-accent">{t('{name} already paid in. Yours after the lab check.', { name: factory.name })}</Text>
           </View>
         </View>
       )}
@@ -72,12 +74,13 @@ function CheckCircle({ size = 36 }: { size?: number }) {
 export function PaidRow({ sale, action, children }: { sale: Sale; action: ReactNode; children?: ReactNode }) {
   const field = useFieldName(sale.fieldId);
   const factory = factoryById(sale.factoryId);
+  const t = useT();
   return (
     <View className="flex-row items-center p-3">
       <CheckCircle />
       <View className="ml-2.5 flex-1">
         <Text className="font-i8 text-ap-body text-ink">{`${field} → ${factory.name}`}</Text>
-        <Text className="font-i5 text-ap-small text-muted">{`${sale.tons} t · ${euroPrice(sale.pricePerKg)}/kg · paid ${sale.paidDate}`}</Text>
+        <Text className="font-i5 text-ap-small text-muted">{t('{tons} t · {price}/kg · paid {date}', { tons: sale.tons, price: euroPrice(sale.pricePerKg), date: t(sale.paidDate ?? '') })}</Text>
         {children}
       </View>
       <View className="items-end">

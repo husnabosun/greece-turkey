@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import type { ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { useT } from '@/state/i18n';
 import { colors } from '@/theme/tokens';
 
 interface Props {
@@ -14,11 +15,12 @@ interface Props {
 
 export function ScreenHeader({ title, subtitle, back = false, right }: Props) {
   const router = useRouter();
+  const t = useT();
   const goBack = () => (router.canGoBack() ? router.back() : router.navigate('/farmer'));
   return (
     <View className="flex-row items-center">
       {back ? (
-        <Pressable onPress={goBack} accessibilityLabel="Back" className="mr-3 h-10 w-10 items-center justify-center rounded-full border border-line bg-card">
+        <Pressable onPress={goBack} accessibilityLabel={t('Back')} className="mr-3 h-10 w-10 items-center justify-center rounded-full border border-line bg-card">
           <ArrowLeft size={20} color={colors.ink} />
         </Pressable>
       ) : null}

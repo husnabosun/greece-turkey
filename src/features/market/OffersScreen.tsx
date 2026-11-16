@@ -5,6 +5,7 @@ import { Button, Card, Pill, SectionHeader } from '@/components/ui';
 import { type Offer } from '@/data/mock';
 import { compareToRange, euroPrice, euroTotal, saleTotal } from '@/lib/market';
 import { deliveryLabel } from '@/lib/processor';
+import { useT } from '@/state/i18n';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { InProgressCard, PaidRow } from './SaleCards';
@@ -15,6 +16,7 @@ export function OffersScreen() {
   const offers = useStore((s) => s.offers);
   const fields = useStore((s) => s.fields);
   const showToast = useStore((s) => s.showToast);
+  const t = useT();
 
   const inProgress = sales.filter((s) => s.status === 'inProgress');
   const lastPaid = sales.find((s) => s.status === 'paid');
@@ -36,14 +38,14 @@ export function OffersScreen() {
             action={
               <Pressable onPress={() => showToast('Wallet is coming soon')} className="h-7 flex-row items-center gap-1 rounded-lg bg-white px-2">
                 <Wallet size={14} color={colors.good} />
-                <Text className="font-i7 text-ap-small text-good">Go to wallet</Text>
+                <Text className="font-i7 text-ap-small text-good">{t('Go to wallet')}</Text>
                 <ChevronRight size={12} color={colors.good} />
               </Pressable>
             }
           >
             <View className="mt-0.5 flex-row items-center gap-1">
               <MapPin size={11} color={colors.muted} />
-              <Text className="font-i5 text-ap-small text-muted">{`Total ${euroTotal(saleTotal(lastPaid.tons, lastPaid.pricePerKg))}`}</Text>
+              <Text className="font-i5 text-ap-small text-muted">{t('Total {amount}', { amount: euroTotal(saleTotal(lastPaid.tons, lastPaid.pricePerKg)) })}</Text>
             </View>
           </PaidRow>
         </Card>
@@ -51,16 +53,16 @@ export function OffersScreen() {
 
       {fieldsWithOffers.length === 0 ? (
         <>
-          <SectionHeader title="Offers" />
+          <SectionHeader title={t('Offers')} />
           <Card className="mt-2 items-center p-4">
-            <Text className="font-i6 text-ap-body text-muted">No open offers right now.</Text>
+            <Text className="font-i6 text-ap-body text-muted">{t('No open offers right now.')}</Text>
           </Card>
         </>
       ) : null}
 
       {fieldsWithOffers.map((f) => (
         <View key={f.id}>
-          <SectionHeader title={`Offers for ${f.name}`} />
+          <SectionHeader title={t('Offers for {name}', { name: f.name })} />
           <View className="mt-2 gap-2">
             {open
               .filter((o) => o.fieldId === f.id)
@@ -78,6 +80,7 @@ export function OffersScreen() {
 function OfferCard({ offer }: { offer: Offer }) {
   const acceptOffer = useStore((s) => s.acceptOffer);
   const showToast = useStore((s) => s.showToast);
+  const t = useT();
   const factory = factoryById(offer.factoryId);
   const verdict = compareToRange(offer.pricePerKg, useExchangeRange().range);
 
@@ -87,8 +90,8 @@ function OfferCard({ offer }: { offer: Offer }) {
         <FactoryLogo factory={factory} />
         <View className="ml-2.5 flex-1">
           <Text className="font-i8 text-ap-card text-ink">{factory.name}</Text>
-          <Rating value={factory.rating} extra={factory.praise} />
-          {offer.tons ? <Text className="font-i5 text-ap-small text-muted">{`${offer.tons} t · delivery ${deliveryLabel(offer.deliveryIn ?? 5)}`}</Text> : null}
+          <Rating value={factory.rating} extra={factory.praise ? t(factory.praise) : undefined} />
+          {offer.tons ? <Text className="font-i5 text-ap-small text-muted">{t('{tons} t · delivery {when}', { tons: offer.tons, when: t(deliveryLabel(offer.deliveryIn ?? 5)) })}</Text> : null}
         </View>
         <Text className="font-i8 text-ap-title text-ink">
           {euroPrice(offer.pricePerKg)}
@@ -96,10 +99,10 @@ function OfferCard({ offer }: { offer: Offer }) {
         </Text>
       </View>
       <View className="mt-2 flex-row items-center justify-between">
-        {verdict ? <Pill tone={verdict.tone}>{verdict.label}</Pill> : <Pill tone="neutral">No exchange data</Pill>}
+        {verdict ? <Pill tone={verdict.tone}>{t(verdict.label)}</Pill> : <Pill tone="neutral">{t('No exchange data')}</Pill>}
         <View className="flex-row gap-2">
-          <Button compact label="Counter" variant="outline" className="h-9 px-4" onPress={() => showToast(`Counter offer sent to ${factory.name}`)} />
-          <Button compact label="Accept" variant="primary" className="h-9 px-4" onPress={() => acceptOffer(offer.id)} />
+          <Button compact label={t('Counter')} variant="outline" className="h-9 px-4" onPress={() => showToast(`Counter offer sent to ${factory.name}`)} />
+          <Button compact label={t('Accept')} variant="primary" className="h-9 px-4" onPress={() => acceptOffer(offer.id)} />
         </View>
       </View>
     </Card>

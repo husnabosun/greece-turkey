@@ -10,6 +10,7 @@ import type { AiSource } from '@/lib/ai/schemas';
 import { euCheck } from '@/lib/euCheck';
 import { readLabelAi, takeOrPickPhoto } from '@/state/ai';
 import { useStore } from '@/state/store';
+import { useT } from '@/state/i18n';
 import { colors } from '@/theme/tokens';
 
 const WHEN = [
@@ -43,6 +44,7 @@ const formOf = (d: LabelDraft): LabelForm => ({
  */
 export function AddSpraySheet({ field, onClose, labelScan = false }: { field: Field; onClose: () => void; labelScan?: boolean }) {
   const addSpray = useStore((s) => s.addSpray);
+  const t = useT();
   const offset = useTabBarOffset();
   const [productName, setProductName] = useState<string | null>(null);
   const [daysAgo, setDaysAgo] = useState(0);
@@ -131,14 +133,14 @@ export function AddSpraySheet({ field, onClose, labelScan = false }: { field: Fi
 
   return (
     <View className="absolute inset-0 z-40 justify-end">
-      <Pressable onPress={onClose} accessibilityLabel="Close" className="absolute inset-0 bg-black/40" />
+      <Pressable onPress={onClose} accessibilityLabel={t('Close')} className="absolute inset-0 bg-black/40" />
       <View className="mx-3 rounded-[18px] bg-card p-4" style={{ marginBottom: offset + 8, maxHeight: '88%' }}>
         <View className="flex-row items-center justify-between">
           <View>
-            <Text className="font-i8 text-ap-title text-ink">Add a spray</Text>
+            <Text className="font-i8 text-ap-title text-ink">{t('Add a spray')}</Text>
             <Text className="font-i5 text-ap-body text-muted">{field.name}</Text>
           </View>
-          <Pressable onPress={onClose} accessibilityLabel="Close" className="h-10 w-10 items-center justify-center rounded-full bg-soft">
+          <Pressable onPress={onClose} accessibilityLabel={t('Close')} className="h-10 w-10 items-center justify-center rounded-full bg-soft">
             <X size={18} color={colors.ink} />
           </Pressable>
         </View>
@@ -146,7 +148,7 @@ export function AddSpraySheet({ field, onClose, labelScan = false }: { field: Fi
         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <Pressable onPress={() => void scanLabel()} disabled={reading} accessibilityRole="button" className="mt-3 h-11 flex-row items-center justify-center gap-2 rounded-xl border border-dashed border-ink/40">
             <Camera size={16} color={colors.ink} />
-            <Text className="font-i7 text-ap-body text-ink">{reading ? 'Reading the label…' : 'Scan the label'}</Text>
+            <Text className="font-i7 text-ap-body text-ink">{t(reading ? 'Reading the label…' : 'Scan the label')}</Text>
           </Pressable>
           <View className="mt-1">
             <PrivacyLine />
@@ -155,31 +157,31 @@ export function AddSpraySheet({ field, onClose, labelScan = false }: { field: Fi
           {read?.draft.unsure ? (
             <View className="mt-2 flex-row items-center gap-2 rounded-lg bg-warn-soft p-2.5">
               <TriangleAlert size={16} color={colors.warnText} />
-              <Text className="flex-1 font-i6 text-ap-small text-ink">We could not read the label well. Please check every field, or take a clearer photo.</Text>
+              <Text className="flex-1 font-i6 text-ap-small text-ink">{t('We could not read the label well. Please check every field, or take a clearer photo.')}</Text>
             </View>
           ) : null}
 
           {form ? (
             <>
-              <Field2 label="Product" tag={tagged('product')}>
+              <Field2 label={t('Product')} tag={tagged('product')}>
                 <Input value={form.product} onChange={(v) => setForm({ ...form, product: v })} />
               </Field2>
-              <Field2 label="Active substance" tag={tagged('substances')}>
-                <Input value={form.substances} onChange={(v) => setForm({ ...form, substances: v })} placeholder="not found on the label" />
+              <Field2 label={t('Active substance')} tag={tagged('substances')}>
+                <Input value={form.substances} onChange={(v) => setForm({ ...form, substances: v })} placeholder={t('not found on the label')} />
               </Field2>
-              <Field2 label="Licence number" tag={tagged('licence')}>
-                <Input value={form.licence} onChange={(v) => setForm({ ...form, licence: v })} placeholder="not found on the label" />
+              <Field2 label={t('Licence number')} tag={tagged('licence')}>
+                <Input value={form.licence} onChange={(v) => setForm({ ...form, licence: v })} placeholder={t('not found on the label')} />
               </Field2>
-              <Field2 label="Max dose per hectare" tag={tagged('dose')}>
-                <Input value={form.dose} onChange={(v) => setForm({ ...form, dose: v })} placeholder="not found on the label" />
+              <Field2 label={t('Max dose per hectare')} tag={tagged('dose')}>
+                <Input value={form.dose} onChange={(v) => setForm({ ...form, dose: v })} placeholder={t('not found on the label')} />
               </Field2>
-              <Field2 label="Days before harvest" tag={tagged('preHarvest')}>
-                <Input value={form.preHarvest} onChange={(v) => setForm({ ...form, preHarvest: v.replace(/[^0-9]/g, '') })} placeholder="not found on the label" keyboardType="number-pad" />
+              <Field2 label={t('Days before harvest')} tag={tagged('preHarvest')}>
+                <Input value={form.preHarvest} onChange={(v) => setForm({ ...form, preHarvest: v.replace(/[^0-9]/g, '') })} placeholder={t('not found on the label')} keyboardType="number-pad" />
               </Field2>
             </>
           ) : (
             <>
-              <Label>Product</Label>
+              <Label>{t('Product')}</Label>
               <View className="gap-1.5">
                 {sprayProducts.map((p) => {
                   const on = p.name === productName;
@@ -190,7 +192,7 @@ export function AddSpraySheet({ field, onClose, labelScan = false }: { field: Fi
                       className={`min-h-[40px] flex-row items-center justify-between rounded-xl border px-3 py-1.5 ${on ? 'border-primary bg-good-soft' : 'border-line bg-card'}`}
                     >
                       <Text className="flex-1 font-i6 text-ap-body text-ink">{p.name}</Text>
-                      <Text className="font-i5 text-ap-small text-muted">{p.dose}</Text>
+                      <Text className="font-i5 text-ap-small text-muted">{t(p.dose)}</Text>
                     </Pressable>
                   );
                 })}
@@ -202,32 +204,32 @@ export function AddSpraySheet({ field, onClose, labelScan = false }: { field: Fi
             <View className="mt-2 flex-row items-center gap-2 rounded-lg bg-risk-soft p-2.5">
               <TriangleAlert size={16} color={colors.risk} />
               <Text className="flex-1 font-i6 text-ap-small text-risk">
-                {form && eu.hits.length ? `${eu.hits.join(', ')} is not approved in the EU. Buyers will see it.` : 'This product is banned in the EU. Buyers will see it.'}
+                {form && eu.hits.length ? t('{names} is not approved in the EU. Buyers will see it.', { names: eu.hits.join(', ') }) : t('This product is banned in the EU. Buyers will see it.')}
               </Text>
             </View>
           ) : null}
 
-          <Label>When</Label>
+          <Label>{t('When')}</Label>
           <View className="flex-row flex-wrap gap-2">
             {WHEN.map((w) => (
               <Chip key={w.label} on={daysAgo === w.daysAgo} onPress={() => setDaysAgo(w.daysAgo)}>
-                <Text className={`font-i7 text-ap-pill ${daysAgo === w.daysAgo ? 'text-white' : 'text-ink'}`}>{w.label}</Text>
+                <Text className={`font-i7 text-ap-pill ${daysAgo === w.daysAgo ? 'text-white' : 'text-ink'}`}>{t(w.label)}</Text>
               </Chip>
             ))}
           </View>
 
-          <Label>Where</Label>
+          <Label>{t('Where')}</Label>
           <View className="flex-row flex-wrap gap-2">
             {AREAS.map((a) => (
               <Chip key={a} on={area === a} onPress={() => setArea(a)}>
-                <Text className={`font-i7 text-ap-pill capitalize ${area === a ? 'text-white' : 'text-ink'}`}>{a}</Text>
+                <Text className={`font-i7 text-ap-pill ${area === a ? 'text-white' : 'text-ink'}`}>{t(a[0].toUpperCase() + a.slice(1))}</Text>
               </Chip>
             ))}
           </View>
         </ScrollView>
 
         <View className={`mt-4 ${canSave ? '' : 'opacity-40'}`}>
-          <Button label="Save spray" onPress={save} />
+          <Button label={t('Save spray')} onPress={save} />
         </View>
       </View>
     </View>

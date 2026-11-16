@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ScanMode } from '@/data/mock';
 import { PrivacyLine } from '@/components/ui';
 import { HINT, MODE_LABEL } from '@/lib/diagnosis';
+import { useT } from '@/state/i18n';
 import { useStore } from '@/state/store';
 
 const MODES: ScanMode[] = ['leaf', 'fruit', 'trap', 'label'];
@@ -17,6 +18,7 @@ const isMode = (v: unknown): v is ScanMode => typeof v === 'string' && (MODES as
 export function CameraScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const t = useT();
   const params = useLocalSearchParams<{ fieldId?: string; treeId?: string; mode?: string }>();
   const fields = useStore((s) => s.fields);
   const trees = useStore((s) => s.trees);
@@ -92,11 +94,11 @@ export function CameraScreen() {
       <StatusBar style="light" />
 
       <View className="flex-row items-center justify-between px-4">
-        <Pressable onPress={() => router.back()} accessibilityLabel="Close" className="h-10 w-10 items-center justify-center rounded-full bg-white/15">
+        <Pressable onPress={() => router.back()} accessibilityLabel={t('Close')} className="h-10 w-10 items-center justify-center rounded-full bg-white/15">
           <X size={20} color="#fff" />
         </Pressable>
         <Pressable onPress={() => setPicking((v) => !v)} accessibilityRole="button" className="h-9 flex-row items-center gap-1.5 rounded-full bg-white/15 px-3.5">
-          <Text className="font-i7 text-ap-body text-white">{`${field.name}${treeId ? ` · Tree #${treeId}` : ''}`}</Text>
+          <Text className="font-i7 text-ap-body text-white">{`${field.name}${treeId ? ` · ${t('Tree #{id}', { id: treeId })}` : ''}`}</Text>
           <ChevronDown size={14} color="#fff" />
         </Pressable>
         <View className="h-10 w-10" />
@@ -105,7 +107,7 @@ export function CameraScreen() {
       <View className="mx-auto mt-3 h-9 flex-row rounded-full bg-white/15 p-1">
         {MODES.map((m) => (
           <Pressable key={m} onPress={() => setMode(m)} accessibilityRole="tab" className={`w-[72px] items-center justify-center rounded-full ${m === mode ? 'bg-white' : ''}`}>
-            <Text className={`font-i7 text-ap-pill ${m === mode ? 'text-ink' : 'text-white/80'}`}>{MODE_LABEL[m]}</Text>
+            <Text className={`font-i7 text-ap-pill ${m === mode ? 'text-ink' : 'text-white/80'}`}>{t(MODE_LABEL[m])}</Text>
           </Pressable>
         ))}
       </View>
@@ -116,12 +118,12 @@ export function CameraScreen() {
         ) : (
           <View className="flex-1 items-center justify-center gap-3 px-8">
             <Camera size={32} color="#8A8A8A" />
-            <Text className="text-center font-i6 text-ap-body text-white/70">The camera is not available. You can still scan a photo.</Text>
+            <Text className="text-center font-i6 text-ap-body text-white/70">{t('The camera is not available. You can still scan a photo.')}</Text>
             <Pressable onPress={pickPhoto} accessibilityRole="button" className="h-11 items-center justify-center rounded-full bg-white px-6">
-              <Text className="font-i7 text-ap-btn text-ink">Choose a photo</Text>
+              <Text className="font-i7 text-ap-btn text-ink">{t('Choose a photo')}</Text>
             </Pressable>
             <Pressable onPress={() => analyse(null)} accessibilityRole="link" className="h-8 justify-center">
-              <Text className="font-i6 text-ap-body text-white/70 underline">Use sample photo</Text>
+              <Text className="font-i6 text-ap-body text-white/70 underline">{t('Use sample photo')}</Text>
             </Pressable>
           </View>
         )}
@@ -130,7 +132,7 @@ export function CameraScreen() {
             <View className="h-[230px] w-[230px] rounded-[24px] border-2 border-dashed border-white/80" />
           </View>
         ) : null}
-        <Text pointerEvents="none" className="absolute bottom-4 self-center rounded-full bg-black/50 px-3 py-1.5 font-i6 text-ap-body text-white">{HINT[mode]}</Text>
+        <Text pointerEvents="none" className="absolute bottom-4 self-center rounded-full bg-black/50 px-3 py-1.5 font-i6 text-ap-body text-white">{t(HINT[mode])}</Text>
       </View>
 
       <View className="mx-4 mt-2">
@@ -138,13 +140,13 @@ export function CameraScreen() {
       </View>
 
       <View className="flex-row items-center justify-between px-8" style={{ paddingTop: 8, paddingBottom: insets.bottom + 14 }}>
-        <Pressable onPress={pickPhoto} accessibilityLabel="Choose a photo from your gallery" className="h-12 w-12 items-center justify-center rounded-full bg-white/15">
+        <Pressable onPress={pickPhoto} accessibilityLabel={t('Choose a photo from your gallery')} className="h-12 w-12 items-center justify-center rounded-full bg-white/15">
           <ImageIcon size={22} color="#fff" />
         </Pressable>
-        <Pressable onPress={shutter} accessibilityRole="button" accessibilityLabel="Take photo" className="h-[76px] w-[76px] items-center justify-center rounded-full border-4 border-white">
+        <Pressable onPress={shutter} accessibilityRole="button" accessibilityLabel={t('Take photo')} className="h-[76px] w-[76px] items-center justify-center rounded-full border-4 border-white">
           <View className="h-[58px] w-[58px] rounded-full bg-white" />
         </Pressable>
-        <Pressable onPress={() => router.navigate('/farmer/scan')} accessibilityLabel="Your scans" className="h-12 w-12 items-center justify-center rounded-full bg-white/15">
+        <Pressable onPress={() => router.navigate('/farmer/scan')} accessibilityLabel={t('Your scans')} className="h-12 w-12 items-center justify-center rounded-full bg-white/15">
           <History size={22} color="#fff" />
         </Pressable>
       </View>
@@ -153,7 +155,7 @@ export function CameraScreen() {
         <View className="absolute inset-0 z-20">
           <Pressable onPress={() => setPicking(false)} className="absolute inset-0 bg-black/50" />
           <View className="absolute left-4 right-4 rounded-[18px] bg-card p-3" style={{ top: insets.top + 56 }}>
-            <Text className="mb-1.5 font-i7 text-ap-small uppercase tracking-[1px] text-muted">Field</Text>
+            <Text className="mb-1.5 font-i7 text-ap-small uppercase tracking-[1px] text-muted">{t('Field')}</Text>
             <View className="flex-row flex-wrap gap-2">
               {fields.map((f) => (
                 <Pressable
@@ -169,14 +171,14 @@ export function CameraScreen() {
                 </Pressable>
               ))}
             </View>
-            <Text className="mb-1.5 mt-3 font-i7 text-ap-small uppercase tracking-[1px] text-muted">Tree</Text>
+            <Text className="mb-1.5 mt-3 font-i7 text-ap-small uppercase tracking-[1px] text-muted">{t('Tree')}</Text>
             <View className="flex-row flex-wrap gap-2">
               <Pressable onPress={() => { setTreeId(undefined); setPicking(false); }} className={`h-[30px] items-center justify-center rounded-full border px-3 ${!treeId ? 'border-ink bg-ink' : 'border-line bg-card'}`}>
-                <Text className={`font-i7 text-ap-pill ${!treeId ? 'text-white' : 'text-ink'}`}>Whole field</Text>
+                <Text className={`font-i7 text-ap-pill ${!treeId ? 'text-white' : 'text-ink'}`}>{t('Whole field')}</Text>
               </Pressable>
-              {fieldTrees.map((t) => (
-                <Pressable key={t.id} onPress={() => { setTreeId(t.id); setPicking(false); }} className={`h-[30px] items-center justify-center rounded-full border px-3 ${t.id === treeId ? 'border-ink bg-ink' : 'border-line bg-card'}`}>
-                  <Text className={`font-i7 text-ap-pill ${t.id === treeId ? 'text-white' : 'text-ink'}`}>{`Tree #${t.id}`}</Text>
+              {fieldTrees.map((tr) => (
+                <Pressable key={tr.id} onPress={() => { setTreeId(tr.id); setPicking(false); }} className={`h-[30px] items-center justify-center rounded-full border px-3 ${tr.id === treeId ? 'border-ink bg-ink' : 'border-line bg-card'}`}>
+                  <Text className={`font-i7 text-ap-pill ${tr.id === treeId ? 'text-white' : 'text-ink'}`}>{t('Tree #{id}', { id: tr.id })}</Text>
                 </Pressable>
               ))}
             </View>

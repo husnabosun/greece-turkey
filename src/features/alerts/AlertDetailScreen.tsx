@@ -8,6 +8,7 @@ import { LOCATION_RISK_PENALTY } from '@/data/mock';
 import { THREAT_BY_ID, type RiskLevel, type ThreatId } from '@/lib/risk';
 import { useRisk } from '@/state/risk';
 import { useStore } from '@/state/store';
+import { useT } from '@/state/i18n';
 import { colors } from '@/theme/tokens';
 import { FeedbackRow } from './FeedbackRow';
 
@@ -23,11 +24,12 @@ export function AlertDetailScreen() {
   const orderLab = useStore((s) => s.orderLabTest);
   const view = useRisk()[fieldId ?? ''];
   const meta = THREAT_BY_ID[threat];
+  const t = useT();
 
   if (!field || !view || !meta) {
     return (
       <Screen tabs={false}>
-        <ScreenHeader back title="Alert" subtitle="This alert was not found." />
+        <ScreenHeader back title={t('Alert')} subtitle={t('This alert was not found.')} />
       </Screen>
     );
   }
@@ -39,33 +41,33 @@ export function AlertDetailScreen() {
 
   return (
     <Screen tabs={false}>
-      <ScreenHeader back title={meta.name} subtitle={field.name} />
+      <ScreenHeader back title={t(meta.name)} subtitle={field.name} />
 
       <View className="mt-3 self-start">
-        <Pill tone={PILL[a.level]}>{`${a.level} risk`}</Pill>
+        <Pill tone={PILL[a.level]}>{t('{level} risk', { level: t(a.level) })}</Pill>
       </View>
 
-      <Text className="mt-4 font-i8 text-ap-card text-ink">Why</Text>
+      <Text className="mt-4 font-i8 text-ap-card text-ink">{t('Why')}</Text>
       {reasons.map((d) => (
-        <Text key={d} className="mt-1 font-i5 text-ap-body text-muted">{`• ${d}`}</Text>
+        <Text key={d} className="mt-1 font-i5 text-ap-body text-muted">{`• ${t(d)}`}</Text>
       ))}
 
-      <Text className="mt-4 font-i8 text-ap-card text-ink">What you can do</Text>
+      <Text className="mt-4 font-i8 text-ap-card text-ink">{t('What you can do')}</Text>
       {a.actions.slice(0, 3).map((x) => (
         <View key={x} className="mt-1.5 flex-row items-start gap-1.5">
           <Check size={14} color={colors.good} strokeWidth={3} />
-          <Text className="flex-1 font-i5 text-ap-body text-muted">{x}</Text>
+          <Text className="flex-1 font-i5 text-ap-body text-muted">{t(x)}</Text>
         </View>
       ))}
 
       {isLocation ? (
         <>
           <View className="mt-4 flex-row gap-2">
-            <Button compact className="flex-1" label={done ? 'Done' : 'Mark as done'} onPress={() => !done && markDone()} />
-            <Button compact className="flex-1" variant="outline" label={ordered ? 'Lab test ordered' : 'Order lab test'} onPress={() => !ordered && orderLab()} />
+            <Button compact className="flex-1" label={t(done ? 'Done' : 'Mark as done')} onPress={() => !done && markDone()} />
+            <Button compact className="flex-1" variant="outline" label={t(ordered ? 'Lab test ordered' : 'Order lab test')} onPress={() => !ordered && orderLab()} />
           </View>
           <Text className="mt-1.5 font-i5 text-ap-small text-muted">
-            {done ? `${field.name} keeps its quality score.` : `If no action is taken, ${field.name}'s quality score drops by ${LOCATION_RISK_PENALTY}.`}
+            {done ? t('{name} keeps its quality score.', { name: field.name }) : t("If no action is taken, {name}'s quality score drops by {n}.", { name: field.name, n: LOCATION_RISK_PENALTY })}
           </Text>
         </>
       ) : null}

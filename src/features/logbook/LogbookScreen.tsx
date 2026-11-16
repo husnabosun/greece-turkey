@@ -8,6 +8,7 @@ import { Screen, useTabBarOffset } from '@/components/Screen';
 import { Card, FieldChips } from '@/components/ui';
 import { nearbyFarms, type Spray } from '@/data/mock';
 import { useActiveField, useStore } from '@/state/store';
+import { useT } from '@/state/i18n';
 import { colors } from '@/theme/tokens';
 import { AddSpraySheet } from './AddSpraySheet';
 import { SprayCard, sprayColor, useWashoff } from './SprayCard';
@@ -33,6 +34,7 @@ export function LogbookScreen() {
   const showToast = useStore((s) => s.showToast);
   const offset = useTabBarOffset();
   const router = useRouter();
+  const t = useT();
   const { add, label } = useLocalSearchParams<{ add?: string; label?: string }>();
   const [labelScan, setLabelScan] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -54,9 +56,9 @@ export function LogbookScreen() {
     <View className="flex-1">
       <Screen>
         <ScreenHeader
-          title="Logbook"
+          title={t('Logbook')}
           right={
-            <RoundButton label="Show only issues" active={onlyIssues} onPress={() => setOnlyIssues((v) => !v)}>
+            <RoundButton label={t('Show only issues')} active={onlyIssues} onPress={() => setOnlyIssues((v) => !v)}>
               <ListFilter size={18} color={onlyIssues ? '#fff' : colors.ink} />
             </RoundButton>
           }
@@ -67,14 +69,14 @@ export function LogbookScreen() {
 
         <View className="mt-2 flex-row gap-2">
           <View className="flex-1 rounded-[18px] border border-line bg-soft px-3 py-1.5">
-            <Text className="font-i5 text-ap-body text-muted">Safe to harvest</Text>
-            <Text className="font-i8 text-ap-title text-ink">{field.harvest.ready ? 'Now' : field.harvest.badge}</Text>
+            <Text className="font-i5 text-ap-body text-muted">{t('Safe to harvest')}</Text>
+            <Text className="font-i8 text-ap-title text-ink">{t(field.harvest.ready ? 'Now' : field.harvest.badge)}</Text>
           </View>
           <View className="flex-1 rounded-[18px] border border-line bg-card px-3 py-1.5">
-            <Text className="font-i5 text-ap-body text-muted">Sprays this year</Text>
+            <Text className="font-i5 text-ap-body text-muted">{t('Sprays this year')}</Text>
             <View className="flex-row items-baseline gap-2">
               <Text className="font-i8 text-ap-title text-ink">{sprays.length}</Text>
-              <Text className="font-i5 text-ap-small text-muted">{`Nearby farms: ${nearbyFarms}`}</Text>
+              <Text className="font-i5 text-ap-small text-muted">{t('Nearby farms: {n}', { n: nearbyFarms })}</Text>
             </View>
           </View>
         </View>
@@ -82,28 +84,28 @@ export function LogbookScreen() {
         <Card className="mt-2 flex-row items-center p-2.5">
           <EuFlag />
           <View className="ml-2.5 flex-1">
-            <Text className="font-i8 text-ap-body text-ink">EU spray record: complete</Text>
-            <Text className="font-i5 text-ap-small text-muted">Kept for you, as the EU requires.</Text>
+            <Text className="font-i8 text-ap-body text-ink">{t('EU spray record: complete')}</Text>
+            <Text className="font-i5 text-ap-small text-muted">{t('Kept for you, as the EU requires.')}</Text>
             {issues.length ? (
-              <Text className="font-i5 text-ap-small text-risk">{`${issues.length} issue${issues.length > 1 ? 's' : ''}: banned product on ${issues[0].date}`}</Text>
+              <Text className="font-i5 text-ap-small text-risk">{t(issues.length > 1 ? '{n} issues: banned product on {date}' : '{n} issue: banned product on {date}', { n: issues.length, date: t(issues[0].date) })}</Text>
             ) : (
-              <Text className="font-i5 text-ap-small text-good">No issues</Text>
+              <Text className="font-i5 text-ap-small text-good">{t('No issues')}</Text>
             )}
           </View>
           <Pressable onPress={() => showToast('Spray record is ready to share')} className="h-8 flex-row items-center gap-1.5 rounded-full bg-soft px-3">
             <Share2 size={14} color={colors.ink} />
-            <Text className="font-i7 text-ap-pill text-ink">Share</Text>
+            <Text className="font-i7 text-ap-pill text-ink">{t('Share')}</Text>
           </Pressable>
         </Card>
 
         <View className="mt-3 flex-row items-baseline justify-between">
-          <Text className="font-i8 text-ap-card text-ink">Your sprays</Text>
-          <Text className="font-i5 text-ap-body text-muted">2026 season</Text>
+          <Text className="font-i8 text-ap-card text-ink">{t('Your sprays')}</Text>
+          <Text className="font-i5 text-ap-body text-muted">{t('{year} season', { year: 2026 })}</Text>
         </View>
 
         {shown.length === 0 ? (
           <Card className="mt-2 items-center p-5">
-            <Text className="font-i6 text-ap-body text-muted">{onlyIssues ? 'No issues in this field.' : 'No sprays yet in this field.'}</Text>
+            <Text className="font-i6 text-ap-body text-muted">{t(onlyIssues ? 'No issues in this field.' : 'No sprays yet in this field.')}</Text>
           </Card>
         ) : (
           <View className="mt-1.5">
@@ -121,7 +123,7 @@ export function LogbookScreen() {
         style={{ bottom: offset + 12, boxShadow: '0 6px 16px rgba(0,0,0,0.2)' }}
       >
         <Camera size={18} color="#fff" />
-        <Text className="font-i7 text-ap-btn text-white">Add a spray</Text>
+        <Text className="font-i7 text-ap-btn text-white">{t('Add a spray')}</Text>
       </Pressable>
 
       {adding ? <AddSpraySheet field={field} labelScan={labelScan} onClose={() => { setAdding(false); setLabelScan(false); }} /> : null}
