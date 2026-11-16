@@ -1,14 +1,16 @@
 import { useRouter } from 'expo-router';
-import { ArrowLeftRight, Bell, Camera, Cloud, CloudLightning, CloudRain, Droplet, Globe, Leaf, MapPin, Plus, Settings, Sun, Tag, TriangleAlert, type LucideIcon } from 'lucide-react-native';
+import { ArrowLeftRight, Bell, Camera, Check, Cloud, CloudLightning, CloudRain, Droplet, Globe, Leaf, MapPin, Plus, Settings, Sun, Tag, TriangleAlert, type LucideIcon } from 'lucide-react-native';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { AiTag, Button, Card, FieldChips, SectionHeader } from '@/components/ui';
-import { farmer, type Level, type ScanMode } from '@/data/mock';
+import type { Level, ScanMode } from '@/data/mock';
 import { openCamera } from '@/features/scan/nav';
 import { THREAT_BY_ID, type Assessment, type RiskLevel, type ThreatId } from '@/lib/risk';
 import type { WeatherIcon } from '@/lib/weather';
 import { LANGUAGES, type Language } from '@/lib/ai/schemas';
+import { LANGUAGE_LABEL, type T } from '@/lib/i18n';
+import { useLocale, useT } from '@/state/i18n';
 import { useAdvice } from '@/state/ai';
 import { countRisks, topPest, topRiskOfAll, useRisk } from '@/state/risk';
 import { useStore } from '@/state/store';
@@ -37,11 +39,11 @@ const TONE: Record<RiskLevel, { card: string; kicker: string; icon: string; icon
 const toLevel = (l: RiskLevel): Level => (l === 'High' ? 'high' : l === 'Medium' ? 'medium' : 'low');
 
 /** "today", "tomorrow" or the weekday of an assessed day. */
-function dayWord(day: string, todayIndex: number, days: { date: string }[]): string {
+function dayWord(day: string, todayIndex: number, days: { date: string }[], t: T, locale: string): string {
   const i = days.findIndex((d) => d.date === day);
-  if (i === todayIndex) return 'today';
-  if (i === todayIndex + 1) return 'tomorrow';
-  return new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long' }).toLowerCase();
+  if (i === todayIndex) return t('today');
+  if (i === todayIndex + 1) return t('tomorrow');
+  return new Date(`${day}T12:00:00`).toLocaleDateString(locale, { weekday: 'long' }).toLocaleLowerCase(locale);
 }
 
 export function HomeScreen() {
@@ -54,8 +56,11 @@ export function HomeScreen() {
   const selectField = useStore((s) => s.selectField);
   const showWelcomeBanners = useStore((s) => s.showWelcomeBanners);
   const language = useStore((s) => s.language);
+  const farmer = useStore((s) => s.farmer);
   const setLanguage = useStore((s) => s.setLanguage);
   const [menu, setMenu] = useState(false);
+  const t = useT();
+  const locale = useLocale();
   const risk = useRisk();
 
   useEffect(() => {
@@ -85,7 +90,7 @@ export function HomeScreen() {
   const { advice, loading: adviceLoading } = useAdvice(field.id);
   const threat = a ? THREAT_BY_ID[a.threat] : undefined;
   const group = threat?.group ?? 'pests';
-  const when = a && w ? dayWord(a.day, w.todayIndex, w.days) : 'today';
+  const when = a && w ? dayWord(a.day, w.todayIndex, w.days, t, locale) : t('today');
   const mode = a ? SCAN_MODE[a.threat] : undefined;
   const CardIcon: LucideIcon = group === 'weather' ? CloudRain : group === 'location' ? MapPin : Leaf;
 
@@ -93,23 +98,26 @@ export function HomeScreen() {
     <Screen>
       <View className="flex-row items-start justify-between">
         <View className="flex-1 pr-3">
-          <Text className="font-i8 text-ap-title text-ink">{`Good morning,\n${farmer.name}`}</Text>
+          <Text className="font-i8 text-ap-title text-ink">{t('Good morning,\n{name}', { name: farmer.name })}</Text>
           <View className="mt-1 flex-row items-center gap-1">
             <MapPin size={14} color={colors.muted} />
-            <Text className="font-i5 text-ap-body text-muted">{farmer.place}</Text>
+            <Text className="font-i5 text-ap-body text-muted">{t(farmer.place)}</Text>
           </View>
         </View>
         <View className="flex-row gap-2">
-          <Pressable onPress={() => setMenu((v) => !v)} accessibilityLabel="Settings" className="h-10 w-10 items-center justify-center rounded-full border border-line bg-card">
+          <Pressable onPress={() => setMenu((v) => !v)} accessibilityLabel={t('Settings')} className="h-10 w-10 items-center justify-center rounded-full border border-line bg-card">
             <Settings size={18} color={colors.ink} />
           </Pressable>
-          <Pressable onPress={() => router.push('/farmer/tasks')} accessibilityLabel="This week" className="h-10 w-10 items-center justify-center rounded-full border border-line bg-card">
+          <Pressable onPress={() => router.push('/farmer/tasks')} accessibilityLabel={t('This week')} className="h-10 w-10 items-center justify-center rounded-full border border-line bg-card">
             <Bell size={18} color={colors.good} />
             <View className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-[#E5473A]" />
           </Pressable>
         </View>
       </View>
 
+      {menu ? (
+        <Pressable onPress={() => setMenu(false)} accessibilityLabel={t('Close')} className="absolute -bottom-[2000px] -left-5 -right-5 -top-5 z-10" />
+      ) : null}
       {menu ? (
         <View className="absolute right-5 top-[64px] z-20 w-[230px] rounded-2xl border border-line bg-card p-1.5" style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
           <Pressable
@@ -120,7 +128,7 @@ export function HomeScreen() {
             className="h-11 flex-row items-center gap-2.5 rounded-xl px-2.5"
           >
             <Plus size={18} color={colors.ink} />
-            <Text className="font-i6 text-ap-body text-ink">Add a field</Text>
+            <Text className="font-i6 text-ap-body text-ink">{t('Add a field')}</Text>
           </Pressable>
           {Platform.OS === 'web' ? (
             <Pressable
@@ -133,24 +141,28 @@ export function HomeScreen() {
               className="h-11 flex-row items-center gap-2.5 rounded-xl px-2.5"
             >
               <ArrowLeftRight size={18} color={colors.ink} />
-              <Text className="font-i6 text-ap-body text-ink">Switch view</Text>
+              <Text className="font-i6 text-ap-body text-ink">{t('Switch view')}</Text>
             </Pressable>
           ) : null}
           <View className="px-2.5 pb-1.5 pt-1">
             <View className="mb-1.5 flex-row items-center gap-2">
               <Globe size={16} color={colors.ink} />
-              <Text className="font-i6 text-ap-body text-ink">Advisor language</Text>
+              <Text className="font-i6 text-ap-body text-ink">{t('Language')}</Text>
             </View>
-            <View className="flex-row gap-1.5">
+            <View className="gap-1.5">
               {LANGUAGES.map((l: Language) => (
                 <Pressable
                   key={l}
-                  onPress={() => setLanguage(l)}
+                  onPress={() => {
+                    setLanguage(l);
+                    setMenu(false);
+                  }}
                   accessibilityRole="button"
                   accessibilityState={{ selected: language === l }}
-                  className={`h-11 flex-1 items-center justify-center rounded-full border ${language === l ? 'border-ink bg-ink' : 'border-line bg-card'}`}
+                  className={`h-11 flex-row items-center justify-between rounded-full border px-4 ${language === l ? 'border-ink bg-ink' : 'border-line bg-card'}`}
                 >
-                  <Text className={`font-i7 text-ap-pill ${language === l ? 'text-white' : 'text-ink'}`}>{l.toUpperCase()}</Text>
+                  <Text className={`font-i7 text-ap-pill ${language === l ? 'text-white' : 'text-ink'}`}>{LANGUAGE_LABEL[l]}</Text>
+                  {language === l ? <Check size={16} color="#fff" strokeWidth={3} /> : null}
                 </Pressable>
               ))}
             </View>
@@ -165,12 +177,12 @@ export function HomeScreen() {
       <Card className="mt-2 h-10 flex-row items-center px-3">
         <WeatherIconCmp size={18} color={colors.warn} />
         <Text className="ml-2 font-i7 text-ap-body text-ink">{w ? `${Math.round(w.current.temp)}°C` : '–'}</Text>
-        <Text className="ml-1.5 font-i5 text-ap-body text-muted">{w?.current.label ?? ''}</Text>
+        <Text className="ml-1.5 font-i5 text-ap-body text-muted">{w ? t(w.current.label) : ''}</Text>
         <View className="mx-2.5 h-5 w-px bg-line" />
         <View className="flex-1 flex-row items-center justify-end gap-1.5">
           <Droplet size={16} color={colors.accent} />
           <Text className="font-i5 text-ap-body text-muted" numberOfLines={1}>
-            {tomorrow ? (tomorrow.rain >= 1 ? 'Rain tomorrow' : 'No rain tomorrow') : ''}
+            {tomorrow ? t(tomorrow.rain >= 1 ? 'Rain tomorrow' : 'No rain tomorrow') : ''}
           </Text>
         </View>
       </Card>
@@ -178,11 +190,13 @@ export function HomeScreen() {
       <View className={`mt-2 rounded-[18px] p-3 ${tone.card}`}>
         <View className="flex-row items-center gap-1 self-start rounded-lg bg-white px-2 py-1">
           <MapPin size={12} color={tone.iconColor} />
-          <Text className="font-i7 text-ap-small text-ink">{`${field.name} · ${field.trees} trees`}</Text>
+          <Text className="font-i7 text-ap-small text-ink">{t('{name} · {trees} trees', { name: field.name, trees: field.trees })}</Text>
         </View>
-        <Text className={`mt-2 font-i7 text-ap-small tracking-[1.2px] ${tone.kicker}`}>{a && level !== 'Low' ? `${KICKER[group]} · ${when.toUpperCase()}` : 'ALL CLEAR'}</Text>
+        <Text className={`mt-2 font-i7 text-ap-small tracking-[1.2px] ${tone.kicker}`}>{a && level !== 'Low' ? `${t(KICKER[group])} · ${when.toLocaleUpperCase(locale)}` : t('ALL CLEAR')}</Text>
         <Text className="mt-0.5 max-w-[240px] font-i8 text-[20px] leading-[24px] text-ink">
-          {a && level !== 'Low' ? `${threat?.name}${/risk$/i.test(threat?.name ?? '') ? '' : ' risk'} is ${level.toLowerCase()}` : 'No big risks in the next 3 days'}
+          {a && level !== 'Low'
+            ? t(/risk$/i.test(threat?.name ?? '') ? '{threat} is {level}' : '{threat} risk is {level}', { threat: t(threat?.name ?? ''), level: t(level.toLowerCase()) })
+            : t('No big risks in the next 3 days')}
         </Text>
         {advice?.source === 'gemini' ? (
           <>
@@ -194,7 +208,7 @@ export function HomeScreen() {
         ) : (
           <>
             <Text className="mt-1 font-i5 text-ap-body text-[#5a5a5a]" numberOfLines={2}>
-              {a ? a.actions[0] : 'Keep your normal checks.'}
+              {t(a ? a.actions[0] : 'Keep your normal checks.')}
             </Text>
             {adviceLoading ? null : <AiTag source="demo" className="mt-1.5" />}
           </>
@@ -205,27 +219,27 @@ export function HomeScreen() {
         <View className="mt-2.5 flex-row items-center justify-between">
           {level !== 'Low' && mode ? (
             <Button
-              label="Take a photo"
+              label={t('Take a photo')}
               variant={tone.btn}
               icon={<Camera size={18} color="#fff" />}
               onPress={() => openCamera(router, { fieldId: field.id, treeId: trees[field.id]?.find((t) => t.status === 'diseased')?.id, mode })}
             />
           ) : (
-            <Button label="See alerts" variant={tone.btn} icon={<TriangleAlert size={18} color="#fff" />} onPress={() => router.push('/farmer/alerts')} />
+            <Button label={t('See alerts')} variant={tone.btn} icon={<TriangleAlert size={18} color="#fff" />} onPress={() => router.push('/farmer/alerts')} />
           )}
           <Pressable onPress={() => router.push('/farmer/tasks')} className="h-8 justify-center">
-            <Text className={`font-i6 text-ap-small ${tone.kicker}`}>{`${done} / ${tasks.length} tasks`}</Text>
+            <Text className={`font-i6 text-ap-small ${tone.kicker}`}>{t('{done} / {total} tasks', { done, total: tasks.length })}</Text>
           </Pressable>
         </View>
       </View>
 
       <View className="mt-2 flex-row gap-2">
-        <StatChip label={`${risks} risks`} tone="risk" icon={<TriangleAlert size={16} color={colors.risk} />} onPress={() => router.push('/farmer/alerts')} />
-        <StatChip label={`${rechecks} re-check`} tone="warn" icon={<Leaf size={16} color={colors.warn} />} onPress={() => router.push('/farmer/tasks')} />
-        <StatChip label={`${openOffers} offers`} tone="good" icon={<Tag size={16} color={colors.good} />} onPress={() => router.push('/farmer/market/offers')} />
+        <StatChip label={t('{n} risks', { n: risks })} tone="risk" icon={<TriangleAlert size={14} color={colors.risk} />} onPress={() => router.push('/farmer/alerts')} />
+        <StatChip label={t('{n} re-check', { n: rechecks })} tone="warn" icon={<Leaf size={14} color={colors.warn} />} onPress={() => router.push('/farmer/tasks')} />
+        <StatChip label={t('{n} offers', { n: openOffers })} tone="good" icon={<Tag size={14} color={colors.good} />} onPress={() => router.push('/farmer/market/offers')} />
       </View>
 
-      <SectionHeader title="Your fields" action="See all" onAction={() => router.push('/farmer/field')} />
+      <SectionHeader title={t('Your fields')} action={t('See all')} onAction={() => router.push('/farmer/field')} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5 mt-1.5" contentContainerClassName="gap-2 px-5">
         {shown.map((f) => {
           const p = topPest(risk[f.id]);
@@ -250,10 +264,14 @@ const chipStyle = { risk: 'border-[#E9B5A6]', warn: 'border-[#E3CF95]', good: 'b
 const chipText = { risk: 'text-risk', warn: 'text-warn-text', good: 'text-good' } as const;
 
 function StatChip({ label, tone, icon, onPress }: { label: string; tone: keyof typeof chipStyle; icon: ReactNode; onPress: () => void }) {
+  // Small phones (< 380 px): one size smaller, so Greek and Turkish labels fit on one line.
+  const small = useWindowDimensions().width < 380;
   return (
-    <Pressable onPress={onPress} className={`h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border-[1.5px] bg-card ${chipStyle[tone]}`}>
+    <Pressable onPress={onPress} className={`h-9 flex-1 flex-row items-center justify-center gap-1 rounded-xl px-1 border-[1.5px] bg-card ${chipStyle[tone]}`}>
       {icon}
-      <Text className={`font-i7 text-ap-pill ${chipText[tone]}`}>{label}</Text>
+      <Text numberOfLines={1} className={`shrink font-i7 ${small ? 'text-ap-small' : 'text-ap-pill'} ${chipText[tone]}`}>
+        {label}
+      </Text>
     </Pressable>
   );
 }

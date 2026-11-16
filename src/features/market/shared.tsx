@@ -1,7 +1,7 @@
 import { Star } from 'lucide-react-native';
 import { useMemo } from 'react';
 import { Text, View } from 'react-native';
-import { exchangeRanges, factories, farmer, type Factory } from '@/data/mock';
+import { exchangeRanges, factories, type Factory } from '@/data/mock';
 import { hasBannedLast12Months, type ExchangeRange } from '@/lib/market';
 import { regionOf } from '@/lib/processor';
 import { useStore } from '@/state/store';
@@ -20,7 +20,7 @@ export function useHasBanned(fieldId: string): boolean {
 
 /** Today's exchange range for the farmer's area, or null when there is no exchange data there (for example in Greece). */
 export function useExchangeRange(): { area: string; range: ExchangeRange | null } {
-  const area = regionOf(farmer.place);
+  const area = regionOf(useStore((s) => s.farmer.place));
   return { area, range: exchangeRanges[area] ?? null };
 }
 

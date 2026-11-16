@@ -104,6 +104,8 @@ export function buildUserLots(input: {
   farmerName: string;
   place: string;
   defaultTons: number;
+  /** Nearest place of the season risk table. */
+  riskPlace?: string;
 }): Lot[] {
   const [town, region] = input.place.split(',').map((x) => x.trim());
   return input.fields.map((f) => {
@@ -115,7 +117,7 @@ export function buildUserLots(input: {
       farmerName: input.farmerName,
       town,
       region: region ?? town,
-      riskPlace: 'Ayvalık',
+      riskPlace: input.riskPlace ?? 'Ayvalık',
       ha: f.ha,
       variety: f.variety,
       tons: listing?.tons ?? input.defaultTons,

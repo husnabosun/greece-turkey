@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { farmer, lots as otherLots, tonsAvailable, type Lot } from '@/data/mock';
+import { lots as otherLots, tonsAvailable, type Lot } from '@/data/mock';
 import { buildUserLots } from '@/lib/processor';
 import { useStore } from '@/state/store';
 
@@ -9,10 +9,11 @@ export function useLots(): Lot[] {
   const sprays = useStore((s) => s.sprays);
   const sales = useStore((s) => s.sales);
   const listings = useStore((s) => s.listings);
+  const farmer = useStore((s) => s.farmer);
   return useMemo(() => {
-    const own = buildUserLots({ fields, sprays, sales, listings, farmerName: farmer.name, place: farmer.place, defaultTons: tonsAvailable });
+    const own = buildUserLots({ fields, sprays, sales, listings, farmerName: farmer.name, place: farmer.place, defaultTons: tonsAvailable, riskPlace: farmer.riskPlace });
     return [...own, ...otherLots].sort((a, b) => b.score - a.score);
-  }, [fields, sprays, sales, listings]);
+  }, [fields, sprays, sales, listings, farmer]);
 }
 
 export function useLot(id: string | undefined): Lot | undefined {

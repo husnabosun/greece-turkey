@@ -78,7 +78,12 @@ src/
   Rebuild everything as React Native components; never copy HTML.
 
 ## Content rules
-- All text in English.
+- Source text in English. The farmer app is shown in English, Turkish or Greek (Settings menu on Home):
+  wrap every visible text in `t('…')` from `useT()` (`src/state/i18n.ts`) and add the Turkish and Greek text to
+  `src/lib/i18n/tr.ts` and `el.ts`. `npm test` fails when a text has no translation. The processor panel stays in English.
+- The demo farmer follows the language: Greek shows a farmer in Greece (`farmerProfiles.gr` in `mock.ts`), Turkish and
+  English the farmer in Türkiye. Read the farmer from the store (`useStore((s) => s.farmer)`), never the `farmer` constant, and
+  never write a field name into a text: build it from the current field.
 - Company names, places and numbers come only from `src/data/mock.ts`.
 - Use prices rounded to €0.05 and totals rounded to €50 so screens are easy to read.
 - Agronomic facts must be correct: olive fly attacks the fruit; peacock spot shows as round spots on leaves.

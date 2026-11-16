@@ -1,13 +1,15 @@
 import { useRouter } from 'expo-router';
-import { Bell, Camera, Check, Droplet, RefreshCw, Sparkles } from 'lucide-react-native';
-import type { ReactNode } from 'react';
+import { Bell, Camera, Check, ChevronRight, Droplet, RefreshCw, Sparkles } from 'lucide-react-native';
+import { useMemo, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { RoundButton, ScreenHeader } from '@/components/ScreenHeader';
 import { Screen } from '@/components/Screen';
 import { Button, Card } from '@/components/ui';
-import type { Task } from '@/data/mock';
+import { factories, type AppNotification, type Task } from '@/data/mock';
 import { openCamera } from '@/features/scan/nav';
+import { activeInbox } from '@/lib/notifications';
 import { useStore } from '@/state/store';
+import { useT } from '@/state/i18n';
 import { colors } from '@/theme/tokens';
 
 const ICON: Record<Task['kind'], { bg: string; node: ReactNode }> = {
@@ -22,6 +24,8 @@ function TaskCard({ task }: { task: Task }) {
   const completeTask = useStore((s) => s.completeTask);
   const selectField = useStore((s) => s.selectField);
   const showToast = useStore((s) => s.showToast);
+  const field = useStore((s) => s.fields.find((f) => f.id === task.fieldId)?.name ?? '');
+  const t = useT();
 
   /** The task finishes when the scan is saved. */
   const takePhoto = () => openCamera(router, { fieldId: task.fieldId, mode: 'trap' });
@@ -37,8 +41,8 @@ function TaskCard({ task }: { task: Task }) {
       <View className="flex-row items-start">
         <View className={`h-9 w-9 items-center justify-center rounded-xl ${ICON[task.kind].bg}`}>{ICON[task.kind].node}</View>
         <View className="ml-2.5 flex-1">
-          <Text className="font-i8 text-ap-body text-ink">{task.title}</Text>
-          <Text className="font-i5 text-ap-small text-muted">{task.meta}</Text>
+          <Text className="font-i8 text-ap-body text-ink">{t(task.title)}</Text>
+          <Text className="font-i5 text-ap-small text-muted">{[field, task.meta ? t(task.meta) : ''].filter(Boolean).join(' · ')}</Text>
         </View>
         <View className="h-6 justify-center rounded-lg bg-good-soft px-2">
           <Text className="font-i8 text-ap-small text-good">+1</Text>
@@ -47,21 +51,21 @@ function TaskCard({ task }: { task: Task }) {
       {task.why ? (
         <View className="mt-2 flex-row items-start gap-1.5 rounded-lg bg-soft p-2">
           <Sparkles size={13} color={colors.good} />
-          <Text className="flex-1 font-i5 text-ap-small text-ink">{task.why}</Text>
+          <Text className="flex-1 font-i5 text-ap-small text-ink">{t(task.why)}</Text>
         </View>
       ) : null}
       <View className="mt-2 flex-row gap-2">
         {task.kind === 'photo' ? (
-          <Button compact className="h-9 px-4" label="Take photo" icon={<Camera size={16} color="#fff" />} onPress={takePhoto} />
+          <Button compact className="h-9 px-4" label={t('Take photo')} icon={<Camera size={16} color="#fff" />} onPress={takePhoto} />
         ) : task.kind === 'spray' ? (
           <>
-            <Button compact className="h-9 px-4" label="Yes, add it" onPress={yes} />
-            <Button compact className="h-9 px-4" variant="outline" label="No" onPress={() => completeTask(task.id, 'Noted: no spray this week. Score +1')} />
+            <Button compact className="h-9 px-4" label={t('Yes, add it')} onPress={yes} />
+            <Button compact className="h-9 px-4" variant="outline" label={t('No')} onPress={() => completeTask(task.id, 'Noted: no spray this week. Score +1')} />
           </>
         ) : task.kind === 'recheck' ? (
-          <Button compact className="h-9 px-4" label="Re-check now" icon={<RefreshCw size={16} color="#fff" />} onPress={() => openCamera(router, { fieldId: task.fieldId, treeId: task.treeId, mode: 'leaf' })} />
+          <Button compact className="h-9 px-4" label={t('Re-check now')} icon={<RefreshCw size={16} color="#fff" />} onPress={() => openCamera(router, { fieldId: task.fieldId, treeId: task.treeId, mode: 'leaf' })} />
         ) : (
-          <Button compact className="h-9 px-4" label="Mark as done" onPress={() => completeTask(task.id)} />
+          <Button compact className="h-9 px-4" label={t('Mark as done')} onPress={() => completeTask(task.id)} />
         )}
       </View>
     </Card>
@@ -70,51 +74,88 @@ function TaskCard({ task }: { task: Task }) {
 
 export function TasksScreen() {
   const router = useRouter();
+  const t = useT();
   const tasks = useStore((s) => s.tasks);
-  const open = tasks.filter((t) => !t.done);
-  const done = tasks.filter((t) => t.done);
+  const open = tasks.filter((x) => !x.done);
+  const done = tasks.filter((x) => x.done);
   const fields = useStore((s) => s.fields);
   const fieldName = (id: string) => fields.find((f) => f.id === id)?.name ?? '';
+  const inboxIds = useStore((s) => s.inbox);
+  const listings = useStore((s) => s.listings);
+  const offers = useStore((s) => s.offers);
+  const inbox = useMemo(
+    () => activeInbox(inboxIds, { fields, listings, offers, factoryName: (id) => factories.find((f) => f.id === id)?.name ?? '' }),
+    [inboxIds, fields, listings, offers],
+  );
 
   return (
     <Screen tabs={false}>
       <ScreenHeader
         back
-        title="This week"
+        title={t('This week')}
         right={
-          <RoundButton label="Alerts" onPress={() => router.push('/farmer/alerts')}>
+          <RoundButton label={t('Alerts')} onPress={() => router.push('/farmer/alerts')}>
             <Bell size={18} color={colors.ink} />
           </RoundButton>
         }
       />
 
+      {inbox.length ? (
+        <>
+          <Text className="mt-3 font-i8 text-ap-card text-ink">{t('Notifications')}</Text>
+          {inbox.map((n) => (
+            <NotificationRow key={n.id} n={n} />
+          ))}
+        </>
+      ) : null}
+
       <Card className="mt-2.5 flex-row items-center p-3">
         <View>
-          <Text className="font-i5 text-ap-small text-muted">Checks done</Text>
-          <Text className="font-i8 text-ap-card text-ink">{`${done.length} of ${tasks.length}`}</Text>
+          <Text className="font-i5 text-ap-small text-muted">{t('Checks done')}</Text>
+          <Text className="font-i8 text-ap-card text-ink">{t('{done} of {total}', { done: done.length, total: tasks.length })}</Text>
         </View>
         <View className="mx-3 h-2 flex-1 overflow-hidden rounded-full bg-[#ECEAE4]">
           <View className="h-full rounded-full bg-good" style={{ width: `${(done.length / Math.max(1, tasks.length)) * 100}%` }} />
         </View>
-        <Text className="font-i8 text-ap-body text-good">{`+${done.length} score`}</Text>
+        <Text className="font-i8 text-ap-body text-good">{t('+{n} score', { n: done.length })}</Text>
       </Card>
 
       {open.length === 0 ? (
         <Card className="mt-2 items-center p-5">
-          <Text className="font-i7 text-ap-body text-good">All checks done. Well done!</Text>
+          <Text className="font-i7 text-ap-body text-good">{t('All checks done. Well done!')}</Text>
         </Card>
       ) : null}
-      {open.map((t) => (
-        <TaskCard key={t.id} task={t} />
+      {open.map((x) => (
+        <TaskCard key={x.id} task={x} />
       ))}
 
-      {done.map((t) => (
-        <View key={t.id} className="mt-2 h-11 flex-row items-center gap-2.5 rounded-2xl bg-[#F4F3EF] px-3">
+      {done.map((x) => (
+        <View key={x.id} className="mt-2 h-11 flex-row items-center gap-2.5 rounded-2xl bg-[#F4F3EF] px-3">
           <Check size={14} color={colors.good} strokeWidth={3} />
-          <Text className="font-i6 text-ap-body text-[#555] line-through">{t.title}</Text>
-          <Text className="ml-auto font-i5 text-ap-small text-muted">{fieldName(t.fieldId)}</Text>
+          <Text className="font-i6 text-ap-body text-[#555] line-through">{t(x.title)}</Text>
+          <Text className="ml-auto font-i5 text-ap-small text-muted">{fieldName(x.fieldId)}</Text>
         </View>
       ))}
     </Screen>
+  );
+}
+
+/** A notification that stays here after its banner is gone, e.g. a harvest reminder or a new offer. Tapping it opens its screen. */
+function NotificationRow({ n }: { n: AppNotification }) {
+  const router = useRouter();
+  const t = useT();
+  return (
+    <Pressable onPress={() => n.href && router.push(n.href as never)} accessibilityRole="link" className="mt-2">
+      <Card className="flex-row items-center border-good/30 bg-good-soft/60 p-3">
+        <View className="h-9 w-9 items-center justify-center rounded-xl bg-white">
+          <Text className="text-[18px]">{n.emoji}</Text>
+        </View>
+        <View className="ml-2.5 flex-1">
+          <Text className="font-i8 text-ap-body text-ink">{t(n.title)}</Text>
+          <Text className="font-i5 text-ap-small text-muted">{t(n.body)}</Text>
+        </View>
+        <ChevronRight size={16} color={colors.muted} />
+      </Card>
+    </Pressable>
   );
 }
