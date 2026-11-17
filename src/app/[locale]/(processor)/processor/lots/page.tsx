@@ -1,5 +1,5 @@
 import { setRequestLocale } from "next-intl/server";
-import { ProcessorLotsScreen } from "@/features/marketplace/processor-screens";
+import { ProcessorLotsScreen } from "@/features/marketplace/processor-lots-screen";
 
 type Props = { params: Promise<{ locale: string }> };
 

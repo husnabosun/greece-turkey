@@ -1,19 +1,15 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { ArrowRight, Check, ChevronDown, ChevronLeft, Minus, Plus, Trees } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, Trees } from "lucide-react";
 import { formatStremmata } from "@/features/fields/area";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { varietyAgronomyContext, varietyLabelFromStored } from "@/features/fields/olive-varieties";
-import { euroPrice, roundPrice } from "@/features/marketplace/pricing";
 import { publishLot } from "@/features/marketplace/save-lot";
 import { Link, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
-import { useLocale } from "next-intl";
-
-const PERIOD_KEYS = ["period1", "period2", "period3", "period4"] as const;
 
 function useLabel(use: string, t: (key: "useOil" | "useDual" | "useTable") => string) {
   if (use === "OIL") return t("useOil");
@@ -22,13 +18,42 @@ function useLabel(use: string, t: (key: "useOil" | "useDual" | "useTable") => st
   return use;
 }
 
-export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: string }) {
+function isoToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function addDaysIso(iso: string, days: number) {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function parsePositiveNumber(raw: string): number | null {
+  const n = Number(raw.replace(",", ".").trim());
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+export function NewListingScreen({
+  fieldId,
+  factoryId,
+  buyRequestId,
+}: {
+  fieldId?: string;
+  factoryId?: string;
+  buyRequestId?: string;
+}) {
   const t = useTranslations("farmerMarket");
   const locale = useLocale();
   const router = useRouter();
   const { fields, loading } = useFarmerFields();
   const [currentId, setCurrentId] = useState(fieldId ?? "");
   const field = fields.find((f) => f.id === currentId) ?? fields[0];
+  /** Flow B: offer to a mill buy-request. Flow A: plain public listing. */
+  const targetProcessorId = factoryId?.trim() || null;
+  const targetRequestId = buyRequestId?.trim() || null;
+  const isOfferToMill = Boolean(targetProcessorId);
 
   useEffect(() => {
     if (!fields.length) return;
@@ -39,11 +64,13 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
     if (!fields.some((f) => f.id === currentId)) setCurrentId(fields[0]!.id);
   }, [fields, fieldId, currentId]);
 
-  const [tons, setTons] = useState(2.5);
-  const [periodIdx, setPeriodIdx] = useState(0);
+  const defaultStart = useMemo(() => isoToday(), []);
+  const [tonsText, setTonsText] = useState("2.5");
+  const [harvestStart, setHarvestStart] = useState(defaultStart);
+  const [harvestEnd, setHarvestEnd] = useState(() => addDaysIso(defaultStart, 7));
   const [negotiable, setNegotiable] = useState(false);
   const [delivery, setDelivery] = useState<"pickup" | "deliver">("pickup");
-  const [price, setPrice] = useState(0.8);
+  const [priceText, setPriceText] = useState("0.80");
   const [publishing, setPublishing] = useState(false);
 
   if (loading) {
@@ -72,7 +99,12 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
 
   return (
     <div className="w-full flex-1">
-      <Header title={t("newListing")} />
+      <Header title={isOfferToMill ? t("offerToMill") : t("newListing")} />
+      {isOfferToMill ? (
+        <p className="mt-2 text-ap-body text-muted-foreground">{t("offerToMillHint")}</p>
+      ) : (
+        <p className="mt-2 text-ap-body text-muted-foreground">{t("listForBidsHint")}</p>
+      )}
 
       <Label>{t("fieldLabel")}</Label>
       <div className="flex items-center gap-2.5 rounded-[18px] border border-line bg-card p-3">
@@ -128,29 +160,53 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
         </div>
       </div>
 
-      <div className="mt-2 flex gap-2">
-        <div className="flex-1 rounded-[18px] border border-line bg-card p-3">
-          <p className="text-ap-body text-muted-foreground">{t("howMuch")}</p>
-          <div className="mt-1.5 flex h-10 items-center justify-between">
-            <RoundBtn label={t("less")} onClick={() => setTons((n) => Math.max(0.5, Math.round((n - 0.5) * 10) / 10))}>
-              <Minus className="size-4" />
-            </RoundBtn>
-            <span className="text-ap-card text-ink">{tons} t</span>
-            <RoundBtn label={t("more")} onClick={() => setTons((n) => Math.min(25, Math.round((n + 0.5) * 10) / 10))}>
-              <Plus className="size-4" />
-            </RoundBtn>
-          </div>
+      <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
+        <p className="text-ap-body text-muted-foreground">{t("howMuch")}</p>
+        <div className="mt-1.5 flex h-12 items-center gap-2 rounded-xl border border-line bg-background px-3">
+          <input
+            type="text"
+            inputMode="decimal"
+            value={tonsText}
+            onChange={(e) => setTonsText(e.target.value)}
+            className="min-w-0 flex-1 bg-transparent text-ap-card font-extrabold text-ink outline-none"
+            aria-label={t("howMuch")}
+          />
+          <span className="text-ap-body font-bold text-muted-foreground">t</span>
         </div>
-        <div className="flex-1 rounded-[18px] border border-line bg-card p-3">
-          <p className="text-ap-body text-muted-foreground">{t("harvestPeriod")}</p>
-          <button
-            type="button"
-            onClick={() => setPeriodIdx((i) => (i + 1) % PERIOD_KEYS.length)}
-            className="mt-1.5 flex h-10 w-full items-center justify-between rounded-xl border border-line bg-background px-3 text-ap-body font-semibold text-ink"
-          >
-            <span className="truncate">{t(PERIOD_KEYS[periodIdx]!)}</span>
-            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-          </button>
+        <p className="mt-1 text-ap-small text-muted-foreground">{t("anyQuantityHint")}</p>
+      </div>
+
+      <Label>{t("harvestPeriod")}</Label>
+      <div className="rounded-[18px] border border-line bg-card p-3">
+        <p className="text-ap-small text-muted-foreground">{t("harvestRangeHint")}</p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="text-[11px] font-bold tracking-[1px] text-muted-foreground uppercase">
+              {t("fromDate")}
+            </span>
+            <input
+              type="date"
+              value={harvestStart}
+              onChange={(e) => {
+                const next = e.target.value;
+                setHarvestStart(next);
+                if (harvestEnd < next) setHarvestEnd(next);
+              }}
+              className="mt-1 h-11 w-full rounded-xl border border-line bg-background px-3 text-ap-body font-semibold text-ink"
+            />
+          </label>
+          <label className="block">
+            <span className="text-[11px] font-bold tracking-[1px] text-muted-foreground uppercase">
+              {t("toDate")}
+            </span>
+            <input
+              type="date"
+              value={harvestEnd}
+              min={harvestStart}
+              onChange={(e) => setHarvestEnd(e.target.value)}
+              className="mt-1 h-11 w-full rounded-xl border border-line bg-background px-3 text-ap-body font-semibold text-ink"
+            />
+          </label>
         </div>
       </div>
 
@@ -207,16 +263,19 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
           <p className="mt-0.5 text-ap-small text-muted-foreground">{t("noExchange")}</p>
         </div>
         <p className="mt-3 text-ap-body text-muted-foreground">{t("yourPrice")}</p>
-        <div className="mt-1.5 flex h-12 items-center justify-between rounded-xl border border-line px-2">
-          <RoundBtn label={t("less")} onClick={() => setPrice((n) => roundPrice(Math.max(0.4, n - 0.05)))}>
-            <Minus className="size-4" />
-          </RoundBtn>
-          <span className="text-[22px] font-extrabold text-ink">{euroPrice(price)}</span>
-          <RoundBtn label={t("more")} onClick={() => setPrice((n) => roundPrice(Math.min(2, n + 0.05)))}>
-            <Plus className="size-4" />
-          </RoundBtn>
+        <div className="mt-1.5 flex h-12 items-center gap-2 rounded-xl border border-line px-3">
+          <span className="text-ap-card font-extrabold text-muted-foreground">€</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={priceText}
+            onChange={(e) => setPriceText(e.target.value)}
+            className="min-w-0 flex-1 bg-transparent text-[22px] font-extrabold text-ink outline-none"
+            aria-label={t("yourPrice")}
+          />
+          <span className="text-ap-small font-medium text-muted-foreground">{t("perKg")}</span>
         </div>
-        <p className="mt-2 text-ap-small text-muted-foreground">{t("setByMarket")}</p>
+        <p className="mt-2 text-ap-small text-muted-foreground">{t("anyPriceHint")}</p>
       </div>
 
       <button
@@ -224,6 +283,20 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
         disabled={publishing || !field}
         onClick={() => {
           if (!field) return;
+          const tons = parsePositiveNumber(tonsText);
+          const price = parsePositiveNumber(priceText);
+          if (tons == null) {
+            toast.error(t("invalidTons"));
+            return;
+          }
+          if (price == null) {
+            toast.error(t("invalidPrice"));
+            return;
+          }
+          if (!harvestStart || !harvestEnd || harvestEnd < harvestStart) {
+            toast.error(t("invalidHarvestRange"));
+            return;
+          }
           void (async () => {
             setPublishing(true);
             try {
@@ -235,20 +308,27 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
                 pricePerKg: price,
                 negotiable,
                 delivery,
-                periodIndex: periodIdx,
+                harvestStart,
+                harvestEnd,
+                processorId: targetProcessorId,
+                buyRequestId: targetRequestId,
               });
               if (!result.ok) {
                 toast.error(
                   t(
-                    result.error === "needLogin" || result.error === "needSupabase"
-                      ? result.error
+                    result.error === "needLogin" ||
+                      result.error === "needSupabase" ||
+                      result.error === "offerFailed"
+                      ? result.error === "offerFailed"
+                        ? "offerFailed"
+                        : result.error
                       : "publishFailed",
                   ),
                 );
                 return;
               }
-              toast.success(t("published"));
-              router.push("/farmer/market");
+              toast.success(isOfferToMill ? t("offerSent") : t("published"));
+              router.push(isOfferToMill ? "/farmer/market?tab=offers" : "/farmer/market?tab=overview");
               router.refresh();
             } finally {
               setPublishing(false);
@@ -257,7 +337,13 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
         }}
         className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white disabled:opacity-50"
       >
-        {publishing ? t("publishing") : t("publishListing")}
+        {publishing
+          ? isOfferToMill
+            ? t("sendingOffer")
+            : t("publishing")
+          : isOfferToMill
+            ? t("sendOfferToMill")
+            : t("publishListing")}
         <ArrowRight className="size-4" />
       </button>
     </div>
@@ -287,17 +373,4 @@ function Header({ title }: { title: string }) {
 
 function Label({ children }: { children: ReactNode }) {
   return <p className="mt-3 mb-1.5 text-[11px] font-bold tracking-[1px] text-muted-foreground uppercase">{children}</p>;
-}
-
-function RoundBtn({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      className="flex size-9 items-center justify-center rounded-full bg-soft"
-    >
-      {children}
-    </button>
-  );
 }

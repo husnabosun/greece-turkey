@@ -46,6 +46,7 @@ export type ProcessorOffer = {
   pricePerKg: number;
   initiatedBy: "farmer" | "processor";
   message: string | null;
+  buyRequestId: string | null;
   lot: ProcessorLot | null;
 };
 
@@ -192,7 +193,7 @@ export function useProcessorMarket() {
           .order("quality_score", { ascending: false, nullsFirst: false }),
         supabase
           .from("offers")
-          .select("id, lot_id, farmer_id, status, tons, price_per_kg, initiated_by, message")
+          .select("id, lot_id, farmer_id, status, tons, price_per_kg, initiated_by, message, buy_request_id")
           .eq("processor_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
@@ -268,6 +269,7 @@ export function useProcessorMarket() {
         pricePerKg: Number(row.price_per_kg),
         initiatedBy: row.initiated_by as "farmer" | "processor",
         message: row.message,
+        buyRequestId: row.buy_request_id ?? null,
         lot: lotById.get(row.lot_id) ?? null,
       }));
 
@@ -455,6 +457,23 @@ export async function scheduleDelivery(
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
   const { error } = await supabase.from("deliveries").update({ scheduled_for: scheduledFor }).eq("id", deliveryId);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+export async function rejectOffer(offerId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  const { error } = await supabase.from("offers").update({ status: "rejected" }).eq("id", offerId);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+export async function deactivateBuyRequest(requestId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  const { error } = await supabase
+    .from("buy_requests")
+    .update({ active: false })
+    .eq("id", requestId);
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 

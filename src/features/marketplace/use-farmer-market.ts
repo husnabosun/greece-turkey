@@ -8,16 +8,21 @@ export type MarketOffer = {
   lotId: string;
   processorId: string;
   processorName: string;
+  /** processor = mill bid on your listing (Flow A). farmer = your offer to a mill request (Flow B). */
+  initiatedBy: "farmer" | "processor";
   status: string;
   tons: number;
   pricePerKg: number;
   fieldId: string | null;
   fieldName: string | null;
   lotVariety: string | null;
+  buyRequestId: string | null;
 };
 
 export type MarketRequest = {
   id: string;
+  processorId: string;
+  processorName: string;
   variety: string;
   tons: number;
   filledTons: number;
@@ -32,8 +37,10 @@ export type MarketDelivery = {
   status: string;
   tons: number;
   pricePerKg: number;
+  scheduledFor: string | null;
   fieldName: string | null;
   processorName: string | null;
+  lotVariety: string | null;
 };
 
 export type FieldMarketCard = {
@@ -87,18 +94,22 @@ export function useFarmerMarket(fieldIds: string[]) {
       const [offersRes, requestsRes, deliveriesRes, lotsRes, qualityRes] = await Promise.all([
         supabase
           .from("offers")
-          .select("id, lot_id, processor_id, status, tons, price_per_kg, lots(variety, field_id, fields(name))")
+          .select(
+            "id, lot_id, processor_id, initiated_by, status, tons, price_per_kg, buy_request_id, lots(variety, field_id, fields(name))",
+          )
           .eq("farmer_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
           .from("buy_requests")
-          .select("id, variety, tons, filled_tons, min_score, region, window_label, no_banned")
+          .select(
+            "id, processor_id, variety, tons, filled_tons, min_score, region, window_label, no_banned",
+          )
           .eq("active", true)
           .eq("shared_with_farmers", true)
           .order("created_at", { ascending: false }),
         supabase
           .from("deliveries")
-          .select("id, status, tons, price_per_kg, processor_id, lots(fields(name))")
+          .select("id, status, tons, price_per_kg, scheduled_for, processor_id, lots(variety, fields(name))")
           .eq("farmer_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
@@ -119,6 +130,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         ...new Set([
           ...(offersRes.data ?? []).map((o) => o.processor_id),
           ...(deliveriesRes.data ?? []).map((d) => d.processor_id),
+          ...(requestsRes.data ?? []).map((r) => r.processor_id),
         ]),
       ];
       const nameByProcessor = new Map<string, string>();
@@ -143,17 +155,21 @@ export function useFarmerMarket(fieldIds: string[]) {
           lotId: row.lot_id,
           processorId: row.processor_id,
           processorName: nameByProcessor.get(row.processor_id) ?? "Buyer",
+          initiatedBy: row.initiated_by === "farmer" ? "farmer" : "processor",
           status: row.status,
           tons: Number(row.tons),
           pricePerKg: Number(row.price_per_kg),
           fieldId: lot?.field_id ?? null,
           fieldName: fieldName ?? null,
           lotVariety: lot?.variety ?? null,
+          buyRequestId: row.buy_request_id ?? null,
         };
       });
 
       const requests: MarketRequest[] = (requestsRes.data ?? []).map((row) => ({
         id: row.id,
+        processorId: row.processor_id,
+        processorName: nameByProcessor.get(row.processor_id) ?? "Buyer",
         variety: row.variety,
         tons: Number(row.tons),
         filledTons: Number(row.filled_tons),
@@ -164,7 +180,9 @@ export function useFarmerMarket(fieldIds: string[]) {
       }));
 
       const deliveries: MarketDelivery[] = (deliveriesRes.data ?? []).map((row) => {
-        const lot = row.lots as { fields?: { name?: string } | { name?: string }[] } | null;
+        const lot = row.lots as
+          | { variety?: string; fields?: { name?: string } | { name?: string }[] }
+          | null;
         const fieldsJoin = lot?.fields;
         const fieldName = Array.isArray(fieldsJoin) ? fieldsJoin[0]?.name : fieldsJoin?.name;
         return {
@@ -172,8 +190,10 @@ export function useFarmerMarket(fieldIds: string[]) {
           status: row.status,
           tons: Number(row.tons),
           pricePerKg: Number(row.price_per_kg),
+          scheduledFor: row.scheduled_for ?? null,
           fieldName: fieldName ?? null,
           processorName: nameByProcessor.get(row.processor_id) ?? null,
+          lotVariety: lot?.variety ?? null,
         };
       });
 
@@ -184,6 +204,8 @@ export function useFarmerMarket(fieldIds: string[]) {
 
       const offerCountByField = new Map<string, number>();
       for (const o of offers) {
+        // Only mill bids on your public listing (Flow A) count on field cards.
+        if (o.initiatedBy !== "processor") continue;
         if (o.status !== "pending" && o.status !== "countered") continue;
         if (!o.fieldId) continue;
         offerCountByField.set(o.fieldId, (offerCountByField.get(o.fieldId) ?? 0) + 1);
@@ -282,6 +304,20 @@ export async function acceptOffer(offerId: string): Promise<{ ok: boolean; error
   }
 
   return { ok: true };
+}
+
+export async function withdrawOffer(offerId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  const { error } = await supabase.from("offers").update({ status: "withdrawn" }).eq("id", offerId);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+export async function rejectIncomingBid(offerId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  const { error } = await supabase.from("offers").update({ status: "rejected" }).eq("id", offerId);
+  return error ? { ok: false, error: error.message } : { ok: true };
 }
 
 export async function counterOffer(

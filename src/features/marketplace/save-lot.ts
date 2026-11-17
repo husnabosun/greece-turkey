@@ -9,16 +9,30 @@ export type PublishLotInput = {
   pricePerKg: number;
   negotiable: boolean;
   delivery: "pickup" | "deliver";
-  /** Free-text harvest window label stored via harvest dates approx. */
-  periodIndex: number;
+  /** Legacy preset window index; ignored when harvestStart/End are set. */
+  periodIndex?: number;
+  /** Inclusive harvest window (YYYY-MM-DD), preferred over periodIndex. */
+  harvestStart?: string;
+  harvestEnd?: string;
   region?: string | null;
   country?: "GR" | "TR" | null;
   qualityScore?: number | null;
+  /**
+   * Flow B: offer to a mill buy-request.
+   * Creates a non-public (`draft`) lot + farmer-initiated offer so mills don't
+   * also see it as an open listing for Flow A bids.
+   */
+  processorId?: string | null;
+  buyRequestId?: string | null;
 };
 
 type PublishResult =
-  | { ok: true; lotId: string }
-  | { ok: false; error: "needSupabase" | "needLogin" | "insertFailed"; detail?: string };
+  | { ok: true; lotId: string; offerId?: string }
+  | {
+      ok: false;
+      error: "needSupabase" | "needLogin" | "insertFailed" | "offerFailed";
+      detail?: string;
+    };
 
 const PERIOD_DATES: { start: string; end: string }[] = [
   { start: "2026-11-03", end: "2026-11-10" },
@@ -43,7 +57,10 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
     (input.varietySlug && input.varietySlug !== "other" ? input.varietySlug : null) ||
     input.variety ||
     "olive";
-  const period = PERIOD_DATES[input.periodIndex] ?? PERIOD_DATES[0]!;
+  const period =
+    input.harvestStart && input.harvestEnd
+      ? { start: input.harvestStart, end: input.harvestEnd }
+      : PERIOD_DATES[input.periodIndex ?? 0] ?? PERIOD_DATES[0]!;
 
   let region = input.region?.trim() || null;
   let country = input.country ?? null;
@@ -95,12 +112,15 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
     }
   }
 
+  const targetedOffer = Boolean(input.processorId);
+  // Flow A: public listed lot for mills to bid on.
+  // Flow B: draft lot + direct offer to one mill (not open marketplace).
   const { data: row, error } = await supabase
     .from("lots")
     .insert({
       farmer_id: user.id,
       field_id: input.fieldId,
-      status: "listed",
+      status: targetedOffer ? "draft" : "listed",
       use_type: useType,
       variety,
       tons: input.tons,
@@ -115,13 +135,35 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
       harvest_start: period.start,
       harvest_end: period.end,
       quality_score: qualityScore,
-      listed_at: new Date().toISOString(),
+      listed_at: targetedOffer ? null : new Date().toISOString(),
     })
     .select("id")
     .single();
 
   if (error || !row) {
     return { ok: false, error: "insertFailed", detail: error?.message };
+  }
+
+  if (input.processorId) {
+    const { data: offer, error: offerError } = await supabase
+      .from("offers")
+      .insert({
+        lot_id: row.id,
+        farmer_id: user.id,
+        processor_id: input.processorId,
+        initiated_by: "farmer",
+        status: "pending",
+        tons: input.tons,
+        price_per_kg: input.pricePerKg,
+        delivery_in_days: input.delivery === "deliver" ? 2 : 0,
+        buy_request_id: input.buyRequestId || null,
+      })
+      .select("id")
+      .single();
+    if (offerError || !offer) {
+      return { ok: false, error: "offerFailed", detail: offerError?.message };
+    }
+    return { ok: true, lotId: row.id, offerId: offer.id };
   }
 
   return { ok: true, lotId: row.id };

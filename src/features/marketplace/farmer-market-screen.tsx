@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
   ArrowRight,
@@ -20,7 +20,11 @@ import { euroPrice, roundPrice } from "@/features/marketplace/pricing";
 import {
   acceptOffer,
   counterOffer,
+  rejectIncomingBid,
   useFarmerMarket,
+  withdrawOffer,
+  type FieldMarketCard,
+  type MarketDelivery,
   type MarketOffer,
 } from "@/features/marketplace/use-farmer-market";
 import { Link, useRouter } from "@/shared/i18n/navigation";
@@ -43,9 +47,24 @@ function isTab(value: string | undefined): value is Tab {
   return !!value && (TABS as string[]).includes(value);
 }
 
+function formatDeliveryDay(iso: string | null, locale: string) {
+  if (!iso) return null;
+  const d = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
+}
+
+function nextStepHint(status: string, t: ReturnType<typeof useTranslations<"farmerMarket">>) {
+  if (status === "scheduled") return t("nextPickupHint");
+  if (status === "weighed") return t("nextLabHint");
+  if (status === "lab_checked") return t("nextPaidHint");
+  return t("deliveryNextHint");
+}
+
 export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const t = useTranslations("farmerMarket");
   const tFields = useTranslations("farmerFields");
+  const locale = useLocale();
   const router = useRouter();
   const { fields, loading, error } = useFarmerFields();
   const fieldIds = useMemo(() => fields.map((f) => f.id), [fields]);
@@ -66,17 +85,31 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     [t],
   );
 
-  const openOffers = useMemo(
-    () => offers.filter((o) => o.status === "pending" || o.status === "countered"),
+  // Flow A: mill bids on your public listing — farmer can Accept/Counter.
+  const incomingBids = useMemo(
+    () =>
+      offers.filter(
+        (o) =>
+          o.initiatedBy === "processor" && (o.status === "pending" || o.status === "countered"),
+      ),
     [offers],
   );
-  const bestOffer = openOffers[0] ?? null;
-  const activeDelivery = deliveries.find((d) => d.status !== "paid" && d.status !== "cancelled") ?? null;
+  // Flow B: your offers to mill buy-requests — waiting on mill.
+  const sentOffers = useMemo(
+    () =>
+      offers.filter(
+        (o) => o.initiatedBy === "farmer" && (o.status === "pending" || o.status === "countered"),
+      ),
+    [offers],
+  );
+  const bestOffer = incomingBids[0] ?? null;
+  const activeDeliveries = useMemo(
+    () => deliveries.filter((d) => d.status !== "paid" && d.status !== "cancelled"),
+    [deliveries],
+  );
   const paidDeliveries = deliveries.filter((d) => d.status === "paid");
   const paidSeason = paidDeliveries.reduce((sum, d) => sum + d.tons * 1000 * d.pricePerKg, 0);
-  const onTheWay = deliveries
-    .filter((d) => d.status !== "paid" && d.status !== "cancelled")
-    .reduce((sum, d) => sum + d.tons * 1000 * d.pricePerKg, 0);
+  const onTheWay = activeDeliveries.reduce((sum, d) => sum + d.tons * 1000 * d.pricePerKg, 0);
 
   const filterChips: { key: FilterKey; label: string }[] = [
     { key: "fits", label: t("fits") },
@@ -86,6 +119,8 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   ];
 
   async function onAccept(offer: MarketOffer) {
+    // Only mill bids (Flow A) can be accepted by the farmer.
+    if (offer.initiatedBy !== "processor") return;
     setBusyOfferId(offer.id);
     toast.message(t("accepting"));
     try {
@@ -102,7 +137,42 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     }
   }
 
+  async function onRejectBid(offer: MarketOffer) {
+    if (offer.initiatedBy !== "processor") return;
+    if (!window.confirm(t("rejectBidConfirm"))) return;
+    setBusyOfferId(offer.id);
+    try {
+      const result = await rejectIncomingBid(offer.id);
+      if (!result.ok) {
+        toast.error(result.error ?? t("actionFailed"));
+        return;
+      }
+      toast.success(t("rejectedBidOk"));
+      await reload();
+    } finally {
+      setBusyOfferId(null);
+    }
+  }
+
+  async function onWithdraw(offer: MarketOffer) {
+    if (offer.initiatedBy !== "farmer") return;
+    if (!window.confirm(t("withdrawOfferConfirm"))) return;
+    setBusyOfferId(offer.id);
+    try {
+      const result = await withdrawOffer(offer.id);
+      if (!result.ok) {
+        toast.error(result.error ?? t("actionFailed"));
+        return;
+      }
+      toast.success(t("withdrawnOk"));
+      await reload();
+    } finally {
+      setBusyOfferId(null);
+    }
+  }
+
   async function onCounter(offer: MarketOffer) {
+    if (offer.initiatedBy !== "processor") return;
     const suggested = roundPrice(offer.pricePerKg + 0.05);
     const raw = window.prompt(t("counterPrompt"), String(suggested));
     if (raw == null) {
@@ -162,9 +232,9 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               )}
             >
               {t(id)}
-              {id === "offers" && openOffers.length > 0 ? (
+              {id === "offers" && incomingBids.length > 0 ? (
                 <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-risk px-1 text-[10px] leading-none font-bold text-white">
-                  {openOffers.length}
+                  {incomingBids.length}
                 </span>
               ) : null}
             </button>
@@ -195,10 +265,12 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               busy={busyOfferId === bestOffer.id}
               counter={t("counter")}
               accept={t("accept")}
+              reject={t("reject")}
               perKg={t("perKg")}
               acceptClass="bg-ink"
               onAccept={() => void onAccept(bestOffer)}
               onCounter={() => void onCounter(bestOffer)}
+              onReject={() => void onRejectBid(bestOffer)}
             />
           ) : (
             <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
@@ -271,13 +343,27 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
           ) : (
             <div className="mt-2 space-y-2">
               {requests.slice(0, 3).map((req) => (
-                <div key={req.id} className="rounded-[18px] border border-line bg-card p-3">
-                  <p className="text-ap-card font-extrabold text-ink">{req.variety}</p>
-                  <p className="text-ap-small text-muted-foreground">
-                    {req.tons} t · {req.region ?? "—"}
-                    {req.windowLabel ? ` · ${req.windowLabel}` : ""}
-                  </p>
-                </div>
+                <RequestCard
+                  key={req.id}
+                  millName={req.processorName}
+                  variety={req.variety}
+                  tons={req.tons}
+                  filledTons={req.filledTons}
+                  minScore={req.minScore}
+                  region={req.region}
+                  windowLabel={req.windowLabel}
+                  offerLabel={t("offer")}
+                  canSellLabel={t("canSellHere")}
+                  filledOf={t("filledOf", { filled: req.filledTons, total: req.tons })}
+                  onOffer={() => {
+                    const field = bestFieldForRequest(fields, fieldCards, req.minScore);
+                    const qs = new URLSearchParams();
+                    if (field) qs.set("field", field);
+                    qs.set("factory", req.processorId);
+                    qs.set("request", req.id);
+                    router.push(`/farmer/market/new?${qs.toString()}`);
+                  }}
+                />
               ))}
             </div>
           )}
@@ -332,16 +418,27 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
             </div>
           ) : (
             requests.map((req) => (
-              <div key={req.id} className="rounded-[18px] border border-line bg-card p-3">
-                <p className="text-ap-card font-extrabold text-ink">{req.variety}</p>
-                <p className="text-ap-body text-muted-foreground">
-                  {req.tons} t · min score {req.minScore}
-                  {req.region ? ` · ${req.region}` : ""}
-                </p>
-                <p className="mt-1 text-ap-small text-muted-foreground">
-                  {t("filledOf", { filled: req.filledTons, total: req.tons })}
-                </p>
-              </div>
+              <RequestCard
+                key={req.id}
+                millName={req.processorName}
+                variety={req.variety}
+                tons={req.tons}
+                filledTons={req.filledTons}
+                minScore={req.minScore}
+                region={req.region}
+                windowLabel={req.windowLabel}
+                offerLabel={t("offer")}
+                canSellLabel={t("canSellHere")}
+                filledOf={t("filledOf", { filled: req.filledTons, total: req.tons })}
+                onOffer={() => {
+                  const field = bestFieldForRequest(fields, fieldCards, req.minScore);
+                  const qs = new URLSearchParams();
+                  if (field) qs.set("field", field);
+                  qs.set("factory", req.processorId);
+                  qs.set("request", req.id);
+                  router.push(`/farmer/market/new?${qs.toString()}`);
+                }}
+              />
             ))
           )}
         </div>
@@ -354,65 +451,82 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               {t("loadingMarket")}
             </div>
           ) : null}
-          <section className="rounded-[18px] border border-line bg-card p-3">
-            {activeDelivery ? (
-              <>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold tracking-[1px] text-ap-accent uppercase">{t("inProgress")}</p>
-                    <p className="text-ap-card text-ink">{activeDelivery.fieldName ?? "—"}</p>
-                    <p className="text-ap-body text-muted-foreground">{activeDelivery.processorName ?? "—"}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[22px] font-extrabold text-ink">
-                      {euroPrice(activeDelivery.tons * 1000 * activeDelivery.pricePerKg)}
-                    </p>
-                    <p className="text-ap-small text-muted-foreground">{t("youllGet")}</p>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <StatusSteps steps={steps} current={DELIVERY_STEP[activeDelivery.status] ?? 0} />
-                </div>
-                <p className="mt-2 text-ap-small font-semibold text-muted-foreground">{t("deliveryNextHint")}</p>
-                {activeDelivery.status === "scheduled" || activeDelivery.status === "weighed" ? (
-                  <div className="mt-2 flex items-center gap-2.5 rounded-xl bg-ap-accent-soft p-2.5">
-                    <FlaskConical className="size-5 shrink-0 text-ap-accent" />
-                    <div>
-                      <p className="text-ap-body font-bold text-ink">{t("labPending")}</p>
-                      <p className="text-ap-small text-muted-foreground">{t("labPendingHint")}</p>
-                    </div>
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <p className="text-ap-small font-semibold text-ink">{t("noActiveSalesTitle")}</p>
-                <p className="mt-1 text-ap-small text-muted-foreground">{t("noActiveSales")}</p>
-                <div className="mt-3 opacity-40">
-                  <StatusSteps steps={steps} current={-1} />
-                </div>
-              </>
-            )}
-          </section>
+
+          <SectionTitle>{t("activeDeliveriesTitle")}</SectionTitle>
+          <p className="text-ap-small text-muted-foreground">
+            {t("activeDeliveriesHint", { count: activeDeliveries.length })}
+          </p>
+          {activeDeliveries.length === 0 ? (
+            <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
+              <p className="text-ap-small font-semibold text-ink">{t("noActiveSalesTitle")}</p>
+              <p className="mt-1 text-ap-small text-muted-foreground">{t("noActiveSales")}</p>
+              <div className="mt-3 opacity-40">
+                <StatusSteps steps={steps} current={-1} />
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 space-y-2">
+              {activeDeliveries.map((d) => (
+                <ActiveDeliveryCard
+                  key={d.id}
+                  delivery={d}
+                  steps={steps}
+                  locale={locale}
+                  youllGet={t("youllGet")}
+                  inProgress={t("inProgress")}
+                  unscheduled={t("unscheduledShort")}
+                  nextHint={nextStepHint(d.status, t)}
+                  pickupOn={t("pickupOn")}
+                  tonsLabel={t("tonsShort", { n: d.tons })}
+                  labPending={t("labPending")}
+                  labPendingHint={t("labPendingHint")}
+                />
+              ))}
+            </div>
+          )}
 
           <SectionTitle>{t("offersForField")}</SectionTitle>
-          {openOffers.length === 0 ? (
+          <p className="text-ap-small text-muted-foreground">{t("incomingBidsHint")}</p>
+          {incomingBids.length === 0 ? (
             <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
               <p className="text-ap-small font-semibold text-ink">{t("noIncomingOffersTitle")}</p>
               <p className="mt-1 text-ap-small text-muted-foreground">{t("noIncomingOffers")}</p>
             </div>
           ) : (
-            openOffers.map((offer) => (
+            incomingBids.map((offer) => (
               <OfferCard
                 key={offer.id}
                 offer={offer}
                 busy={busyOfferId === offer.id}
                 counter={t("counter")}
                 accept={t("accept")}
+                reject={t("reject")}
                 perKg={t("perKg")}
                 acceptClass="bg-good"
                 onAccept={() => void onAccept(offer)}
                 onCounter={() => void onCounter(offer)}
+                onReject={() => void onRejectBid(offer)}
+              />
+            ))
+          )}
+
+          <SectionTitle>{t("yourSentOffers")}</SectionTitle>
+          <p className="text-ap-small text-muted-foreground">{t("sentOffersHint")}</p>
+          {sentOffers.length === 0 ? (
+            <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
+              <p className="text-ap-small font-semibold text-ink">{t("noSentOffersTitle")}</p>
+              <p className="mt-1 text-ap-small text-muted-foreground">{t("noSentOffers")}</p>
+            </div>
+          ) : (
+            sentOffers.map((offer) => (
+              <SentOfferCard
+                key={offer.id}
+                offer={offer}
+                perKg={t("perKg")}
+                waiting={t("waitingMill")}
+                withdraw={t("withdraw")}
+                busy={busyOfferId === offer.id}
+                onWithdraw={() => void onWithdraw(offer)}
               />
             ))
           )}
@@ -442,19 +556,34 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
           </div>
 
           <SectionTitle>{t("inProgress")}</SectionTitle>
-          {activeDelivery ? (
-            <div className="mt-2 rounded-[18px] border border-line bg-card p-4">
-              <p className="text-ap-card text-ink">{activeDelivery.fieldName ?? "—"}</p>
-              <div className="mt-4">
-                <StatusSteps steps={steps} current={DELIVERY_STEP[activeDelivery.status] ?? 0} />
-              </div>
-            </div>
-          ) : (
+          <p className="text-ap-small text-muted-foreground">
+            {t("activeDeliveriesHint", { count: activeDeliveries.length })}
+          </p>
+          {activeDeliveries.length === 0 ? (
             <div className="mt-2 rounded-[18px] border border-line bg-card p-4">
               <p className="text-center text-ap-body font-semibold text-muted-foreground">{t("nothingOnTheWay")}</p>
               <div className="mt-4 opacity-40">
                 <StatusSteps steps={steps} current={-1} />
               </div>
+            </div>
+          ) : (
+            <div className="mt-2 space-y-2">
+              {activeDeliveries.map((d) => (
+                <ActiveDeliveryCard
+                  key={d.id}
+                  delivery={d}
+                  steps={steps}
+                  locale={locale}
+                  youllGet={t("youllGet")}
+                  inProgress={t("inProgress")}
+                  unscheduled={t("unscheduledShort")}
+                  nextHint={nextStepHint(d.status, t)}
+                  pickupOn={t("pickupOn")}
+                  tonsLabel={t("tonsShort", { n: d.tons })}
+                  labPending={t("labPending")}
+                  labPendingHint={t("labPendingHint")}
+                />
+              ))}
             </div>
           )}
 
@@ -487,24 +616,180 @@ function SectionTitle({ children }: { children: string }) {
   return <h2 className="mt-4 text-[17px] font-extrabold text-ink">{children}</h2>;
 }
 
+function ActiveDeliveryCard({
+  delivery,
+  steps,
+  locale,
+  youllGet,
+  inProgress,
+  unscheduled,
+  nextHint,
+  pickupOn,
+  tonsLabel,
+  labPending,
+  labPendingHint,
+}: {
+  delivery: MarketDelivery;
+  steps: string[];
+  locale: string;
+  youllGet: string;
+  inProgress: string;
+  unscheduled: string;
+  nextHint: string;
+  pickupOn: string;
+  tonsLabel: string;
+  labPending: string;
+  labPendingHint: string;
+}) {
+  const when = formatDeliveryDay(delivery.scheduledFor, locale);
+  const meta = [
+    when ? `${pickupOn} ${when}` : unscheduled,
+    tonsLabel,
+    delivery.lotVariety,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <div className="rounded-[18px] border border-line bg-card p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold tracking-[1px] text-ap-accent uppercase">{inProgress}</p>
+          <p className="text-ap-card text-ink">{delivery.fieldName ?? "—"}</p>
+          <p className="text-ap-body text-muted-foreground">{delivery.processorName ?? "—"}</p>
+          <p className="mt-1 text-ap-small font-semibold text-ink">{meta}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[22px] font-extrabold text-ink">
+            {euroPrice(delivery.tons * 1000 * delivery.pricePerKg)}
+          </p>
+          <p className="text-ap-small text-muted-foreground">{youllGet}</p>
+        </div>
+      </div>
+      <div className="mt-3">
+        <StatusSteps steps={steps} current={DELIVERY_STEP[delivery.status] ?? 0} />
+      </div>
+      <p className="mt-2 text-ap-small font-semibold text-muted-foreground">{nextHint}</p>
+      {delivery.status === "scheduled" || delivery.status === "weighed" ? (
+        <div className="mt-2 flex items-center gap-2.5 rounded-xl bg-ap-accent-soft p-2.5">
+          <FlaskConical className="size-5 shrink-0 text-ap-accent" />
+          <div>
+            <p className="text-ap-body font-bold text-ink">{labPending}</p>
+            <p className="text-ap-small text-muted-foreground">{labPendingHint}</p>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function bestFieldForRequest(
+  fields: { id: string }[],
+  fieldCards: Record<string, FieldMarketCard>,
+  minScore: number,
+): string | undefined {
+  if (!fields.length) return undefined;
+  const fitting = fields.filter((f) => (fieldCards[f.id]?.qualityScore ?? 0) >= minScore);
+  const pool = fitting.length ? fitting : fields;
+  return pool.reduce((best, f) => {
+    const bestScore = fieldCards[best.id]?.qualityScore ?? -1;
+    const score = fieldCards[f.id]?.qualityScore ?? -1;
+    return score > bestScore ? f : best;
+  }).id;
+}
+
+function RequestCard({
+  millName,
+  variety,
+  tons,
+  minScore,
+  region,
+  windowLabel,
+  offerLabel,
+  canSellLabel,
+  filledOf,
+  onOffer,
+}: {
+  millName: string;
+  variety: string;
+  tons: number;
+  filledTons: number;
+  minScore: number;
+  region: string | null;
+  windowLabel: string | null;
+  offerLabel: string;
+  canSellLabel: string;
+  filledOf: string;
+  onOffer: () => void;
+}) {
+  const initials = millName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+
+  return (
+    <div className="rounded-[18px] border border-line bg-card p-3">
+      <div className="flex items-center gap-2.5">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-soft text-ap-body font-extrabold text-ink">
+          {initials || "Μ"}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-ap-card font-extrabold text-ink">{millName}</p>
+          <p className="text-ap-small text-muted-foreground">
+            {variety} · {tons} t
+            {region ? ` · ${region}` : ""}
+            {windowLabel ? ` · ${windowLabel}` : ""}
+          </p>
+        </div>
+        <p className="shrink-0 text-ap-small font-bold text-muted-foreground">
+          {minScore}+
+        </p>
+      </div>
+      <p className="mt-2 text-ap-small text-muted-foreground">{filledOf}</p>
+      <div className="mt-2 flex items-center gap-2.5 rounded-xl bg-soft p-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-ap-body font-bold text-ink">{canSellLabel}</p>
+          <p className="text-ap-small text-muted-foreground">
+            {variety} · min score {minScore}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onOffer}
+          className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full bg-ink px-4 text-ap-btn font-bold text-white"
+        >
+          {offerLabel}
+          <ArrowRight className="size-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function OfferCard({
   offer,
   busy,
   counter,
   accept,
+  reject,
   perKg,
   acceptClass,
   onAccept,
   onCounter,
+  onReject,
 }: {
   offer: MarketOffer;
   busy: boolean;
   counter: string;
   accept: string;
+  reject: string;
   perKg: string;
   acceptClass: string;
   onAccept: () => void;
   onCounter: () => void;
+  onReject: () => void;
 }) {
   return (
     <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
@@ -526,7 +811,15 @@ function OfferCard({
       {busy ? (
         <p className="mt-2 text-ap-small font-semibold text-muted-foreground">…</p>
       ) : null}
-      <div className="mt-3 flex justify-end gap-2">
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onReject}
+          className="h-9 rounded-full border border-line bg-card px-4 text-ap-pill font-bold text-muted-foreground disabled:opacity-50"
+        >
+          {busy ? "…" : reject}
+        </button>
         <button
           type="button"
           disabled={busy || offer.status === "countered"}
@@ -542,6 +835,54 @@ function OfferCard({
           className={cn("h-9 rounded-full px-4 text-ap-pill font-bold text-white disabled:opacity-50", acceptClass)}
         >
           {busy ? "…" : accept}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Flow B outbound — waiting for the mill; farmer can withdraw a mistaken offer. */
+function SentOfferCard({
+  offer,
+  perKg,
+  waiting,
+  withdraw,
+  busy,
+  onWithdraw,
+}: {
+  offer: MarketOffer;
+  perKg: string;
+  waiting: string;
+  withdraw: string;
+  busy: boolean;
+  onWithdraw: () => void;
+}) {
+  return (
+    <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
+      <div className="flex items-center gap-2.5">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-soft text-ap-body font-extrabold text-ink">
+          {offer.processorName.slice(0, 2).toUpperCase()}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-ap-card text-ink">{offer.processorName}</p>
+          <p className="text-ap-small text-muted-foreground">
+            {offer.fieldName ?? offer.lotVariety ?? "—"} · {offer.tons} t
+          </p>
+        </div>
+        <p className="text-[22px] font-extrabold text-ink">
+          {euroPrice(offer.pricePerKg)}
+          <span className="text-ap-small font-medium text-muted-foreground"> {perKg}</span>
+        </p>
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <p className="text-ap-small font-semibold text-ap-accent">{waiting}</p>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onWithdraw}
+          className="h-8 rounded-full border border-line px-3 text-ap-pill font-bold text-muted-foreground disabled:opacity-50"
+        >
+          {busy ? "…" : withdraw}
         </button>
       </div>
     </div>

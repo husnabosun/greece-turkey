@@ -6,6 +6,7 @@ import {
   ArrowLeftRight,
   ChevronUp,
   ClipboardList,
+  Inbox,
   LayoutDashboard,
   LogOut,
   Search,
@@ -18,12 +19,17 @@ import { Initials, initialsOf } from "@/features/marketplace/processor-kit";
 import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 
-type NavItem = { labelKey: "overview" | "findOlives" | "requests" | "deliveries"; href: string; Icon: LucideIcon };
+type NavItem = {
+  labelKey: "overview" | "findOlives" | "requests" | "offers" | "deliveries";
+  href: string;
+  Icon: LucideIcon;
+};
 
 const NAV: NavItem[] = [
   { labelKey: "overview", href: "/processor/overview", Icon: LayoutDashboard },
   { labelKey: "findOlives", href: "/processor/lots", Icon: Search },
   { labelKey: "requests", href: "/processor/requests", Icon: ClipboardList },
+  { labelKey: "offers", href: "/processor/offers", Icon: Inbox },
   { labelKey: "deliveries", href: "/processor/deliveries", Icon: Truck },
 ];
 

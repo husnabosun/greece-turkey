@@ -26,7 +26,7 @@ import { ApCard } from "@/shared/components/brand/ap-card";
 import { Pill } from "@/shared/components/brand/pill";
 import { Chip } from "@/shared/components/brand/chip";
 import { StatusSteps } from "@/shared/components/brand/status-steps";
-import { Link } from "@/shared/i18n/navigation";
+import { Link, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 import { euroPrice, euroTotal, saleTotal } from "@/features/marketplace/pricing";
 import { trustBadges } from "@/features/marketplace/badges";
@@ -67,9 +67,11 @@ import {
   advanceDelivery,
   counterIncomingOffer,
   createBuyRequest,
+  deactivateBuyRequest,
   harvestRangeLabel,
   lotPlaceLabel,
   placeLotOffer,
+  rejectOffer,
   scheduleDelivery,
   useProcessorMarket,
   type ProcessorDelivery,
@@ -77,10 +79,47 @@ import {
   type ProcessorOffer,
 } from "./use-processor-market";
 
-const PROVINCES = ["Aydın", "Balıkesir", "Crete", "İzmir", "Messinia", "Peloponnese", "Laconia"];
+const PROVINCES = ["Crete", "Messinia", "Peloponnese", "Laconia", "Aydın", "Balıkesir", "İzmir"] as const;
 const WINDOW_KEYS = ["window1", "window2", "window3", "window4"] as const;
-const SCORE_OPTIONS = ["70", "75", "80", "85"];
+const SCORE_OPTIONS = ["70", "75", "80", "85"] as const;
 const DEMO_EXCHANGE = 0.8;
+
+type SortKey = "score" | "price" | "harvest" | "tons";
+
+const REGION_I18N: Record<(typeof PROVINCES)[number], { en: string; el: string; tr: string }> = {
+  Crete: { en: "Crete", el: "Κρήτη", tr: "Girit" },
+  Messinia: { en: "Messenia", el: "Μεσσηνία", tr: "Messinya" },
+  Peloponnese: { en: "Peloponnese", el: "Πελοπόννησος", tr: "Peloponez" },
+  Laconia: { en: "Laconia", el: "Λακωνία", tr: "Lakonya" },
+  Aydın: { en: "Aydın", el: "Αϊδίνιο", tr: "Aydın" },
+  Balıkesir: { en: "Balıkesir", el: "Μπαλικεσίρ", tr: "Balıkesir" },
+  İzmir: { en: "İzmir", el: "Σμύρνη", tr: "İzmir" },
+};
+
+function regionLabel(raw: string, locale: string): string {
+  const hit = PROVINCES.find(
+    (p) =>
+      p.toLowerCase() === raw.toLowerCase() ||
+      REGION_I18N[p].en.toLowerCase() === raw.toLowerCase() ||
+      REGION_I18N[p].el.toLowerCase() === raw.toLowerCase() ||
+      REGION_I18N[p].tr.toLowerCase() === raw.toLowerCase(),
+  );
+  if (!hit) return raw;
+  const lang = locale.startsWith("el") ? "el" : locale.startsWith("tr") ? "tr" : "en";
+  return REGION_I18N[hit][lang];
+}
+
+function regionMatches(lotRegion: string, place: string, selected: string): boolean {
+  if (selected === "all") return true;
+  const needle = selected.toLowerCase();
+  if (lotRegion.toLowerCase() === needle || place.toLowerCase().includes(needle)) return true;
+  const hit = PROVINCES.find((p) => p === selected);
+  if (!hit) return lotRegion === selected || place.includes(selected);
+  const aliases = [hit, REGION_I18N[hit].en, REGION_I18N[hit].el, REGION_I18N[hit].tr].map((s) =>
+    s.toLowerCase(),
+  );
+  return aliases.some((a) => lotRegion.toLowerCase() === a || place.toLowerCase().includes(a));
+}
 
 function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"processor">>): LotBadge[] {
   const trust = trustBadges(
@@ -198,6 +237,7 @@ export function ProcessorOverviewScreen() {
   const t = useTranslations("processor");
   const tNav = useTranslations("processorNav");
   const locale = useLocale();
+  const router = useRouter();
   const varietyLabel = useVarietyLabel();
   const { lots, offers, requests, deliveries, supply, loading, error, reload } = useProcessorMarket();
   const [company, setCompany] = useState(tNav("processorFallback"));
@@ -284,6 +324,23 @@ export function ProcessorOverviewScreen() {
         return;
       }
       toast.success(t("counterSentDetail"));
+      await reload();
+    } finally {
+      setBusyOfferId(null);
+    }
+  };
+
+  const onReject = async (offer: ProcessorOffer) => {
+    if (!window.confirm(t("rejectConfirm"))) return;
+    setBusyOfferId(offer.id);
+    try {
+      const res = await rejectOffer(offer.id);
+      if (!res.ok) {
+        toast.error(res.error ?? t("saveFailed"));
+        return;
+      }
+      toast.success(t("rejectedOk"));
+      setAcceptOffer(null);
       await reload();
     } finally {
       setBusyOfferId(null);
@@ -538,12 +595,50 @@ export function ProcessorOverviewScreen() {
       <Dialog
         open={acceptOffer != null}
         onClose={() => setAcceptOffer(null)}
-        title={t("acceptScheduleTitle")}
-        subtitle={t("acceptScheduleHint")}
+        title={t("offerDetailTitle")}
+        subtitle={t("offerDetailHint")}
         actionLabel={busyOfferId ? t("loading") : t("accept")}
         actionDisabled={busyOfferId != null}
         onAction={() => void onAcceptConfirm()}
       >
+        {acceptOffer ? (
+          <div className="mb-4 space-y-2 rounded-xl bg-soft p-3">
+            <p className="text-[15px] font-extrabold text-ink">
+              {acceptOffer.lot
+                ? lotPlaceLabel(acceptOffer.lot, t("anonymousGrove"))
+                : t("anonymousGrove")}
+            </p>
+            <p className="text-[13px] font-medium text-muted-foreground">
+              {acceptOffer.lot
+                ? t("incomingSub", {
+                    variety: varietyLabel(acceptOffer.lot.variety),
+                    tons: acceptOffer.tons,
+                    region: acceptOffer.lot.region,
+                  })
+                : `${acceptOffer.tons} t`}
+            </p>
+            <p className="text-[18px] font-extrabold text-ink">
+              {t("asksPrice", { price: euroPrice(acceptOffer.pricePerKg) })}
+              <span className="ml-2 text-[12px] font-semibold text-muted-foreground">
+                {t("approx", { total: euroTotal(saleTotal(acceptOffer.tons, acceptOffer.pricePerKg)) })}
+              </span>
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <ApButton
+                label={busyOfferId ? t("loading") : t("reject")}
+                variant="outline"
+                disabled={busyOfferId != null}
+                onClick={() => void onReject(acceptOffer)}
+              />
+              <ApButton
+                label={busyOfferId ? t("loading") : t("counter")}
+                variant="outline"
+                disabled={busyOfferId != null}
+                onClick={() => void onCounter(acceptOffer)}
+              />
+            </div>
+          </div>
+        ) : null}
         <DayChipPicker
           label={t("arriveOn")}
           days={weekDates}
@@ -556,19 +651,15 @@ export function ProcessorOverviewScreen() {
 
       <div className="grid grid-cols-1 gap-6 min-[900px]:grid-cols-[minmax(0,1fr)_300px]">
         <div id="incoming-offers" className="scroll-mt-4 min-w-0 space-y-6">
-          <Panel
-            title={t("incomingOffers")}
-            subtitle={t("incomingHint")}
-            right={<Pill tone="neutral">{t("demoPrice", { price: euroPrice(DEMO_EXCHANGE) })}</Pill>}
-          >
+          <Panel title={t("incomingOffers")} subtitle={t("incomingHint")}>
             {incoming.length === 0 ? (
               <EmptyBlock
                 icon={<Inbox className="size-5" />}
                 title={t("noOpenOffersTitle")}
                 body={t("noOpenOffersHint")}
                 action={
-                  <Link href="/processor/lots">
-                    <ApButton label={tNav("findOlives")} variant="dark" icon={<Search className="size-4" />} />
+                  <Link href="/processor/requests">
+                    <ApButton label={tNav("requests")} variant="dark" icon={<ClipboardList className="size-4" />} />
                   </Link>
                 }
               />
@@ -582,7 +673,7 @@ export function ProcessorOverviewScreen() {
                   <LotRow
                     key={offer.id}
                     first={i === 0}
-                    href={lot ? `/processor/lots/${lot.id}` : "/processor/lots"}
+                    href={`/processor/offers/${offer.id}`}
                     lead={
                       <span className="flex size-11 items-center justify-center rounded-xl bg-soft">
                         <MapPin className="size-5 text-ink" />
@@ -603,26 +694,20 @@ export function ProcessorOverviewScreen() {
                     value={
                       <>
                         <Amount value={euroPrice(offer.pricePerKg)} unit="/kg" />
+                        <span className="text-[11px] font-semibold text-ink">
+                          {t("asksPrice", { price: euroPrice(offer.pricePerKg) })}
+                        </span>
                         <span className="text-[11px] font-medium text-muted-foreground">
                           {t("approx", { total: euroTotal(saleTotal(offer.tons, offer.pricePerKg)) })}
                         </span>
                       </>
                     }
                     actions={
-                      <>
-                        <ApButton
-                          label={busy ? t("loading") : t("counter")}
-                          variant="outline"
-                          disabled={busy}
-                          onClick={() => void onCounter(offer)}
-                        />
-                        <ApButton
-                          label={busy ? t("loading") : t("accept")}
-                          variant="dark"
-                          disabled={busy}
-                          onClick={() => openAccept(offer)}
-                        />
-                      </>
+                      <ApButton
+                        label={t("openOffer")}
+                        variant="dark"
+                        onClick={() => router.push(`/processor/offers/${offer.id}`)}
+                      />
                     }
                   />
                 );
@@ -763,271 +848,122 @@ export function ProcessorOverviewScreen() {
   );
 }
 
-export function ProcessorLotsScreen() {
+export { ProcessorLotsScreen } from "./processor-lots-screen";
+
+/** Dedicated inbox: Flow B farmer offers in, Flow A mill bids out. */
+export function ProcessorOffersScreen() {
   const t = useTranslations("processor");
-  const locale = useLocale();
+  const tNav = useTranslations("processorNav");
   const varietyLabel = useVarietyLabel();
-  const varietyOptions = useMemo(() => marketplaceVarietyOptions(locale), [locale]);
-  const { lots, offers, loading, error, reload } = useProcessorMarket();
-  const placeById = useLotPlaceLabels(lots);
-  const [useFilter, setUseFilter] = useState<"all" | "oil" | "table">("all");
-  const [variety, setVariety] = useState("all");
-  const [province, setProvince] = useState("all");
-  const [minScore, setMinScore] = useState("0");
-  const [noBanned, setNoBanned] = useState(false);
-  const [labSuggested, setLabSuggested] = useState(false);
-  const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
-  const [offerLot, setOfferLot] = useState<ProcessorLot | null>(null);
-  const [offerTons, setOfferTons] = useState("5");
-  const [offerPrice, setOfferPrice] = useState("0.80");
-  const [offerArrive, setOfferArrive] = useState(() => addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
-  const offerWeek = useMemo(() => nextSevenDays(), []);
-  const mapToken = publicEnv.NEXT_PUBLIC_MAPBOX_TOKEN || undefined;
+  const { offers, loading, error } = useProcessorMarket();
 
-  const regions = useMemo(() => {
-    const fromGeocode = Object.values(placeById)
-      .map((p) => p.split(",").slice(1).join(",").trim())
-      .filter(Boolean);
-    const set = new Set([...lots.map((l) => l.region).filter(Boolean), ...fromGeocode]);
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [lots, placeById]);
-
-  const minScores = useMemo(
-    () => [
-      { value: "0", label: t("anyScore") },
-      ...SCORE_OPTIONS.map((score) => ({ value: score, label: t("scorePlus", { score }) })),
-    ],
-    [t],
+  const incoming = offers.filter(
+    (o) => o.initiatedBy === "farmer" && (o.status === "pending" || o.status === "countered"),
   );
-
-  const shown = useMemo(() => {
-    const min = Number(minScore) || 0;
-    return lots
-      .filter((l) => l.status === "listed")
-      .filter((l) => (useFilter === "all" ? true : l.useType === useFilter))
-      .filter((l) => (variety === "all" ? true : l.variety === variety))
-      .filter((l) => {
-        if (province === "all") return true;
-        const place = placeById[l.id] ?? "";
-        return l.region === province || place.includes(province);
-      })
-      .filter((l) => (l.qualityScore ?? 0) >= min)
-      .filter((l) => (noBanned ? !l.hasBannedSpray : true))
-      .filter((l) => (labSuggested ? l.labResult == null && (l.qualityScore ?? 100) < 80 : true));
-  }, [lots, useFilter, variety, province, minScore, noBanned, labSuggested, placeById]);
-
-  const mapPoints = useMemo(
-    () =>
-      shown
-        .filter((l) => l.lat != null && l.lon != null)
-        .map((l) => {
-          const place = lotPlaceLabel(l, t("anonymousGrove"), placeById[l.id]);
-          return {
-            id: l.id,
-            lat: l.lat!,
-            lon: l.lon!,
-            label: place,
-            score: l.qualityScore,
-            title: `${varietyLabel(l.variety)} · ${l.tons} t`,
-            subtitle: t("lotSub", {
-              place,
-              harvest: harvestRangeLabel(l.harvestStart, l.harvestEnd),
-              use: l.useType === "table" ? t("filterTable") : t("filterOil"),
-            }),
-            priceLabel:
-              l.pricePerKg != null ? `${euroPrice(l.pricePerKg)} /kg · ${t("farmerPrice")}` : t("openToOffers"),
-            useLabel: l.useType === "table" ? t("filterTable") : t("filterOil"),
-            harvestLabel: harvestRangeLabel(l.harvestStart, l.harvestEnd),
-          };
-        }),
-    [shown, placeById, t, varietyLabel],
+  const outgoing = offers.filter(
+    (o) => o.initiatedBy === "processor" && (o.status === "pending" || o.status === "countered"),
   );
-
-  useEffect(() => {
-    if (selectedMapId && !shown.some((l) => l.id === selectedMapId)) {
-      setSelectedMapId(null);
-    }
-  }, [shown, selectedMapId]);
-
-  const alreadyOffered = (lotId: string) =>
-    offers.some((o) => o.lotId === lotId && o.initiatedBy === "processor" && (o.status === "pending" || o.status === "countered"));
-
-  const submitOffer = async () => {
-    if (!offerLot?.farmerId) {
-      toast.error(t("identityHidden"));
-      return;
-    }
-    const tons = Number(offerTons);
-    const price = Number(offerPrice);
-    if (!(tons > 0) || !(price > 0)) {
-      toast.error(t("invalidOfferValues"));
-      return;
-    }
-    toast.message(t("sendingOffer"));
-    const deliveryInDays = Math.max(0, Math.round((new Date(`${offerArrive}T12:00:00`).getTime() - new Date(`${todayIsoDate()}T12:00:00`).getTime()) / 86_400_000));
-    const res = await placeLotOffer({
-      lotId: offerLot.id,
-      farmerId: offerLot.farmerId,
-      tons,
-      pricePerKg: price,
-      deliveryInDays,
-    });
-    if (!res.ok) {
-      toast.error(res.error ?? t("saveFailed"));
-      return;
-    }
-    toast.success(t("offerSentDetail"));
-    setOfferLot(null);
-    await reload();
-  };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <PageHeader title={t("findTitle")} subtitle={t("findSubtitle")} />
-        <Segmented
-          value={useFilter}
-          onChange={setUseFilter}
-          options={[
-            { value: "all", label: t("filterAll") },
-            { value: "oil", label: t("filterOil") },
-            { value: "table", label: t("filterTable") },
-          ]}
-        />
-      </div>
+    <div className="mx-auto w-full max-w-[1100px] space-y-6 px-4 py-6 sm:px-6">
+      <PageHeader title={t("offersTitle")} subtitle={t("offersSubtitle")} />
+      {error ? <p className="text-ap-small text-risk">{error}</p> : null}
+      {loading ? <p className="text-ap-small text-muted-foreground">{t("loading")}</p> : null}
 
-      {error === "needSupabase" || error === "needLogin" ? (
-        <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{t(error)}</ApCard>
-      ) : null}
-
-      <LotsMap
-        token={mapToken}
-        points={mapPoints}
-        selectedId={selectedMapId}
-        onSelect={setSelectedMapId}
-        labels={{
-          locate: t("mapLocate"),
-          zoomIn: t("mapZoomIn"),
-          zoomOut: t("mapZoomOut"),
-          needToken: t("mapNeedToken"),
-          empty: t("mapEmpty"),
-          qualityScore: t("qualityScore"),
-          openLot: t("openLot"),
-        }}
-      />
-
-      <div className="space-y-3">
-        <ChipGroup
-          label={t("variety")}
-          value={variety}
-          onChange={setVariety}
-          options={[{ value: "all", label: t("filterAll") }, ...varietyOptions.map((v) => ({ value: v.value, label: v.label }))]}
-        />
-        <ChipGroup
-          label={t("province")}
-          value={province}
-          onChange={setProvince}
-          options={[
-            { value: "all", label: t("filterAll") },
-            ...(regions.length ? regions : PROVINCES).map((v) => ({ value: v, label: v })),
-          ]}
-        />
-        <ChipGroup label={t("minScore")} value={minScore} onChange={setMinScore} options={minScores} />
-        <div className="flex flex-wrap gap-2">
-          <Chip tone="black" on={noBanned} onClick={() => setNoBanned((v) => !v)}>
-            <span className={cn("text-[13px] font-bold", noBanned ? "text-white" : "text-ink")}>{t("noBannedProducts")}</span>
-          </Chip>
-          <Chip tone="black" on={labSuggested} onClick={() => setLabSuggested((v) => !v)}>
-            <span className={cn("inline-flex items-center gap-1.5 text-[13px] font-bold", labSuggested ? "text-white" : "text-ink")}>
-              <FlaskConical className="size-3.5" />
-              {t("labTestSuggested")}
-            </span>
-          </Chip>
-        </div>
-      </div>
-
-      <Panel title={t("lotsCount", { count: shown.length })} subtitle={t("bestScoreFirst")}>
-        {shown.length === 0 ? (
-          <div className="border-t border-line px-4 py-10 text-center text-[13px] font-semibold text-muted-foreground">
-            {loading ? t("loading") : t("noLotsMatch")}
-          </div>
+      <Panel title={t("incomingOffers")} subtitle={t("incomingHint")}>
+        {incoming.length === 0 ? (
+          <EmptyBlock
+            icon={<Inbox className="size-5" />}
+            title={t("noOpenOffersTitle")}
+            body={t("noOpenOffersHint")}
+            action={
+              <Link href="/processor/requests">
+                <ApButton label={tNav("requests")} variant="dark" icon={<ClipboardList className="size-4" />} />
+              </Link>
+            }
+          />
         ) : (
-          shown.map((lot, i) => {
-            const badges = lotBadgesFor(lot, t);
-            const sent = alreadyOffered(lot.id);
-            const place = lotPlaceLabel(lot, t("anonymousGrove"), placeById[lot.id]);
-            const selected = selectedMapId === lot.id;
+          incoming.map((offer, i) => {
+            const lot = offer.lot;
+            const place = lot ? lotPlaceLabel(lot, t("anonymousGrove")) : t("anonymousGrove");
             return (
-              <div
-                key={lot.id}
-                className={cn(selected && "bg-good-soft/40")}
-                onMouseEnter={() => setSelectedMapId(lot.id)}
-              >
-                <LotRow
-                  first={i === 0}
-                  href={`/processor/lots/${lot.id}`}
-                  lead={
-                    <span className="flex size-11 items-center justify-center rounded-xl bg-good-soft">
-                      <Leaf className="size-5 text-good" />
+              <LotRow
+                key={offer.id}
+                first={i === 0}
+                href={`/processor/offers/${offer.id}`}
+                lead={
+                  <span className="flex size-11 items-center justify-center rounded-xl bg-soft">
+                    <MapPin className="size-5 text-ink" />
+                  </span>
+                }
+                title={place}
+                sub={
+                  lot
+                    ? t("incomingSub", {
+                        variety: varietyLabel(lot.variety),
+                        tons: offer.tons,
+                        region: lot.region,
+                      })
+                    : `${offer.tons} t`
+                }
+                badges={<span />}
+                score={lot?.qualityScore != null ? <ScoreBox score={lot.qualityScore} /> : <span />}
+                value={
+                  <>
+                    <Amount value={euroPrice(offer.pricePerKg)} unit="/kg" />
+                    <span className="text-[11px] font-semibold text-ink">
+                      {t("asksPrice", { price: euroPrice(offer.pricePerKg) })}
                     </span>
-                  }
-                  title={`${varietyLabel(lot.variety)} · ${lot.tons} t`}
-                  sub={t("lotSub", {
-                    place,
-                    harvest: harvestRangeLabel(lot.harvestStart, lot.harvestEnd),
-                    use: lot.useType === "table" ? t("filterTable") : t("filterOil"),
-                  })}
-                  badges={<LotBadges badges={badges} max={2} />}
-                  score={lot.qualityScore != null ? <ScoreBox score={lot.qualityScore} /> : <span />}
-                  value={
-                    lot.pricePerKg != null ? (
-                      <>
-                        <Amount value={euroPrice(lot.pricePerKg)} unit="/kg" />
-                        <span className="text-[11px] font-medium text-muted-foreground">{t("farmerPrice")}</span>
-                      </>
-                    ) : (
-                      <span className="text-[13px] font-semibold text-muted-foreground">{t("openToOffers")}</span>
-                    )
-                  }
-                  actions={
-                    <ApButton
-                      label={sent ? t("offerSent") : t("makeOffer")}
-                      variant={sent ? "outline" : "dark"}
-                      disabled={sent}
-                      onClick={() => {
-                        setOfferLot(lot);
-                        setOfferTons(String(Math.min(5, lot.tons)));
-                        setOfferPrice(String(lot.pricePerKg ?? DEMO_EXCHANGE));
-                        setOfferArrive(addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
-                      }}
-                    />
-                  }
-                />
-              </div>
+                  </>
+                }
+                actions={
+                  <Link href={`/processor/offers/${offer.id}`}>
+                    <ApButton label={t("openOffer")} variant="dark" />
+                  </Link>
+                }
+              />
             );
           })
         )}
       </Panel>
 
-      <Dialog
-        open={offerLot != null}
-        onClose={() => setOfferLot(null)}
-        title={t("makeOffer")}
-        subtitle={offerLot ? `${varietyLabel(offerLot.variety)} · ${offerLot.tons} t` : undefined}
-        actionLabel={t("sendOffer")}
-        onAction={() => void submitOffer()}
-      >
-        <TextField label={t("tons")} value={offerTons} onChange={setOfferTons} suffix="t" inputMode="decimal" />
-        <TextField label={t("price")} value={offerPrice} onChange={setOfferPrice} suffix="€/kg" inputMode="decimal" />
-        <DayChipPicker
-          label={t("arriveOn")}
-          days={offerWeek}
-          value={offerArrive}
-          onChange={setOfferArrive}
-          formatDay={(iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(locale, { weekday: "short" })}
-          todayLabel={t("todayShort")}
-        />
-      </Dialog>
+      <Panel title={t("outgoingOffers")} subtitle={t("outgoingHint")}>
+        {outgoing.length === 0 ? (
+          <EmptyBlock
+            icon={<Search className="size-5" />}
+            title={t("noOutgoingTitle")}
+            body={t("noOutgoingOffers")}
+            action={
+              <Link href="/processor/lots">
+                <ApButton label={tNav("findOlives")} variant="outline" icon={<Search className="size-4" />} />
+              </Link>
+            }
+          />
+        ) : (
+          outgoing.map((offer) => {
+            const lot = offer.lot;
+            const place = lot ? lotPlaceLabel(lot, t("anonymousGrove")) : t("anonymousGrove");
+            return (
+              <Link
+                key={offer.id}
+                href={`/processor/offers/${offer.id}`}
+                className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3 hover:bg-background"
+              >
+                <div>
+                  <p className="text-[15px] font-extrabold text-ink">{place}</p>
+                  <p className="text-[12px] font-medium text-muted-foreground">
+                    {t("waitingFarmerAnswer", {
+                      price: euroPrice(offer.pricePerKg),
+                      tons: offer.tons,
+                    })}
+                  </p>
+                </div>
+                <Pill tone="warn">{t("pendingStatus")}</Pill>
+              </Link>
+            );
+          })
+        )}
+      </Panel>
     </div>
   );
 }
@@ -1037,7 +973,7 @@ export function ProcessorRequestsScreen() {
   const locale = useLocale();
   const varietyLabel = useVarietyLabel();
   const varietyOptions = useMemo(() => marketplaceVarietyOptions(locale), [locale]);
-  const { requests, loading, error, reload } = useProcessorMarket();
+  const { requests, offers, loading, error, reload } = useProcessorMarket();
   const [open, setOpen] = useState(false);
   const [variety, setVariety] = useState(() => defaultVarietySlug(resolveOliveCountry({ locale }).country));
   const [tons, setTons] = useState("10");
@@ -1046,8 +982,19 @@ export function ProcessorRequestsScreen() {
   const [province, setProvince] = useState("Peloponnese");
   const [noBanned, setNoBanned] = useState<"required" | "optional">("required");
   const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [acceptOffer, setAcceptOffer] = useState<ProcessorOffer | null>(null);
+  const [acceptDate, setAcceptDate] = useState(() => addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
+  const weekDates = useMemo(() => nextSevenDays(), []);
 
   const openRequests = requests.filter((r) => r.active);
+  const offersForRequest = (requestId: string) =>
+    offers.filter(
+      (o) =>
+        o.buyRequestId === requestId &&
+        o.initiatedBy === "farmer" &&
+        (o.status === "pending" || o.status === "countered"),
+    );
 
   const onCreate = async () => {
     const tonsN = Number(tons);
@@ -1074,6 +1021,79 @@ export function ProcessorRequestsScreen() {
     await reload();
   };
 
+  const onDeleteRequest = async (requestId: string) => {
+    if (!window.confirm(t("deleteRequestConfirm"))) return;
+    setBusyId(requestId);
+    try {
+      const res = await deactivateBuyRequest(requestId);
+      if (!res.ok) {
+        toast.error(res.error ?? t("saveFailed"));
+        return;
+      }
+      toast.success(t("requestDeleted"));
+      await reload();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onAcceptConfirm = async () => {
+    if (!acceptOffer) return;
+    setBusyId(acceptOffer.id);
+    try {
+      const res = await acceptIncomingOffer(acceptOffer.id, { scheduledFor: acceptDate });
+      if (!res.ok) {
+        toast.error(res.error ?? t("saveFailed"));
+        return;
+      }
+      toast.success(t("acceptedScheduled", { date: acceptDate }));
+      setAcceptOffer(null);
+      await reload();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onRejectOffer = async (offer: ProcessorOffer) => {
+    if (!window.confirm(t("rejectConfirm"))) return;
+    setBusyId(offer.id);
+    try {
+      const res = await rejectOffer(offer.id);
+      if (!res.ok) {
+        toast.error(res.error ?? t("saveFailed"));
+        return;
+      }
+      toast.success(t("rejectedOk"));
+      setAcceptOffer(null);
+      await reload();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onCounterOffer = async (offer: ProcessorOffer) => {
+    const suggested = Math.max(0.05, Math.round((offer.pricePerKg - 0.05) * 100) / 100);
+    const raw = window.prompt(t("counterPrompt"), String(suggested));
+    if (raw == null) return;
+    const next = Number(raw.replace(",", "."));
+    if (!Number.isFinite(next) || next <= 0) {
+      toast.error(t("invalidPrice"));
+      return;
+    }
+    setBusyId(offer.id);
+    try {
+      const res = await counterIncomingOffer(offer, next);
+      if (!res.ok) {
+        toast.error(res.error ?? t("saveFailed"));
+        return;
+      }
+      toast.success(t("counterSentDetail"));
+      await reload();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -1088,6 +1108,51 @@ export function ProcessorRequestsScreen() {
         <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{t(error)}</ApCard>
       ) : null}
 
+      <Dialog
+        open={acceptOffer != null}
+        onClose={() => setAcceptOffer(null)}
+        title={t("offerDetailTitle")}
+        subtitle={t("offerDetailHint")}
+        actionLabel={busyId ? t("loading") : t("accept")}
+        actionDisabled={busyId != null}
+        onAction={() => void onAcceptConfirm()}
+      >
+        {acceptOffer ? (
+          <div className="mb-4 space-y-2 rounded-xl bg-soft p-3">
+            <p className="text-[18px] font-extrabold text-ink">
+              {t("asksPrice", { price: euroPrice(acceptOffer.pricePerKg) })}
+            </p>
+            <p className="text-[13px] text-muted-foreground">
+              {acceptOffer.tons} t · {t("approx", { total: euroTotal(saleTotal(acceptOffer.tons, acceptOffer.pricePerKg)) })}
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <ApButton
+                label={t("reject")}
+                variant="outline"
+                disabled={busyId != null}
+                onClick={() => void onRejectOffer(acceptOffer)}
+              />
+              <ApButton
+                label={t("counter")}
+                variant="outline"
+                disabled={busyId != null}
+                onClick={() => void onCounterOffer(acceptOffer)}
+              />
+            </div>
+          </div>
+        ) : null}
+        <DayChipPicker
+          label={t("arriveOn")}
+          days={weekDates}
+          value={acceptDate}
+          onChange={setAcceptDate}
+          formatDay={(iso) =>
+            new Date(`${iso}T12:00:00`).toLocaleDateString(locale, { weekday: "short", day: "numeric" })
+          }
+          todayLabel={t("todayShort")}
+        />
+      </Dialog>
+
       <Panel title={t("openRequestsCount", { count: openRequests.length })}>
         {openRequests.length === 0 ? (
           <div className="border-t border-line px-4 py-10 text-center text-[13px] font-semibold text-muted-foreground">
@@ -1096,26 +1161,66 @@ export function ProcessorRequestsScreen() {
         ) : (
           openRequests.map((req, i) => {
             const pct = req.tons > 0 ? Math.min(100, Math.round((req.filledTons / req.tons) * 100)) : 0;
+            const linked = offersForRequest(req.id);
             return (
-              <div key={req.id} className={cn("flex flex-wrap items-center gap-4 px-4 py-4", i > 0 && "border-t border-line")}>
-                <Initials text={initialsOf(varietyLabel(req.variety))} size={44} />
-                <div className="min-w-[200px] flex-1">
-                  <p className="text-[16px] font-extrabold text-ink">
-                    {varietyLabel(req.variety)} · {req.tons} t
-                  </p>
-                  <p className="text-[13px] font-medium text-muted-foreground">
-                    {[req.region, req.windowLabel, t("scorePlus", { score: String(req.minScore) })]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                  <div className="mt-2 h-2 max-w-[280px] overflow-hidden rounded-full bg-soft">
-                    <div className="h-full rounded-full bg-ink" style={{ width: `${pct}%` }} />
+              <div key={req.id} className={cn("px-4 py-4", i > 0 && "border-t border-line")}>
+                <div className="flex flex-wrap items-center gap-4">
+                  <Initials text={initialsOf(varietyLabel(req.variety))} size={44} />
+                  <div className="min-w-[200px] flex-1">
+                    <p className="text-[16px] font-extrabold text-ink">
+                      {varietyLabel(req.variety)} · {req.tons} t
+                    </p>
+                    <p className="text-[13px] font-medium text-muted-foreground">
+                      {[req.region, req.windowLabel, t("scorePlus", { score: String(req.minScore) })]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    <div className="mt-2 h-2 max-w-[280px] overflow-hidden rounded-full bg-soft">
+                      <div className="h-full rounded-full bg-ink" style={{ width: `${pct}%` }} />
+                    </div>
+                    <p className="mt-1 text-[11px] font-semibold text-muted-foreground">
+                      {t("filledPct", { pct })} · {t("filledOf", { filled: req.filledTons, total: req.tons })}
+                    </p>
                   </div>
-                  <p className="mt-1 text-[11px] font-semibold text-muted-foreground">
-                    {t("filledPct", { pct })} · {t("filledOf", { filled: req.filledTons, total: req.tons })}
-                  </p>
+                  {req.noBanned ? <Pill tone="good">{t("noBannedProducts")}</Pill> : null}
+                  <ApButton
+                    label={busyId === req.id ? t("loading") : t("deleteRequest")}
+                    variant="outline"
+                    disabled={busyId != null}
+                    onClick={() => void onDeleteRequest(req.id)}
+                  />
                 </div>
-                {req.noBanned ? <Pill tone="good">{t("noBannedProducts")}</Pill> : null}
+
+                <div className="mt-3 rounded-xl border border-dashed border-line bg-background/60 p-3">
+                  <p className="text-[12px] font-bold text-ink">
+                    {t("offersOnRequest", { count: linked.length })}
+                  </p>
+                  {linked.length === 0 ? (
+                    <p className="mt-1 text-[12px] text-muted-foreground">{t("noOffersOnRequest")}</p>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      {linked.map((offer) => (
+                        <div
+                          key={offer.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-card px-3 py-2"
+                        >
+                          <div>
+                            <p className="text-[14px] font-extrabold text-ink">
+                              {t("asksPrice", { price: euroPrice(offer.pricePerKg) })}
+                            </p>
+                            <p className="text-[12px] text-muted-foreground">
+                              {offer.tons} t ·{" "}
+                              {t("approx", { total: euroTotal(saleTotal(offer.tons, offer.pricePerKg)) })}
+                            </p>
+                          </div>
+                          <Link href={`/processor/offers/${offer.id}`}>
+                            <ApButton label={t("openOffer")} variant="dark" />
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })

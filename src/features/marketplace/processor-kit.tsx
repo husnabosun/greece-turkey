@@ -220,13 +220,19 @@ export const initialsOf = (name: string) =>
     .map((w) => w[0]?.toLocaleUpperCase("tr-TR") ?? "")
     .join("");
 
+function scoreTone(score: number) {
+  if (score >= 85) return { bg: "bg-good-soft", text: "text-good" };
+  if (score >= 70) return { bg: "bg-warn-soft", text: "text-warn-text" };
+  return { bg: "bg-risk-soft", text: "text-risk" };
+}
+
 export function ScoreBox({ score, large = false }: { score: number; large?: boolean }) {
   const t = useTranslations("processor");
-  const low = score < 70;
+  const tone = scoreTone(score);
   return (
-    <div className={cn("flex flex-col items-center", large ? "rounded-xl px-3 py-2" : "rounded-lg px-2 py-1", low ? "bg-risk-soft" : "bg-good-soft")}>
-      <span className={cn("text-[10px] leading-3 font-semibold", low ? "text-risk" : "text-good")}>{t("qualityScore")}</span>
-      <span className={cn("font-extrabold", large ? "text-[24px] leading-7" : "text-[16px] leading-5", low ? "text-risk" : "text-good")}>{score}</span>
+    <div className={cn("flex flex-col items-center", large ? "rounded-xl px-3 py-2" : "rounded-lg px-2 py-1", tone.bg)}>
+      <span className={cn("text-[10px] leading-3 font-semibold", tone.text)}>{t("qualityScore")}</span>
+      <span className={cn("font-extrabold", large ? "text-[24px] leading-7" : "text-[16px] leading-5", tone.text)}>{score}</span>
     </div>
   );
 }
@@ -244,13 +250,15 @@ export function Segmented<T extends string>({
   options,
   value,
   onChange,
+  fullWidth = false,
 }: {
   options: { value: T; label: string; badge?: number }[];
   value: T;
   onChange: (v: T) => void;
+  fullWidth?: boolean;
 }) {
   return (
-    <div className="flex h-10 flex-row self-start rounded-full bg-soft p-1">
+    <div className={cn("flex h-10 flex-row rounded-full bg-soft p-1", fullWidth ? "w-full" : "self-start")}>
       {options.map((o) => {
         const on = o.value === value;
         return (
@@ -260,7 +268,11 @@ export function Segmented<T extends string>({
             role="tab"
             aria-selected={on}
             onClick={() => onChange(o.value)}
-            className={cn("flex min-w-[96px] items-center justify-center gap-1 rounded-full px-4", on && "bg-ink")}
+            className={cn(
+              "flex items-center justify-center gap-1 rounded-full px-4",
+              fullWidth ? "min-w-0 flex-1" : "min-w-[96px]",
+              on && "bg-ink",
+            )}
           >
             <span className={cn("text-[12px] leading-4 font-bold", on ? "text-white" : "text-muted-foreground")}>{o.label}</span>
             {o.badge ? (
@@ -484,6 +496,113 @@ export function WeekStrip({
   );
 }
 
+export function LotResultCard({
+  href,
+  title,
+  place,
+  harvest,
+  score,
+  badges,
+  price,
+  priceHint,
+  ctaLabel,
+  selected = false,
+  onHover,
+}: {
+  href: string;
+  title: string;
+  place: string;
+  harvest: string;
+  score: number | null;
+  badges: ReactNode;
+  price: ReactNode;
+  priceHint?: string;
+  ctaLabel: string;
+  selected?: boolean;
+  onHover?: () => void;
+}) {
+  return (
+    <div onMouseEnter={onHover}>
+      <ApCard
+        className={cn(
+          "flex h-full flex-col gap-3 p-4 transition-colors",
+          selected && "border-good bg-good-soft/30",
+        )}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[18px] leading-6 font-extrabold text-ink">{title}</p>
+            <p className="mt-1 text-[13px] leading-[18px] font-medium text-muted-foreground">
+              {place}
+              {harvest ? ` · ${harvest}` : ""}
+            </p>
+          </div>
+          {score != null ? <ScoreBox score={score} large /> : null}
+        </div>
+        <div className="min-h-[24px]">{badges}</div>
+        <div className="mt-auto flex flex-wrap items-end justify-between gap-3 border-t border-line pt-3">
+          <div className="min-w-0">
+            <div className="text-[16px] font-extrabold text-ink">{price}</div>
+            {priceHint ? <p className="text-[11px] font-medium text-muted-foreground">{priceHint}</p> : null}
+          </div>
+          <Link href={href}>
+            <ApButton label={ctaLabel} variant="dark" />
+          </Link>
+        </div>
+      </ApCard>
+    </div>
+  );
+}
+
+export function BottomSheet({
+  open,
+  onClose,
+  title,
+  children,
+  actionLabel,
+  onAction,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+  actionLabel: string;
+  onAction: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-ink/40 min-[900px]:items-center min-[900px]:justify-center min-[900px]:p-4" onClick={onClose} role="presentation">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[85vh] w-full overflow-y-auto rounded-t-[22px] border border-line bg-card p-5 shadow-[0_-12px_40px_rgba(0,0,0,0.18)] min-[900px]:max-w-[420px] min-[900px]:rounded-[22px]"
+      >
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-[20px] font-extrabold text-ink">{title}</h2>
+          <button type="button" onClick={onClose} className="flex size-9 items-center justify-center rounded-full border border-line" aria-label="Close">
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="flex flex-col gap-4">{children}</div>
+        <div className="sticky bottom-0 mt-5 bg-card pt-2">
+          <ApButton label={actionLabel} variant="dark" onClick={onAction} className="w-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Dialog({
   open,
   onClose,
@@ -590,6 +709,7 @@ export function LotBadges({ badges, max }: { badges: LotBadge[]; max?: number })
 
 export function LotRow({
   href,
+  onOpen,
   lead,
   title,
   sub,
@@ -599,7 +719,9 @@ export function LotRow({
   actions,
   first = false,
 }: {
-  href: string;
+  /** When set, the row navigates here. Prefer `onOpen` for offer inboxes (no Find-olives redirect). */
+  href?: string;
+  onOpen?: () => void;
   lead: ReactNode;
   title: string;
   sub: string;
@@ -609,10 +731,24 @@ export function LotRow({
   actions?: ReactNode;
   first?: boolean;
 }) {
+  const clickable = Boolean(href || onOpen);
   return (
     <div className={cn("relative hover:bg-background", !first && "border-t border-line")}>
-      <Link href={href} aria-label={title} className="absolute inset-0 z-0" />
-      <div className="pointer-events-none relative flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 min-[900px]:h-[92px] min-[900px]:flex-nowrap min-[900px]:py-0">
+      {href ? <Link href={href} aria-label={title} className="absolute inset-0 z-0" /> : null}
+      {!href && onOpen ? (
+        <button
+          type="button"
+          aria-label={title}
+          onClick={onOpen}
+          className="absolute inset-0 z-0 cursor-pointer"
+        />
+      ) : null}
+      <div
+        className={cn(
+          "relative flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 min-[900px]:h-[92px] min-[900px]:flex-nowrap min-[900px]:py-0",
+          clickable && "pointer-events-none",
+        )}
+      >
         <div className="flex w-full min-w-0 items-center gap-3 min-[900px]:w-auto min-[900px]:flex-1">
           {lead}
           <div className="min-w-0 flex-1">
@@ -625,13 +761,15 @@ export function LotRow({
         <div className="flex w-[124px] shrink-0 flex-col items-end">{value}</div>
         <div
           className={cn(
-            "relative z-10 justify-end gap-2 min-[900px]:flex min-[900px]:w-[176px]",
+            "relative z-10 justify-end gap-2 min-[900px]:flex min-[900px]:w-[220px]",
             actions ? "pointer-events-auto flex" : "pointer-events-none hidden",
           )}
         >
           {actions}
         </div>
-        <ChevronRight className="hidden size-4 shrink-0 text-muted-foreground min-[900px]:block" aria-hidden />
+        {clickable ? (
+          <ChevronRight className="hidden size-4 shrink-0 text-muted-foreground min-[900px]:block" aria-hidden />
+        ) : null}
       </div>
     </div>
   );
