@@ -1,16 +1,47 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Bell, Camera, Check, ChevronLeft, Droplet, RefreshCw } from "lucide-react";
-import { Link } from "@/shared/i18n/navigation";
-import { colors } from "@/shared/theme/tokens";
+import { toast } from "sonner";
+import { Bell, Check, ChevronLeft } from "lucide-react";
+import { TaskCard } from "@/features/tasks/task-card";
+import { completeTask, useFarmerTasks } from "@/features/tasks/use-farmer-tasks";
+import { Link, useRouter } from "@/shared/i18n/navigation";
 
 export function TasksScreen() {
   const t = useTranslations("farmerTasks");
-  const done = 0;
-  const total = 0;
-  const pct = total ? Math.round((done / total) * 100) : 0;
+  const router = useRouter();
+  const { tasks, loading, reload } = useFarmerTasks();
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const open = tasks.filter((task) => !task.done);
+  const done = tasks.filter((task) => task.done);
+  const total = tasks.length;
+  const doneCount = done.length;
+  const pct = total ? Math.round((doneCount / total) * 100) : 0;
+
+  async function markDone(taskId: string, message?: string) {
+    setBusyId(taskId);
+    try {
+      const result = await completeTask(taskId);
+      if (!result.ok) {
+        toast.error(result.error ?? t("actionFailed"));
+        return;
+      }
+      toast.success(message ?? t("markedDone"));
+      await reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const labels = {
+    takePhoto: t("takePhoto"),
+    yesAdd: t("yesAdd"),
+    no: t("no"),
+    recheckNow: t("recheckNow"),
+    markDone: t("markDone"),
+  };
 
   return (
     <div className="w-full flex-1">
@@ -32,111 +63,83 @@ export function TasksScreen() {
         </Link>
       </div>
 
-      <div className="mt-3 rounded-[18px] border border-line bg-card p-3.5">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-ap-body font-semibold text-ink">
-            {t("checksDone")}{" "}
-            <span className="font-extrabold">
-              {done} {t("of")} {total}
-            </span>
+      <div className="mt-3 flex items-center gap-3 rounded-[18px] border border-line bg-card p-3.5">
+        <div className="min-w-0">
+          <p className="text-ap-small text-muted-foreground">{t("checksDone")}</p>
+          <p className="text-ap-card font-extrabold text-ink">
+            {doneCount} {t("of")} {total}
           </p>
-          <span className="rounded-full bg-good-soft px-2.5 py-1 text-ap-pill font-bold text-good">
-            {t("scorePlus", { n: 0 })}
-          </span>
         </div>
-        <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-soft">
-          <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+        <div className="mx-1 h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-soft">
+          <div className="h-full rounded-full bg-good" style={{ width: `${pct}%` }} />
         </div>
+        <span className="shrink-0 text-ap-body font-extrabold text-good">{t("scorePlus", { n: doneCount })}</span>
       </div>
 
-      <div className="mt-4 space-y-3">
-        <EmptyTaskCard
-          icon={<Camera className="size-[18px]" style={{ color: colors.risk }} />}
-          iconBg="bg-risk-soft"
-          title={t("photoTitle")}
-          meta={t("emptyMeta")}
-          action={t("takePhoto")}
-        />
-        <EmptyTaskCard
-          icon={<Droplet className="size-[18px]" style={{ color: "#A9831F" }} />}
-          iconBg="bg-warn-soft"
-          title={t("sprayTitle")}
-          meta={t("emptyMeta")}
-          dual
-          yes={t("yesAdd")}
-          no={t("no")}
-        />
-        <EmptyTaskCard
-          icon={<RefreshCw className="size-[18px]" style={{ color: colors.accent }} />}
-          iconBg="bg-ap-accent-soft"
-          title={t("recheckTitle")}
-          meta={t("emptyMeta")}
-          action={t("recheckNow")}
-        />
-      </div>
-
-      <div className="mt-5">
-        <p className="mb-2 text-ap-small font-bold tracking-wide text-muted-foreground uppercase">
-          {t("completed")}
-        </p>
-        <div className="rounded-[18px] border border-line bg-card px-4 py-6 text-center text-ap-body text-muted-foreground">
-          <span className="inline-flex items-center gap-2">
-            <Check className="size-4 text-good" />
-            {t("noCompleted")}
-          </span>
+      {loading ? (
+        <div className="mt-4 space-y-3">
+          <div className="h-28 animate-pulse rounded-[18px] bg-soft" />
+          <div className="h-28 animate-pulse rounded-[18px] bg-soft" />
         </div>
-      </div>
-    </div>
-  );
-}
-
-function EmptyTaskCard({
-  icon,
-  iconBg,
-  title,
-  meta,
-  action,
-  dual,
-  yes,
-  no,
-}: {
-  icon: ReactNode;
-  iconBg: string;
-  title: string;
-  meta: string;
-  action?: string;
-  dual?: boolean;
-  yes?: string;
-  no?: string;
-}) {
-  return (
-    <div className="rounded-[18px] border border-line bg-card p-3.5 opacity-55">
-      <div className="flex items-start gap-2.5">
-        <span className={`flex size-10 items-center justify-center rounded-[12px] ${iconBg}`}>{icon}</span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <p className="text-ap-body font-extrabold text-ink">{title}</p>
-              <p className="text-ap-small text-muted-foreground">{meta}</p>
+      ) : (
+        <>
+          {open.length === 0 ? (
+            <div className="mt-4 rounded-[18px] border border-line bg-card px-4 py-6 text-center text-ap-body font-semibold text-good">
+              {t("allDone")}
             </div>
-            <span className="rounded-full bg-good-soft px-2 py-0.5 text-ap-pill font-bold text-good">+1</span>
+          ) : null}
+
+          <div className="mt-4 space-y-3">
+            {open.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                busy={busyId === task.id}
+                onPhoto={() => router.push("/farmer/scan")}
+                onSprayYes={() => {
+                  void (async () => {
+                    await markDone(task.id, t("sprayNoted"));
+                    router.push("/farmer/logbook?add=1");
+                  })();
+                }}
+                onSprayNo={() => void markDone(task.id, t("noSprayNoted"))}
+                onRecheck={() => router.push("/farmer/scan")}
+                onPlain={() => void markDone(task.id)}
+                labels={labels}
+              />
+            ))}
           </div>
-          {dual ? (
-            <div className="mt-3 flex gap-2">
-              <button type="button" disabled className="h-10 flex-1 rounded-full bg-ink text-ap-pill font-bold text-white">
-                {yes}
-              </button>
-              <button type="button" disabled className="h-10 flex-1 rounded-full border border-line bg-card text-ap-pill font-bold text-ink">
-                {no}
-              </button>
-            </div>
-          ) : (
-            <button type="button" disabled className="mt-3 h-10 w-full rounded-full bg-ink text-ap-pill font-bold text-white">
-              {action}
-            </button>
-          )}
-        </div>
-      </div>
+
+          <div className="mt-5">
+            <p className="mb-2 text-ap-small font-bold tracking-wide text-muted-foreground uppercase">
+              {t("completed")}
+            </p>
+            {done.length === 0 ? (
+              <div className="rounded-[18px] border border-line bg-card px-4 py-6 text-center text-ap-body text-muted-foreground">
+                <span className="inline-flex items-center gap-2">
+                  <Check className="size-4 text-good" />
+                  {t("noCompleted")}
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {done.map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex h-11 items-center gap-2.5 rounded-2xl bg-[#F4F3EF] px-3"
+                  >
+                    <Check className="size-3.5 shrink-0 text-good" strokeWidth={3} aria-hidden />
+                    <p className="min-w-0 flex-1 truncate text-ap-body font-semibold text-[#555] line-through">
+                      {task.title}
+                    </p>
+                    <span className="shrink-0 text-ap-small text-muted-foreground">{task.fieldName ?? ""}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

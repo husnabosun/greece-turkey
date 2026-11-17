@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { toast } from "sonner";
 import {
   Bell,
   Camera,
@@ -19,18 +20,31 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { formatStremmata } from "@/features/fields/area";
+import { reverseGeocodePlace } from "@/features/fields/reverse-geocode";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
-import { THREAT_BY_ID } from "@/features/weather-risk/risk";
+import { TaskCard } from "@/features/tasks/task-card";
+import { completeTask, useFarmerTasks } from "@/features/tasks/use-farmer-tasks";
+import { LEVEL_RANK, THREAT_BY_ID, type ThreatId } from "@/features/weather-risk/risk";
 import { riskLevelLabel, threatLabel, threatTip } from "@/features/weather-risk/threat-labels";
+import { useFieldRiskColors } from "@/features/weather-risk/use-field-risk-colors";
 import { useFieldWeather } from "@/features/weather-risk/use-field-weather";
 import { LOCALES, type Locale } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { SignOutButton } from "@/features/auth/sign-out-button";
-import { ApButton, ApCard, FieldChips, Pill, SectionHeader } from "@/shared/components/brand";
-import { FIELD_DOTS, colors } from "@/shared/theme/tokens";
+import { AiTag, ApButton, ApCard, FieldChips, Pill, SectionHeader } from "@/shared/components/brand";
+import { colors } from "@/shared/theme/tokens";
 import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
+
+/** Scan mode for "Take a photo" CTA (demo parity). */
+const SCAN_MODE: Partial<Record<ThreatId, "leaf" | "fruit" | "trap">> = {
+  "peacock-spot": "leaf",
+  "olive-moth": "leaf",
+  "olive-knot": "leaf",
+  "olive-fly": "trap",
+  anthracnose: "fruit",
+};
 
 const TONE = {
   High: {
@@ -48,10 +62,10 @@ const TONE = {
     btn: "dark" as const,
   },
   Low: {
-    card: "bg-soft",
-    kicker: "text-muted-foreground",
-    iconBg: "bg-card",
-    iconColor: colors.muted,
+    card: "bg-good-soft",
+    kicker: "text-good",
+    iconBg: "bg-[#CFE3C4]",
+    iconColor: colors.good,
     btn: "dark" as const,
   },
 };
@@ -80,15 +94,21 @@ function weatherLabelKey(label: string) {
 
 export function DashboardScreen() {
   const t = useTranslations("farmerHome");
+  const tTasks = useTranslations("farmerTasks");
   const tThreats = useTranslations("riskThreats");
   const tFields = useTranslations("farmerFields");
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
   const { fields, loading: fieldsLoading, error: fieldsError } = useFarmerFields();
+  const { tasks, loading: tasksLoading, reload: reloadTasks } = useFarmerTasks();
   const [selected, setSelected] = useState<string | "all">("all");
   const [displayName, setDisplayName] = useState("");
-  const [place, setPlace] = useState("");
+  const [profilePlace, setProfilePlace] = useState("");
+  const [fieldPlace, setFieldPlace] = useState<string | null>(null);
+  const [recheckCount, setRecheckCount] = useState(0);
+  const [offerCount, setOfferCount] = useState(0);
+  const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
 
   useEffect(() => {
@@ -103,18 +123,134 @@ export function DashboardScreen() {
         .select("display_name, place")
         .eq("id", user.id)
         .maybeSingle();
-      const meta = user.user_metadata;
-      setDisplayName(
-        String(profile?.display_name ?? meta?.display_name ?? user.email?.split("@")[0] ?? ""),
-      );
-      setPlace(String(profile?.place ?? ""));
+      const meta = user.user_metadata as { display_name?: string } | undefined;
+      const name =
+        (typeof profile?.display_name === "string" ? profile.display_name : "").trim() ||
+        (typeof meta?.display_name === "string" ? meta.display_name : "").trim() ||
+        user.email?.split("@")[0]?.trim() ||
+        "";
+      setDisplayName(name);
+      setProfilePlace((typeof profile?.place === "string" ? profile.place : "").trim());
     })();
   }, []);
+
+  /** Greeting location uses the first field with coords (not chip selection). */
+  const greetingField = useMemo(
+    () => fields.find((f) => f.lat != null && f.lon != null) ?? null,
+    [fields],
+  );
+
+  useEffect(() => {
+    if (!greetingField || greetingField.lat == null || greetingField.lon == null) {
+      setFieldPlace(null);
+      return;
+    }
+    let cancelled = false;
+    const { lat, lon } = greetingField;
+    void (async () => {
+      const label = await reverseGeocodePlace(lat, lon, locale);
+      if (!cancelled) setFieldPlace(label);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [greetingField, locale]);
+
+  /** Config/auth errors → toast (or console in dev), never a red banner on Home. */
+  useEffect(() => {
+    if (!fieldsError) return;
+    const msg =
+      fieldsError === "needSupabase" || fieldsError === "needLogin"
+        ? tFields(fieldsError)
+        : fieldsError;
+    toast.error(msg);
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[farmerHome] fields load:", fieldsError);
+    }
+  }, [fieldsError, tFields]);
+
+  useEffect(() => {
+    const supabase = tryCreateBrowserClient();
+    if (!supabase) {
+      setRecheckCount(0);
+      setOfferCount(0);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+
+      const fieldIds = fields.map((f) => f.id);
+      const [offersRes, treesRes] = await Promise.all([
+        supabase
+          .from("offers")
+          .select("id, status")
+          .eq("farmer_id", user.id)
+          .in("status", ["pending", "countered"]),
+        fieldIds.length
+          ? supabase
+              .from("field_trees")
+              .select("id, status, field_id")
+              .in("field_id", fieldIds)
+              .in("status", ["diseased", "suspicious"])
+          : Promise.resolve({ data: [] as { id: string }[] }),
+      ]);
+      if (cancelled) return;
+
+      const taskRechecks = tasks.filter((row) => row.kind === "recheck" && !row.done).length;
+      const treeRechecks = treesRes.data?.length ?? 0;
+      setRecheckCount(taskRechecks > 0 ? taskRechecks : treeRechecks);
+      setOfferCount(offersRes.data?.length ?? 0);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fields, tasks]);
 
   const shown = useMemo(() => {
     if (selected === "all") return fields;
     return fields.filter((f) => f.id === selected);
   }, [fields, selected]);
+
+  const taskStats = useMemo(
+    () => ({
+      done: tasks.filter((row) => row.done).length,
+      total: tasks.length,
+    }),
+    [tasks],
+  );
+
+  const openTasks = useMemo(() => {
+    const open = tasks.filter((row) => !row.done);
+    const scoped = selected === "all" ? open : open.filter((row) => row.fieldId === selected);
+    return scoped.slice(0, 4);
+  }, [tasks, selected]);
+
+  async function markTaskDone(taskId: string, message?: string) {
+    setBusyTaskId(taskId);
+    try {
+      const result = await completeTask(taskId);
+      if (!result.ok) {
+        toast.error(result.error ?? tTasks("actionFailed"));
+        return;
+      }
+      toast.success(message ?? tTasks("markedDone"));
+      await reloadTasks();
+    } finally {
+      setBusyTaskId(null);
+    }
+  }
+
+  const taskLabels = {
+    takePhoto: tTasks("takePhoto"),
+    yesAdd: tTasks("yesAdd"),
+    no: tTasks("no"),
+    recheckNow: tTasks("recheckNow"),
+    markDone: tTasks("markDone"),
+  };
 
   const primary = shown.find((f) => f.lat != null && f.lon != null) ?? shown[0] ?? null;
   const point = useMemo(() => {
@@ -123,15 +259,22 @@ export function DashboardScreen() {
   }, [primary]);
 
   const { weather, risk, top, loading: weatherLoading } = useFieldWeather(point);
-  const loading = fieldsLoading || (point != null && weatherLoading);
+  const contentLoading = fieldsLoading || (point != null && weatherLoading);
+  const riskColors = useFieldRiskColors(fields);
 
   const elevated = top && top.level !== "Low" ? top : null;
   const level = elevated?.level ?? "Low";
   const tone = TONE[level];
   const threat = elevated ? THREAT_BY_ID[elevated.threat] : null;
+  const scanMode = elevated ? SCAN_MODE[elevated.threat] : undefined;
+  /** Distinct High threats in the next 3 days (demo `countRisks`). */
   const riskCount = useMemo(() => {
     if (!risk) return 0;
-    return Object.values(risk).filter((days) => days.slice(0, 3).some((a) => a.level !== "Low")).length;
+    let n = 0;
+    for (const days of Object.values(risk)) {
+      if (days.slice(0, 3).some((a) => LEVEL_RANK[a.level] >= LEVEL_RANK.High)) n += 1;
+    }
+    return n;
   }, [risk]);
 
   const WeatherIcon =
@@ -143,18 +286,53 @@ export function DashboardScreen() {
   const CardIcon = threat?.group === "weather" ? CloudRain : threat?.group === "location" ? MapPin : Leaf;
   const tomorrow = weather ? weather.days[weather.todayIndex + 1] : undefined;
   const rainText = !weather
-    ? t("noWeatherYet")
+    ? ""
     : tomorrow && tomorrow.rain >= 1
       ? t("rainTomorrow")
       : t("noRainTomorrow");
+  const weatherLabel = weather ? t(weatherLabelKey(weather.current.label)) : "";
 
-  const chipFields = fields.map((f, i) => ({
+  const whenLabel = useMemo(() => {
+    if (!elevated || !weather) return t("whenToday");
+    const idx = weather.days.findIndex((d) => d.date === elevated.day);
+    if (idx === weather.todayIndex) return t("whenToday");
+    if (idx === weather.todayIndex + 1) return t("whenTomorrow");
+    if (idx < 0) return t("whenToday");
+    return new Date(`${elevated.day}T12:00:00`).toLocaleDateString(locale, { weekday: "long" });
+  }, [elevated, weather, t, locale]);
+
+  const kickerText =
+    elevated && threat
+      ? t(
+          threat.group === "weather"
+            ? "kickerWeatherWatch"
+            : threat.group === "location"
+              ? "kickerLocationWatch"
+              : "kickerFieldCheck",
+          { when: whenLabel },
+        )
+      : t("kickerAllClear");
+
+  const tipText =
+    (elevated?.actions?.[0] ?? "") ||
+    (elevated ? threatTip(elevated.threat, tThreats) : "") ||
+    (weather ? t("keepChecks") : fields.length === 0 ? t("noFieldsBody") : t("noLocationBody"));
+
+  const fieldBadge =
+    primary == null
+      ? "—"
+      : primary.tree_count != null
+        ? `${primary.name} · ${tFields("treesCount", { n: primary.tree_count })}`
+        : primary.name;
+
+  const chipFields = fields.map((f) => ({
     id: f.id,
     name: f.name,
-    color: FIELD_DOTS[i % FIELD_DOTS.length],
+    color: riskColors[f.id] ?? colors.good,
   }));
 
-  const location = place || primary?.name || t("noPlace");
+  const location =
+    fieldPlace || profilePlace || (fields.length === 0 ? t("noPlace") : "");
 
   return (
     <div className="w-full flex-1">
@@ -230,54 +408,48 @@ export function DashboardScreen() {
         </div>
       </div>
 
-      {fieldsError ? (
-        <p className="mt-4 text-sm text-risk">
-          {fieldsError === "needSupabase" || fieldsError === "needLogin"
-            ? tFields(fieldsError)
-            : fieldsError}
-        </p>
+      {fieldsLoading ? (
+        <div className="mt-4">
+          <Skeleton className="h-9 w-full rounded-full" />
+        </div>
+      ) : fields.length > 0 ? (
+        <div className="mt-4">
+          <FieldChips
+            fields={chipFields}
+            selected={selected}
+            onSelect={setSelected}
+            showAll
+            allLabel={t("allFields", { n: fields.length })}
+            tone="green"
+          />
+        </div>
       ) : null}
 
-      {loading ? (
-        <div className="mt-4 space-y-3">
-          <Skeleton className="h-9 w-full rounded-full" />
+      {contentLoading ? (
+        <div className="mt-3.5 space-y-3">
           <Skeleton className="h-11 w-full rounded-2xl" />
           <Skeleton className="h-40 w-full rounded-[22px]" />
         </div>
       ) : (
         <>
-          {fields.length > 0 ? (
-            <div className="mt-4">
-              <FieldChips
-                fields={chipFields}
-                selected={selected}
-                onSelect={setSelected}
-                showAll
-                allLabel={t("allFields", { n: fields.length })}
-                tone="green"
-              />
-            </div>
-          ) : null}
-
           <div className="mt-3.5 flex h-11 items-center gap-2 rounded-2xl border border-line bg-card px-3 text-ap-body font-semibold">
             <WeatherIcon className="size-[18px] shrink-0 text-warn" aria-hidden />
             <span>{weather ? `${Math.round(weather.current.temp)}°C` : "—"}</span>
-            <span className="truncate font-medium text-muted-foreground">
-              {weather ? t(weatherLabelKey(weather.current.label)) : ""}
-            </span>
+            <span className="truncate font-medium text-muted-foreground">{weatherLabel}</span>
             <span className="mx-1 h-5 w-px shrink-0 bg-line" />
-            <Droplet className="size-4 shrink-0 text-ap-accent" aria-hidden />
-            <span className="truncate font-medium text-muted-foreground">{rainText}</span>
+            <span className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+              <Droplet className="size-4 shrink-0 text-ap-accent" aria-hidden />
+              <span className="truncate font-medium text-muted-foreground">{rainText}</span>
+            </span>
           </div>
 
           <div className={cn("relative mt-3.5 rounded-[22px] p-4", tone.card)}>
             <div className="inline-flex items-center gap-1.5 rounded-xl bg-white px-2.5 py-1 text-[12px] font-bold text-ink">
               <MapPin className="size-3" style={{ color: tone.iconColor }} aria-hidden />
-              {primary?.name ?? "—"}
-              {primary?.tree_count != null ? ` · ${primary.tree_count}` : ""}
+              {fieldBadge}
             </div>
             <p className={cn("mt-3 text-[11.5px] font-bold tracking-[1.4px] uppercase", tone.kicker)}>
-              {t("fieldCheck")}
+              {kickerText}
             </p>
             <h2 className="mt-1.5 max-w-[240px] text-[23px] leading-tight font-extrabold tracking-tight text-ink">
               {elevated && threat
@@ -289,12 +461,8 @@ export function DashboardScreen() {
                   ? t("noBigRisks")
                   : t("noWeatherYet")}
             </h2>
-            <p className="mt-1.5 max-w-[260px] text-ap-body text-[#5a5a5a]">
-              {(elevated
-                ? threatTip(elevated.threat, tThreats)
-                : "") ||
-                (weather ? t("keepChecks") : fields.length === 0 ? t("noFieldsBody") : t("noLocationBody"))}
-            </p>
+            <p className="mt-1.5 max-w-[260px] text-ap-body text-[#5a5a5a]">{tipText}</p>
+            <AiTag source="demo" className="mt-1.5" />
             <div
               className={cn(
                 "absolute top-14 right-4 flex size-12 items-center justify-center rounded-full",
@@ -304,14 +472,23 @@ export function DashboardScreen() {
               <CardIcon className="size-5" style={{ color: tone.iconColor }} aria-hidden />
             </div>
             <div className="mt-4 flex items-center justify-between gap-2">
-              <ApButton
-                label={t("ctaScan")}
-                variant={tone.btn}
-                icon={<Camera className="size-4" aria-hidden />}
-                onClick={() => router.push("/farmer/scan")}
-              />
+              {elevated && scanMode ? (
+                <ApButton
+                  label={t("ctaScan")}
+                  variant={tone.btn}
+                  icon={<Camera className="size-4" aria-hidden />}
+                  onClick={() => router.push("/farmer/scan")}
+                />
+              ) : (
+                <ApButton
+                  label={t("ctaAlerts")}
+                  variant={tone.btn}
+                  icon={<TriangleAlert className="size-4" aria-hidden />}
+                  onClick={() => router.push("/farmer/alerts")}
+                />
+              )}
               <Link href="/farmer/tasks" className={cn("text-ap-small font-semibold", tone.kicker)}>
-                {t("tasksRatio", { done: 0, total: 0 })}
+                {t("tasksRatio", { done: taskStats.done, total: taskStats.total })}
               </Link>
             </div>
           </div>
@@ -320,13 +497,52 @@ export function DashboardScreen() {
             <QuickPill href="/farmer/alerts" tone="risk" label={t("risksCount", { n: riskCount })}>
               <TriangleAlert className="size-4" aria-hidden />
             </QuickPill>
-            <QuickPill href="/farmer/tasks" tone="warn" label={t("recheckCount", { n: 0 })}>
+            <QuickPill href="/farmer/scan" tone="warn" label={t("recheckCount", { n: recheckCount })}>
               <Leaf className="size-4" aria-hidden />
             </QuickPill>
-            <QuickPill href="/farmer/market?tab=offers" tone="good" label={t("offersCount", { n: 0 })}>
+            <QuickPill href="/farmer/market?tab=offers" tone="good" label={t("offersCount", { n: offerCount })}>
               <Tag className="size-4" aria-hidden />
             </QuickPill>
           </div>
+
+          <SectionHeader
+            title={t("todayTasks")}
+            action={
+              <Link href="/farmer/tasks" className="text-ap-body font-medium text-muted-foreground">
+                {t("seeAll")}
+              </Link>
+            }
+          />
+          {tasksLoading ? (
+            <div className="mt-2.5 space-y-2.5">
+              <Skeleton className="h-24 w-full rounded-[18px]" />
+              <Skeleton className="h-24 w-full rounded-[18px]" />
+            </div>
+          ) : openTasks.length === 0 ? (
+            <p className="mt-2 text-ap-body font-semibold text-good">{t("tasksAllDone")}</p>
+          ) : (
+            <div className="mt-2.5 space-y-2.5">
+              {openTasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  compact
+                  busy={busyTaskId === task.id}
+                  onPhoto={() => router.push("/farmer/scan")}
+                  onSprayYes={() => {
+                    void (async () => {
+                      await markTaskDone(task.id, tTasks("sprayNoted"));
+                      router.push("/farmer/logbook?add=1");
+                    })();
+                  }}
+                  onSprayNo={() => void markTaskDone(task.id, tTasks("noSprayNoted"))}
+                  onRecheck={() => router.push("/farmer/scan")}
+                  onPlain={() => void markTaskDone(task.id)}
+                  labels={taskLabels}
+                />
+              ))}
+            </div>
+          )}
 
           <SectionHeader
             title={t("yourFields")}
@@ -395,7 +611,7 @@ function QuickPill({
   label,
   children,
 }: {
-  href: "/farmer/alerts" | "/farmer/tasks" | "/farmer/market?tab=offers";
+  href: "/farmer/alerts" | "/farmer/scan" | "/farmer/market?tab=offers";
   tone: "risk" | "warn" | "good";
   label: string;
   children: React.ReactNode;

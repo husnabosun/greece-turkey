@@ -40,7 +40,7 @@ const STAGES: { key: CropStage; icon: LucideIcon }[] = [
 
 type Props = { fieldId: string };
 
-/** Field certification / trust score — separate from field onboarding. */
+/** Field certification / trust score — separate from field creation. */
 export function FieldScoreScreen({ fieldId }: Props) {
   const t = useTranslations("farmerFields");
   const locale = useLocale();
@@ -185,7 +185,12 @@ export function FieldScoreScreen({ fieldId }: Props) {
   ];
 
   if (loading) {
-    return <div className="mx-auto w-full max-w-lg animate-pulse space-y-3 px-4 py-6"><div className="h-10 rounded-full bg-soft" /><div className="h-40 rounded-[18px] bg-soft" /></div>;
+    return (
+      <div className="mx-auto w-full max-w-lg animate-pulse space-y-3 px-4 py-6">
+        <div className="h-10 rounded-full bg-soft" />
+        <div className="h-40 rounded-[18px] bg-soft" />
+      </div>
+    );
   }
 
   if (!field) {
@@ -231,12 +236,17 @@ export function FieldScoreScreen({ fieldId }: Props) {
                 type="button"
                 onClick={() => setStage(key)}
                 className={cn(
-                  "flex h-[68px] flex-1 flex-col items-center justify-center gap-1 rounded-2xl border",
+                  "flex h-[68px] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl border px-1",
                   on ? "border-good/40 bg-good-soft" : "border-line bg-card",
                 )}
               >
-                <Icon className="size-5" color={on ? colors.good : colors.ink} aria-hidden />
-                <span className={cn("text-ap-body font-bold", on ? "text-good" : "text-ink")}>
+                <Icon className="size-5 shrink-0" color={on ? colors.good : colors.ink} aria-hidden />
+                <span
+                  className={cn(
+                    "text-center text-[12px] leading-tight font-bold sm:text-ap-body",
+                    on ? "text-good" : "text-ink",
+                  )}
+                >
                   {t(key === "growing" ? "growing" : key === "almost" ? "almost" : "harvested")}
                 </span>
               </button>
@@ -246,9 +256,9 @@ export function FieldScoreScreen({ fieldId }: Props) {
 
         <Label>{t("prevSeason")}</Label>
         <p className="mb-1.5 text-ap-small text-muted-foreground">{t("prevSeasonHint")}</p>
-        <div className="flex h-12 items-center justify-between gap-2 rounded-[18px] border border-line bg-card px-3">
-          <span className="text-ap-body font-extrabold text-ink">{t("sprays")}</span>
-          <div className="flex gap-1.5">
+        <div className="flex min-h-12 flex-col gap-2 rounded-[18px] border border-line bg-card px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <span className="shrink-0 text-ap-body font-extrabold text-ink">{t("sprays")}</span>
+          <div className="flex flex-wrap gap-1.5">
             {sprayOpts.map((opt) => (
               <PillBtn key={opt.key} on={sprays === opt.key} onClick={() => setSprays(opt.key)}>
                 {opt.label}
@@ -256,9 +266,9 @@ export function FieldScoreScreen({ fieldId }: Props) {
             ))}
           </div>
         </div>
-        <div className="mt-2 flex min-h-12 flex-wrap items-center justify-between gap-2 rounded-[18px] border border-line bg-card px-3 py-2">
-          <span className="text-ap-body font-extrabold text-ink">{t("records")}</span>
-          <div className="flex flex-wrap justify-end gap-1.5">
+        <div className="mt-2 flex min-h-12 flex-col gap-2 rounded-[18px] border border-line bg-card px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <span className="shrink-0 text-ap-body font-extrabold text-ink">{t("records")}</span>
+          <div className="flex flex-wrap gap-1.5">
             {recordOpts.map((opt) => (
               <PillBtn key={opt.key} on={records === opt.key} onClick={() => setRecords(opt.key)}>
                 {opt.label}
@@ -335,12 +345,12 @@ export function FieldScoreScreen({ fieldId }: Props) {
                 <span
                   key={key}
                   className={cn(
-                    "flex h-7 flex-1 items-center justify-center gap-1 rounded-lg text-[10.5px] font-bold",
+                    "flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-0.5 text-[10px] font-bold sm:text-[10.5px]",
                     on ? "bg-warn-soft text-warn-text" : "bg-black/5 text-muted-foreground",
                   )}
                 >
-                  {on ? <Check className="size-3" strokeWidth={3} aria-hidden /> : null}
-                  {label}
+                  {on ? <Check className="size-3 shrink-0" strokeWidth={3} aria-hidden /> : null}
+                  <span className="truncate">{label}</span>
                 </span>
               );
             })}
@@ -375,7 +385,7 @@ function PillBtn({ on, onClick, children }: { on: boolean; onClick: () => void; 
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex h-[30px] items-center rounded-full border px-3 text-ap-pill font-bold",
+        "inline-flex h-[30px] shrink-0 items-center rounded-full border px-3 text-ap-pill font-bold",
         on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
       )}
     >

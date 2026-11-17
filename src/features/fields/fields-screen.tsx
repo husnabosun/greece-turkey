@@ -15,10 +15,12 @@ import {
 import { formatStremmata } from "@/features/fields/area";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { FieldHealthMap } from "@/features/fields/field-health-map";
+import { useFieldTrees } from "@/features/fields/use-field-trees";
 import { publicEnv } from "@/core/config/env";
-import { Chip, FieldChips } from "@/shared/components/brand";
+import { Chip, FieldChips, Pill } from "@/shared/components/brand";
 import { Link, useRouter } from "@/shared/i18n/navigation";
 import { FIELD_DOTS, colors } from "@/shared/theme/tokens";
+import { threatLabel } from "@/features/weather-risk/threat-labels";
 
 function scoreFromNotes(notes: string | null | undefined): number | null {
   if (!notes) return null;
@@ -33,10 +35,12 @@ function scoreFromNotes(notes: string | null | undefined): number | null {
 
 export function FieldsScreen() {
   const t = useTranslations("farmerFields");
+  const tThreats = useTranslations("riskThreats");
   const router = useRouter();
   const { fields, loading } = useFarmerFields();
   const [showHealth, setShowHealth] = useState(true);
   const [selectedId, setSelectedId] = useState<string | "all">("all");
+  const [selectedTreeId, setSelectedTreeId] = useState<number | null>(null);
   const token = publicEnv.NEXT_PUBLIC_MAPBOX_TOKEN || undefined;
 
   const viewFields = useMemo(
@@ -64,6 +68,14 @@ export function FieldsScreen() {
 
   const showAll = selectedId === "all";
   const active = showAll ? null : (viewFields.find((f) => f.id === selectedId) ?? viewFields[0] ?? null);
+  const { trees, defaultSelectedId } = useFieldTrees(active?.id);
+
+  useEffect(() => {
+    setSelectedTreeId(defaultSelectedId);
+  }, [active?.id, defaultSelectedId]);
+
+  const selectedTree = trees.find((tr) => tr.id === selectedTreeId) ?? null;
+  const followUpCount = trees.filter((tr) => tr.status !== "healthy").length;
 
   const totals = useMemo(() => {
     const trees = viewFields.reduce((s, f) => s + (f.trees ?? 0), 0);
@@ -177,9 +189,9 @@ export function FieldsScreen() {
               lon={active?.lon}
               geom={active?.geom}
               outlines={mapOutlines}
-              trees={[]}
-              selectedId={null}
-              onSelect={() => undefined}
+              trees={showAll ? [] : trees}
+              selectedId={selectedTreeId}
+              onSelect={setSelectedTreeId}
               showHealth={showHealth}
               onToggleHealth={setShowHealth}
               onLocate={() => toast(t("located"))}
@@ -192,9 +204,9 @@ export function FieldsScreen() {
                 zoomIn: t("zoomIn"),
                 zoomOut: t("zoomOut"),
                 tree: (id) => t("treeN", { id }),
-                needToken: t("needMapboxBody"),
+                needToken: t("mapFallback"),
                 loading: t("mapLoading"),
-                failed: t("mapFailed"),
+                failed: t("mapFallback"),
               }}
             />
           </div>
@@ -220,21 +232,45 @@ export function FieldsScreen() {
           <button
             type="button"
             className="flex h-9 w-full items-center rounded-xl bg-risk-soft px-3 text-left"
+            onClick={() => {
+              const next = trees.find((tr) => tr.status !== "healthy");
+              if (next) setSelectedTreeId(next.id);
+            }}
           >
             <RefreshCw className="size-4 text-risk" aria-hidden />
-            <span className="ml-2 flex-1 text-ap-small font-bold text-ink">{t("followUp", { n: 0 })}</span>
+            <span className="ml-2 flex-1 text-ap-small font-bold text-ink">
+              {t("followUp", { n: showAll ? 0 : followUpCount })}
+            </span>
             <span className="text-ap-small font-bold text-risk">{t("view")}</span>
             <ChevronRight className="size-4 text-risk" aria-hidden />
           </button>
 
           <div className="rounded-2xl border border-line bg-card p-2.5">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-ap-body font-extrabold text-ink">{t("treeN", { id: "—" })}</p>
-              <span className="rounded-full bg-soft px-2 py-0.5 text-ap-pill font-bold text-muted-foreground">
-                {t("selectTree")}
-              </span>
+              <p className="text-ap-body font-extrabold text-ink">
+                {selectedTree ? t("treeN", { id: selectedTree.id }) : t("treeN", { id: "—" })}
+              </p>
+              {selectedTree ? (
+                <Pill tone={selectedTree.status === "diseased" ? "risk" : selectedTree.status === "suspicious" ? "warn" : "good"}>
+                  {selectedTree.status === "diseased"
+                    ? t("diseased")
+                    : selectedTree.status === "suspicious"
+                      ? t("suspicious")
+                      : t("healthy")}
+                </Pill>
+              ) : (
+                <span className="rounded-full bg-soft px-2 py-0.5 text-ap-pill font-bold text-muted-foreground">
+                  {t("selectTree")}
+                </span>
+              )}
             </div>
-            <p className="mt-1 text-ap-small text-muted-foreground">{t("noTreeYet")}</p>
+            <p className="mt-1 text-ap-small text-muted-foreground">
+              {selectedTree?.issue
+                ? threatLabel(selectedTree.issue, tThreats)
+                : selectedTree
+                  ? t("healthy")
+                  : t("noTreeYet")}
+            </p>
             <div className="mt-2 flex gap-2">
               <Link
                 href="/farmer/scan"

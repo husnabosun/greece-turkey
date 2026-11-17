@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import mapboxgl from "mapbox-gl";
 import { Crosshair, Leaf, Minus, Plus } from "lucide-react";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -19,9 +19,12 @@ export type MapTreeStatus = "healthy" | "suspicious" | "diseased";
 
 export type MapTree = {
   id: number;
+  /** DB id when loaded from `field_trees`. */
+  uuid?: string;
   x: number;
   y: number;
   status: MapTreeStatus;
+  issue?: string | null;
 };
 
 const STATUS_COLOR: Record<MapTreeStatus, string> = {
@@ -90,6 +93,7 @@ export function FieldHealthMap({
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const [mapError, setMapError] = useState(false);
   const [ready, setReady] = useState(false);
+  const [staticZoom, setStaticZoom] = useState(1);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -279,30 +283,32 @@ export function FieldHealthMap({
     { key: "diseased", label: labels.diseased },
   ];
 
+  const useStatic = !token || mapError;
+
   return (
     <div
       ref={shellRef}
       className={cn("relative h-full min-h-[58dvh] overflow-hidden bg-[#1a1a1a]", className ?? "rounded-[18px]")}
     >
-      {token ? (
-        <div ref={containerRef} className="absolute inset-0 h-full w-full [&_.mapboxgl-map]:h-full [&_.mapboxgl-map]:w-full [&_.mapboxgl-canvas]:outline-none" />
+      {useStatic ? (
+        <StaticAerial
+          trees={trees}
+          selectedId={selectedId}
+          showHealth={showHealth}
+          onSelect={onSelect}
+          zoom={staticZoom}
+          treeLabel={labels.tree}
+        />
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#1B1B1B] px-6 text-center">
-          <p className="text-ap-body font-semibold text-white/80">
-            {labels.needToken ?? "Add NEXT_PUBLIC_MAPBOX_TOKEN to show the satellite map."}
-          </p>
-        </div>
+        <div
+          ref={containerRef}
+          className="absolute inset-0 h-full w-full [&_.mapboxgl-map]:h-full [&_.mapboxgl-map]:w-full [&_.mapboxgl-canvas]:outline-none"
+        />
       )}
 
       {token && !ready && !mapError ? (
         <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center bg-[#1a1a1a]/70">
           <p className="text-ap-body font-semibold text-white/80">{labels.loading ?? "…"}</p>
-        </div>
-      ) : null}
-
-      {mapError ? (
-        <div className="absolute inset-0 z-[5] flex items-center justify-center bg-[#1a1a1a] px-6 text-center">
-          <p className="text-ap-body font-semibold text-white/80">{labels.failed ?? labels.needToken}</p>
         </div>
       ) : null}
 
@@ -335,19 +341,128 @@ export function FieldHealthMap({
         <button
           type="button"
           aria-label={labels.locate}
-          onClick={locate}
+          onClick={() => {
+            if (useStatic) {
+              setStaticZoom(1);
+              onLocate();
+              return;
+            }
+            locate();
+          }}
           className="flex size-9 items-center justify-center rounded-xl bg-white shadow-sm"
         >
           <Crosshair className="size-[18px] text-ink" aria-hidden />
         </button>
         <div className="overflow-hidden rounded-xl bg-white shadow-sm">
-          <button type="button" aria-label={labels.zoomIn} onClick={() => zoomBy(0.6)} className="flex size-9 items-center justify-center">
+          <button
+            type="button"
+            aria-label={labels.zoomIn}
+            onClick={() => (useStatic ? setStaticZoom((z) => Math.min(2, z + 0.25)) : zoomBy(0.6))}
+            className="flex size-9 items-center justify-center"
+          >
             <Plus className="size-[18px] text-ink" aria-hidden />
           </button>
-          <button type="button" aria-label={labels.zoomOut} onClick={() => zoomBy(-0.6)} className="flex size-9 items-center justify-center">
+          <button
+            type="button"
+            aria-label={labels.zoomOut}
+            onClick={() => (useStatic ? setStaticZoom((z) => Math.max(1, z - 0.25)) : zoomBy(-0.6))}
+            className="flex size-9 items-center justify-center"
+          >
             <Minus className="size-[18px] text-ink" aria-hidden />
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const AERIAL_GREENS = ["#3F6B2F", "#4B7A36", "#35602A", "#56883E"];
+
+/** Demo-style SVG aerial when Mapbox is unavailable — never shows env/token text. */
+function StaticAerial({
+  trees,
+  selectedId,
+  showHealth,
+  onSelect,
+  zoom,
+  treeLabel,
+}: {
+  trees: MapTree[];
+  selectedId: number | null;
+  showHealth: boolean;
+  onSelect: (id: number) => void;
+  zoom: number;
+  treeLabel: (id: number) => string;
+}) {
+  const crowns: ReactNode[] = [];
+  for (let r = 0; r < 13; r++) {
+    for (let c = 0; c < 21; c++) {
+      crowns.push(
+        <circle
+          key={`${r}-${c}`}
+          cx={3 + c * 4.8 + (r % 2 ? 2.4 : 0)}
+          cy={3 + r * 6.2}
+          r={2.1}
+          fill={AERIAL_GREENS[(r * 3 + c) % AERIAL_GREENS.length]}
+        />,
+      );
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-[#4B7A36]">
+      <div className="absolute inset-0 origin-center" style={{ transform: `scale(${zoom})` }}>
+        <svg width="100%" height="100%" viewBox="0 0 100 80" preserveAspectRatio="xMidYMid slice" aria-hidden>
+          <rect width={100} height={80} fill="#7A8F4F" />
+          {crowns}
+          <polygon
+            points="8,16 82,10 88,40 99,50 98,76 14,78"
+            fill="none"
+            stroke="#fff"
+            strokeWidth={0.7}
+            strokeLinejoin="round"
+          />
+        </svg>
+        {showHealth
+          ? trees.map((tree) => {
+              const sel = tree.id === selectedId;
+              const size = sel ? 22 : 16;
+              return (
+                <button
+                  key={tree.id}
+                  type="button"
+                  aria-label={treeLabel(tree.id)}
+                  onClick={() => onSelect(tree.id)}
+                  className="absolute flex items-center justify-center border-0 bg-transparent p-0"
+                  style={{
+                    left: `${tree.x}%`,
+                    top: `${tree.y}%`,
+                    width: size,
+                    height: size,
+                    marginLeft: -size / 2,
+                    marginTop: -size / 2,
+                  }}
+                >
+                  <span
+                    className="block rounded-full"
+                    style={{
+                      width: size - 2,
+                      height: size - 2,
+                      borderWidth: tree.status === "healthy" ? 3 : 2,
+                      borderStyle: "solid",
+                      borderColor: tree.status === "healthy" ? colors.good : "#fff",
+                      backgroundColor: tree.status === "healthy" ? "#fff" : STATUS_COLOR[tree.status],
+                    }}
+                  />
+                  {sel ? (
+                    <span className="absolute -top-7 rounded-full bg-ink px-2 py-0.5 text-ap-small font-bold whitespace-nowrap text-white">
+                      #{tree.id}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })
+          : null}
       </div>
     </div>
   );

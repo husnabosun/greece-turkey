@@ -8,6 +8,7 @@ import { formatStremmata } from "@/features/fields/area";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { varietyAgronomyContext, varietyLabelFromStored } from "@/features/fields/olive-varieties";
 import { euroPrice, roundPrice } from "@/features/marketplace/pricing";
+import { publishLot } from "@/features/marketplace/save-lot";
 import { Link, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 import { useLocale } from "next-intl";
@@ -43,6 +44,7 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
   const [negotiable, setNegotiable] = useState(false);
   const [delivery, setDelivery] = useState<"pickup" | "deliver">("pickup");
   const [price, setPrice] = useState(0.8);
+  const [publishing, setPublishing] = useState(false);
 
   if (loading) {
     return (
@@ -219,13 +221,43 @@ export function NewListingScreen({ fieldId }: { fieldId?: string; factoryId?: st
 
       <button
         type="button"
+        disabled={publishing || !field}
         onClick={() => {
-          toast.success(t("publishedLocal"));
-          router.push("/farmer/market");
+          if (!field) return;
+          void (async () => {
+            setPublishing(true);
+            try {
+              const result = await publishLot({
+                fieldId: field.id,
+                variety: field.variety,
+                varietySlug: field.variety_slug,
+                tons,
+                pricePerKg: price,
+                negotiable,
+                delivery,
+                periodIndex: periodIdx,
+              });
+              if (!result.ok) {
+                toast.error(
+                  t(
+                    result.error === "needLogin" || result.error === "needSupabase"
+                      ? result.error
+                      : "publishFailed",
+                  ),
+                );
+                return;
+              }
+              toast.success(t("published"));
+              router.push("/farmer/market");
+              router.refresh();
+            } finally {
+              setPublishing(false);
+            }
+          })();
         }}
-        className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white"
+        className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white disabled:opacity-50"
       >
-        {t("publishListing")}
+        {publishing ? t("publishing") : t("publishListing")}
         <ArrowRight className="size-4" />
       </button>
     </div>

@@ -188,7 +188,8 @@ export function FieldMapEditor({
       <div
         ref={shellRef}
         className={cn(
-          "relative h-[58dvh] min-h-[320px] w-full overflow-hidden bg-muted md:h-[62dvh]",
+          "relative w-full overflow-hidden bg-muted",
+          "h-[58dvh] min-h-[320px] md:h-[62dvh]",
           fullBleed ? "rounded-none border-y border-line" : "rounded-[18px] border border-line",
         )}
       >

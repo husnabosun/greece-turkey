@@ -33,7 +33,10 @@ const AGE_PRESETS = [
 /** Rough olive density for satellite estimate when polygon area is known. */
 const TREES_PER_HA = 130;
 
-/** Field onboarding only — trust score / listing is a separate field action. */
+/**
+ * Add field — your product flow: enter details, save, done.
+ * (Demo’s extra “Start selling” step is intentionally not used.)
+ */
 export function AddFieldScreen() {
   const t = useTranslations("farmerFields");
   const locale = useLocale();
@@ -138,6 +141,7 @@ export function AddFieldScreen() {
 
       const notes = JSON.stringify({
         tree_age_years: ageYears,
+        tree_age_band: ageYears <= 20 ? "5-20" : ageYears <= 50 ? "20-50" : "50+",
         area_ha_client: areaHa,
       });
 

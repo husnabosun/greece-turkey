@@ -22,6 +22,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { saveFarmerScan } from "@/features/diagnostics/save-scan";
+import type { ActionKind, CaptureMode, PillKey, Presented, SavedScan } from "@/features/diagnostics/scan-types";
+import { scanNeedsRecheck, useFarmerScans } from "@/features/diagnostics/use-farmer-scans";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { varietyAgronomyContext } from "@/features/fields/olive-varieties";
 import { AiTag, ApButton, Chip, FieldChips, Pill, PrivacyLine, type PillTone } from "@/shared/components/brand";
@@ -29,32 +32,7 @@ import { Link } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 import { FIELD_DOTS } from "@/shared/theme/tokens";
 
-type CaptureMode = "leaf" | "fruit" | "trap";
-type PillKey = "healthy" | "watch" | "highRisk";
-type ActionKind = "care" | "healthy" | "trap";
 type View = "list" | "camera" | "result";
-
-type Presented = {
-  mode: CaptureMode;
-  title: string;
-  latin?: string;
-  summary: string;
-  tone: PillTone;
-  pillKey: PillKey;
-  confidence?: number;
-  source?: "gemini" | "demo";
-  actionKind: ActionKind;
-  showNoChemicals: boolean;
-};
-
-type SavedScan = {
-  id: string;
-  fieldId: string | null;
-  fieldName: string | null;
-  at: string;
-  preview: string;
-  presented: Presented;
-};
 
 type TFn = (key: string, values?: Record<string, string | number>) => string;
 
@@ -76,12 +54,12 @@ export function ScanScreen() {
   const t = useTranslations("farmerScan");
   const locale = useLocale();
   const { fields, loading: fieldsLoading } = useFarmerFields();
+  const { scans, loading: scansLoading, setScans, error: scansError } = useFarmerScans();
   const [view, setView] = useState<View>("list");
   const [mode, setMode] = useState<CaptureMode>("leaf");
   const [filter, setFilter] = useState<string | "all">("all");
   const [onlyDue, setOnlyDue] = useState(false);
   const [fieldId, setFieldId] = useState<string | null>(null);
-  const [scans, setScans] = useState<SavedScan[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [analysing, setAnalysing] = useState(false);
@@ -113,8 +91,21 @@ export function ScanScreen() {
   const activeField = viewFields.find((f) => f.id === fieldId) ?? null;
   const active = scans.find((s) => s.id === activeId) ?? null;
 
+  useEffect(() => {
+    if (!scansError) return;
+    if (scansError === "needSupabase" || scansError === "needLogin") {
+      toast.error(t(scansError === "needLogin" ? "needLogin" : "needSupabase"));
+    } else if (process.env.NODE_ENV === "development") {
+      console.warn("[scan] load:", scansError);
+    }
+  }, [scansError, t]);
+
   const groups = useMemo(() => {
-    const list = scans.filter((s) => filter === "all" || s.fieldId === filter);
+    const list = scans.filter((s) => {
+      if (filter !== "all" && s.fieldId !== filter) return false;
+      if (onlyDue && !scanNeedsRecheck(s)) return false;
+      return true;
+    });
     const map = new Map<string, { id: string; name: string; scans: SavedScan[] }>();
     for (const scan of list) {
       const id = scan.fieldId ?? "none";
@@ -124,7 +115,7 @@ export function ScanScreen() {
       map.set(id, group);
     }
     return [...map.values()];
-  }, [scans, filter, viewFields, t]);
+  }, [scans, filter, onlyDue, viewFields, t]);
 
   function openCamera() {
     setPreview(null);
@@ -149,26 +140,26 @@ export function ScanScreen() {
   }
 
   async function analyse(dataUrl: string) {
+    if (!activeField) {
+      toast.error(t("needField"));
+      return;
+    }
     setAnalysing(true);
     try {
       const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
-      const agro = activeField
-        ? varietyAgronomyContext(activeField.variety_slug ?? activeField.variety)
-        : null;
-      const context = activeField
-        ? {
-            fieldName: activeField.name.slice(0, 60),
-            ...(activeField.variety ? { variety: activeField.variety.slice(0, 40) } : {}),
-            ...(agro
-              ? {
-                  varietySlug: agro.slug,
-                  primaryUse: agro.primary_use,
-                  droughtTolerance: agro.drought_tolerance_1to5,
-                  diseaseSusceptibility: agro.disease_susceptibility_1to5,
-                }
-              : {}),
-          }
-        : undefined;
+      const agro = varietyAgronomyContext(activeField.variety_slug ?? activeField.variety);
+      const context = {
+        fieldName: activeField.name.slice(0, 60),
+        ...(activeField.variety ? { variety: activeField.variety.slice(0, 40) } : {}),
+        ...(agro
+          ? {
+              varietySlug: agro.slug,
+              primaryUse: agro.primary_use,
+              droughtTolerance: agro.drought_tolerance_1to5,
+              diseaseSusceptibility: agro.disease_susceptibility_1to5,
+            }
+          : {}),
+      };
       const res = await fetch("/api/ai/diagnose", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -179,18 +170,46 @@ export function ScanScreen() {
         const message = isRecord(json) && typeof json.error === "string" ? json.error : t("failed");
         throw new Error(message);
       }
-      const presented = buildPresented(json.data, t);
+      const payload = json.data;
+      const presented = buildPresented(payload, t);
       if (!presented) throw new Error(t("failed"));
-      const saved: SavedScan = {
-        id: crypto.randomUUID(),
-        fieldId: activeField?.id ?? null,
-        fieldName: activeField?.name ?? null,
-        at: new Date().toISOString(),
-        preview: dataUrl,
+
+      const rawResult = isRecord(payload) ? payload.result : null;
+      const source =
+        isRecord(payload) && (payload.source === "gemini" || payload.source === "demo")
+          ? payload.source
+          : "demo";
+
+      const persisted = await saveFarmerScan({
+        fieldId: activeField.id,
+        fieldName: activeField.name,
+        mode,
+        dataUrl,
+        rawResult,
+        source,
         presented,
-      };
-      setScans((prev) => [saved, ...prev]);
-      setActiveId(saved.id);
+      });
+
+      if (!persisted.ok) {
+        toast.error(t(persisted.error === "needLogin" || persisted.error === "needSupabase" ? persisted.error : "saveFailed"));
+        const local: SavedScan = {
+          id: crypto.randomUUID(),
+          fieldId: activeField.id,
+          fieldName: activeField.name,
+          at: new Date().toISOString(),
+          preview: dataUrl,
+          storagePath: null,
+          presented,
+        };
+        setScans((prev) => [local, ...prev]);
+        setActiveId(local.id);
+        setView("result");
+        return;
+      }
+
+      toast.success(t("saved"));
+      setScans((prev) => [persisted.scan, ...prev.filter((s) => s.id !== persisted.scan.id)]);
+      setActiveId(persisted.scan.id);
       setView("result");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("failed"));
@@ -407,7 +426,9 @@ export function ScanScreen() {
         )}
       </div>
 
-      {onlyDue || groups.length === 0 ? (
+      {scansLoading ? (
+        <div className="mt-2 h-24 animate-pulse rounded-[18px] bg-soft" />
+      ) : groups.length === 0 ? (
         <div className="mt-2 rounded-[18px] border border-line bg-card p-5 text-center text-ap-body font-semibold text-muted-foreground">
           {onlyDue ? t("emptyDue") : t("emptyScans")}
         </div>
@@ -425,8 +446,14 @@ export function ScanScreen() {
                 }}
                 className="mt-2 flex w-full items-center rounded-[18px] border border-line bg-card p-2.5 text-left"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={scan.preview} alt="" className="size-12 shrink-0 rounded-[10px] object-cover" />
+                {scan.preview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={scan.preview} alt="" className="size-12 shrink-0 rounded-[10px] object-cover" />
+                ) : (
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-[10px] bg-soft">
+                    <Leaf className="size-5 text-muted-foreground" aria-hidden />
+                  </span>
+                )}
                 <span className="mr-2 ml-2.5 min-w-0 flex-1">
                   <span className="block truncate text-ap-body font-extrabold text-ink">{scan.presented.title}</span>
                   <span className="block text-ap-small text-muted-foreground">
@@ -494,8 +521,14 @@ function ResultView({
       </div>
 
       <div className="relative mt-2.5 h-[200px] overflow-hidden rounded-[18px] bg-soft">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={scan.preview} alt={presented.title} className="size-full object-cover" />
+        {scan.preview ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={scan.preview} alt={presented.title} className="size-full object-cover" />
+        ) : (
+          <div className="flex size-full items-center justify-center">
+            <Leaf className="size-10 text-muted-foreground" aria-hidden />
+          </div>
+        )}
         <span className="absolute bottom-2 left-2 inline-flex h-8 items-center gap-1.5 rounded-full bg-white px-3 text-ap-pill text-ink">
           <Camera className="size-4" aria-hidden />
           {photoLabel}

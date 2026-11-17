@@ -4,35 +4,27 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Camera, ListFilter, Share2, TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
-import { euCheck } from "@/features/logbook/eu-check";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
+import { euCheck } from "@/features/logbook/eu-check";
+import { saveLogbookEntry } from "@/features/logbook/save-logbook-entry";
+import { safeHarvestDays, useFarmerLogbook, type LogbookEntryView } from "@/features/logbook/use-farmer-logbook";
 import { AiTag, FieldChips, Pill, PrivacyLine } from "@/shared/components/brand";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { cn } from "@/shared/lib/utils";
 import { colors, FIELD_DOTS } from "@/shared/theme/tokens";
 
-type Entry = {
-  id: string;
-  product: string;
-  substances: string[];
-  banned: boolean;
-  hits: string[];
-  at: string;
-  fieldId: string | null;
-  fieldName: string | null;
-  licence: string | null;
-  dose: string | null;
-};
+type Entry = LogbookEntryView;
 
 export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
   const t = useTranslations("farmerLogbook");
   const locale = useLocale();
   const { fields, loading } = useFarmerFields();
+  const { entries, setEntries, loading: entriesLoading } = useFarmerLogbook();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [onlyIssues, setOnlyIssues] = useState(false);
-  const [entries, setEntries] = useState<Entry[]>([]);
   const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const viewFields = useMemo(
     () => fields.map((f, i) => ({ id: f.id, name: f.name, color: FIELD_DOTS[i % FIELD_DOTS.length] })),
@@ -57,6 +49,7 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
   const yearCount = scoped.filter((e) => new Date(e.at).getFullYear() === year).length;
   const issues = scoped.filter((e) => e.banned);
   const shown = onlyIssues ? issues : scoped;
+  const harvestDays = safeHarvestDays(scoped);
 
   async function onShare() {
     const lines = scoped.map((e) => {
@@ -111,7 +104,9 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
       <div className="mt-2 flex gap-2">
         <div className="flex-1 rounded-[18px] border border-line bg-soft px-3 py-1.5">
           <p className="text-ap-body text-muted-foreground">{t("safeHarvest")}</p>
-          <p className="text-ap-title text-ink">—</p>
+          <p className="text-ap-title text-ink">
+            {harvestDays == null ? "—" : t("safeHarvestDays", { n: harvestDays })}
+          </p>
         </div>
         <div className="flex-1 rounded-[18px] border border-line bg-card px-3 py-1.5">
           <p className="text-ap-body text-muted-foreground">{t("spraysYear")}</p>
@@ -150,7 +145,9 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
         <p className="text-ap-body text-muted-foreground">{t("season", { year })}</p>
       </div>
 
-      {shown.length === 0 ? (
+      {entriesLoading ? (
+        <div className="mt-2 h-24 animate-pulse rounded-[18px] bg-soft" />
+      ) : shown.length === 0 ? (
         <div className="mt-2 rounded-[18px] border border-line bg-card p-5 text-center text-ap-body font-semibold text-muted-foreground">
           {onlyIssues ? t("emptyIssues") : viewFields.length === 0 ? t("empty") : t("emptyField")}
         </div>
@@ -186,26 +183,41 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
       {adding ? (
         <AddSpraySheet
           fieldName={selected?.name ?? null}
+          saving={saving}
           onClose={() => setAdding(false)}
           onSave={(draft) => {
-            const check = euCheck(draft.substances);
-            setEntries((prev) => [
-              {
-                id: crypto.randomUUID(),
-                product: draft.product,
-                substances: draft.substances,
-                banned: check.banned,
-                hits: check.hits,
-                at: new Date().toISOString(),
-                fieldId: selected?.id ?? null,
-                fieldName: selected?.name ?? null,
-                licence: draft.licence,
-                dose: draft.dose,
-              },
-              ...prev,
-            ]);
-            toast.success(t("savedLocal"));
-            setAdding(false);
+            void (async () => {
+              if (!selected) {
+                toast.error(t("needField"));
+                return;
+              }
+              setSaving(true);
+              try {
+                const result = await saveLogbookEntry({
+                  product: draft.product,
+                  substances: draft.substances,
+                  licence: draft.licence,
+                  dose: draft.dose,
+                  fieldId: selected.id,
+                  fieldName: selected.name,
+                });
+                if (!result.ok) {
+                  toast.error(
+                    t(
+                      result.error === "needLogin" || result.error === "needSupabase"
+                        ? result.error
+                        : "saveFailed",
+                    ),
+                  );
+                  return;
+                }
+                setEntries((prev) => [result.entry, ...prev.filter((e) => e.id !== result.entry.id)]);
+                toast.success(t("saved"));
+                setAdding(false);
+              } finally {
+                setSaving(false);
+              }
+            })();
           }}
         />
       ) : null}
@@ -249,10 +261,12 @@ function SprayCard({ entry, locale }: { entry: Entry; locale: string }) {
 
 function AddSpraySheet({
   fieldName,
+  saving = false,
   onClose,
   onSave,
 }: {
   fieldName: string | null;
+  saving?: boolean;
   onClose: () => void;
   onSave: (draft: { product: string; substances: string[]; licence: string | null; dose: string | null }) => void;
 }) {
@@ -402,8 +416,12 @@ function AddSpraySheet({
           </div>
         ) : null}
 
-        <button type="submit" className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-full bg-ink text-ap-btn text-white">
-          {t("saveSpray")}
+        <button
+          type="submit"
+          disabled={saving}
+          className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-full bg-ink text-ap-btn text-white disabled:opacity-50"
+        >
+          {saving ? t("saving") : t("saveSpray")}
         </button>
       </form>
     </div>

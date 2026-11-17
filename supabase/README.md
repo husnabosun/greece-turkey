@@ -44,6 +44,18 @@ Run the files in `migrations/` **in filename order** inside the Supabase SQL Edi
 
 Publication includes `offers`, `deliveries`, `lots`.
 
+## Seed demo rows (optional)
+
+After you have at least one farmer with fields:
+
+```bash
+# SQL Editor: paste supabase/seed.sql
+# or CLI:
+psql "$DATABASE_URL" -f supabase/seed.sql
+```
+
+Seeds trees, tasks, quality scores, and sample scans for every field that is still empty. Does **not** create auth users or marketplace offers (needs a processor profile).
+
 ## Smoke test (after push)
 
 1. Create two users (Auth), with `raw_user_meta_data`: `{ "role": "farmer" }` and `{ "role": "processor", "company_name": "Demo Mill" }`.
