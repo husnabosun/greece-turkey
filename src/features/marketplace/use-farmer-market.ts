@@ -237,18 +237,34 @@ export async function acceptOffer(offerId: string): Promise<{ ok: boolean; error
 
   const { data: offer, error: loadError } = await supabase
     .from("offers")
-    .select("id, lot_id, farmer_id, processor_id, tons, price_per_kg, status")
+    .select("id, lot_id, farmer_id, processor_id, tons, price_per_kg, status, delivery_in_days")
     .eq("id", offerId)
     .maybeSingle();
   if (loadError || !offer) return { ok: false, error: loadError?.message ?? "notFound" };
 
+  const deliveryInDays = offer.delivery_in_days ?? 2;
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, "0");
+  const d = String(today.getDate()).padStart(2, "0");
+  const base = new Date(`${y}-${m}-${d}T12:00:00`);
+  base.setDate(base.getDate() + deliveryInDays);
+  const scheduledFor = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(base.getDate()).padStart(2, "0")}`;
+
   if (offer.status !== "accepted") {
-    const { error } = await supabase.from("offers").update({ status: "accepted" }).eq("id", offerId);
+    const { error } = await supabase
+      .from("offers")
+      .update({ status: "accepted", delivery_in_days: deliveryInDays })
+      .eq("id", offerId);
     if (error) return { ok: false, error: error.message };
   }
 
   // Safety net: trigger should insert delivery; if RLS blocked it, create here.
-  const { data: existing } = await supabase.from("deliveries").select("id").eq("offer_id", offerId).maybeSingle();
+  const { data: existing } = await supabase
+    .from("deliveries")
+    .select("id, scheduled_for")
+    .eq("offer_id", offerId)
+    .maybeSingle();
   if (!existing) {
     const { error: deliveryError } = await supabase.from("deliveries").insert({
       offer_id: offer.id,
@@ -258,8 +274,11 @@ export async function acceptOffer(offerId: string): Promise<{ ok: boolean; error
       tons: offer.tons,
       price_per_kg: offer.price_per_kg,
       status: "scheduled",
+      scheduled_for: scheduledFor,
     });
     if (deliveryError) return { ok: false, error: deliveryError.message };
+  } else if (!existing.scheduled_for) {
+    await supabase.from("deliveries").update({ scheduled_for: scheduledFor }).eq("id", existing.id);
   }
 
   return { ok: true };

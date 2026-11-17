@@ -49,7 +49,7 @@ export function useWide() {
 
 export function PageHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: ReactNode }) {
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-[240px] shrink">
         <h1 className="text-[32px] leading-[38px] font-extrabold text-ink">{title}</h1>
         <p className="mt-1 text-[16px] leading-5 font-medium text-muted-foreground">{subtitle}</p>
@@ -59,6 +59,14 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
   );
 }
 
+const ICON_TONES = {
+  soft: "bg-soft text-ink",
+  good: "bg-good-soft text-good",
+  warn: "bg-warn-soft text-warn-text",
+  risk: "bg-risk-soft text-risk",
+  accent: "bg-ap-accent-soft text-ap-accent",
+} as const;
+
 export function StatCard({
   label,
   value,
@@ -66,32 +74,51 @@ export function StatCard({
   icon,
   compact = false,
   href,
+  attention = false,
+  iconTone = "soft",
 }: {
   label: string;
   value: string;
   hint?: string;
   icon: ReactNode;
   compact?: boolean;
-  /** When set, the whole card navigates (overview shortcuts). */
   href?: string;
+  /** Green border / pulse when the card needs action (e.g. new offers). */
+  attention?: boolean;
+  iconTone?: keyof typeof ICON_TONES;
 }) {
   const body = (
-    <>
-      <div className="flex items-center justify-between">
-        <p className="text-[13px] leading-[18px] font-semibold text-muted-foreground">{label}</p>
-        <span className={cn("flex items-center justify-center rounded-full bg-soft", compact ? "size-7" : "size-9")}>{icon}</span>
+    <div className={cn("flex items-start gap-3", compact ? "gap-2.5" : "gap-3.5")}>
+      <span
+        className={cn(
+          "relative flex shrink-0 items-center justify-center rounded-full",
+          compact ? "size-10" : "size-12",
+          ICON_TONES[iconTone],
+        )}
+      >
+        {icon}
+        {attention ? (
+          <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-good ring-2 ring-card" aria-hidden />
+        ) : null}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[12px] leading-4 font-semibold text-muted-foreground">{label}</p>
+        <p className={cn("font-extrabold tracking-tight text-ink", compact ? "mt-0.5 text-[24px] leading-7" : "mt-1 text-[34px] leading-10")}>
+          {value}
+        </p>
+        {hint ? <p className="mt-0.5 text-[11px] leading-[14px] font-medium text-muted-foreground">{hint}</p> : null}
       </div>
-      <p className={cn("font-extrabold text-ink", compact ? "mt-1 text-[24px] leading-7" : "mt-2 text-[32px] leading-[38px]")}>{value}</p>
-      {hint ? <p className="mt-0.5 text-[11px] leading-[14px] font-medium text-muted-foreground">{hint}</p> : null}
-    </>
+    </div>
+  );
+
+  const className = cn(
+    "min-w-[160px] flex-1 rounded-[18px] border bg-card transition-colors",
+    compact ? "p-3.5" : "p-5",
+    attention ? "border-good shadow-[0_0_0_1px_rgba(63,107,47,0.12)]" : "border-line",
+    href && "hover:border-ink/30 hover:bg-soft/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30",
   );
 
   if (href) {
-    const className = cn(
-      "min-w-[160px] flex-1 rounded-[18px] border border-line bg-card transition-colors hover:border-ink/30 hover:bg-soft/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30",
-      compact ? "p-3" : "p-4",
-    );
-    // Hash links stay on-page; next-intl Link can mangle `#section`.
     if (href.startsWith("#")) {
       return (
         <a href={href} aria-label={label} className={className}>
@@ -106,10 +133,27 @@ export function StatCard({
     );
   }
 
+  return <ApCard className={cn(className, "border")}>{body}</ApCard>;
+}
+
+export function EmptyBlock({
+  icon,
+  title,
+  body,
+  action,
+}: {
+  icon: ReactNode;
+  title: string;
+  body: string;
+  action?: ReactNode;
+}) {
   return (
-    <ApCard className={cn("min-w-[160px] flex-1", compact ? "p-3" : "p-4")}>
-      {body}
-    </ApCard>
+    <div className="flex flex-col items-center border-t border-line px-4 py-10 text-center">
+      <span className="flex size-12 items-center justify-center rounded-full bg-soft text-muted-foreground">{icon}</span>
+      <p className="mt-3 text-[15px] font-extrabold text-ink">{title}</p>
+      <p className="mt-1 max-w-[320px] text-[13px] leading-[18px] font-medium text-muted-foreground">{body}</p>
+      {action ? <div className="mt-4">{action}</div> : null}
+    </div>
   );
 }
 
@@ -287,6 +331,156 @@ export function TextField({
         {suffix ? <span className="text-[13px] font-medium text-muted-foreground">{suffix}</span> : null}
       </span>
     </label>
+  );
+}
+
+/** Compact day picker for “arrive in N days / on this date”. */
+export function DayChipPicker({
+  label,
+  days,
+  value,
+  onChange,
+  formatDay,
+  todayLabel,
+}: {
+  label: string;
+  days: string[];
+  value: string;
+  onChange: (iso: string) => void;
+  formatDay: (iso: string, index: number) => string;
+  todayLabel: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-[11px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{label}</p>
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {days.map((iso, i) => {
+          const on = iso === value;
+          return (
+            <button
+              key={iso}
+              type="button"
+              onClick={() => onChange(iso)}
+              className={cn(
+                "flex min-w-[64px] shrink-0 flex-col items-center rounded-xl border px-2 py-2",
+                on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink hover:bg-soft",
+              )}
+            >
+              <span className={cn("text-[10px] font-semibold", on ? "text-white/70" : "text-muted-foreground")}>
+                {i === 0 ? todayLabel : formatDay(iso, i)}
+              </span>
+              <span className="text-[15px] font-extrabold leading-5">{Number(iso.slice(8, 10))}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export type WeekDayCell = {
+  iso: string;
+  weekday: string;
+  dayNum: string;
+  isToday: boolean;
+  tons: number;
+  chips: { id: string; label: string }[];
+  overloaded: boolean;
+};
+
+export function WeekStrip({
+  title,
+  subtitle,
+  days,
+  selectedIso,
+  onSelect,
+  emptyHint,
+}: {
+  title: string;
+  subtitle: string;
+  days: WeekDayCell[];
+  selectedIso: string | null;
+  onSelect: (iso: string) => void;
+  emptyHint: string;
+}) {
+  const maxTons = Math.max(1, ...days.map((d) => d.tons));
+  const hasAny = days.some((d) => d.tons > 0 || d.chips.length > 0);
+
+  return (
+    <ApCard className="overflow-hidden">
+      <div className="flex flex-wrap items-end justify-between gap-2 px-4 pt-4 pb-2">
+        <div className="min-w-0">
+          <p className="text-[16px] leading-5 font-extrabold text-ink">{title}</p>
+          <p className="text-[13px] leading-[18px] font-medium text-muted-foreground">{subtitle}</p>
+        </div>
+        {!hasAny ? <p className="text-[12px] font-semibold text-muted-foreground">{emptyHint}</p> : null}
+      </div>
+      <div className="flex gap-2 overflow-x-auto px-4 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[900px]:grid min-[900px]:grid-cols-7 min-[900px]:overflow-visible">
+        {days.map((day) => {
+          const selected = selectedIso === day.iso;
+          const barH = day.tons > 0 ? Math.max(8, Math.round((day.tons / maxTons) * 40)) : 0;
+          return (
+            <button
+              key={day.iso}
+              type="button"
+              onClick={() => onSelect(day.iso)}
+              className={cn(
+                "flex w-[104px] shrink-0 flex-col rounded-[16px] border px-2.5 py-2.5 text-left transition-colors min-[900px]:w-auto",
+                day.isToday && !selected && "border-good bg-good-soft/40",
+                selected && "border-ink bg-ink text-white",
+                !day.isToday && !selected && "border-line bg-card hover:bg-soft",
+              )}
+            >
+              <div className="flex items-baseline justify-between gap-1">
+                <span
+                  className={cn(
+                    "text-[11px] font-bold",
+                    selected ? "text-white/75" : day.isToday ? "text-good" : "text-muted-foreground",
+                  )}
+                >
+                  {day.isToday ? day.weekday : day.weekday}
+                </span>
+                <span className={cn("text-[15px] font-extrabold", selected ? "text-white" : "text-ink")}>{day.dayNum}</span>
+              </div>
+              <div className={cn("mt-2 flex h-10 items-end rounded-md px-1 pb-1", selected ? "bg-white/15" : "bg-soft")}>
+                {barH > 0 ? (
+                  <div
+                    className={cn(
+                      "w-full rounded-sm",
+                      selected ? "bg-white" : day.overloaded ? "bg-warn-text" : "bg-ink/80",
+                    )}
+                    style={{ height: barH }}
+                  />
+                ) : (
+                  <div className={cn("h-1 w-full rounded-sm", selected ? "bg-white/25" : "bg-line")} />
+                )}
+              </div>
+              <p className={cn("mt-1.5 text-[12px] font-extrabold", selected ? "text-white" : "text-ink")}>
+                {day.tons > 0 ? `${day.tons % 1 ? day.tons.toFixed(1) : day.tons} t` : "–"}
+              </p>
+              <div className="mt-1 flex min-h-[22px] flex-wrap gap-1">
+                {day.chips.slice(0, 2).map((c) => (
+                  <span
+                    key={c.id}
+                    className={cn(
+                      "truncate rounded-full px-1.5 py-0.5 text-[9px] font-bold",
+                      selected ? "bg-white/20 text-white" : "bg-soft text-ink",
+                    )}
+                  >
+                    {c.label}
+                  </span>
+                ))}
+                {day.chips.length > 2 ? (
+                  <span className={cn("text-[9px] font-bold", selected ? "text-white/70" : "text-muted-foreground")}>
+                    +{day.chips.length - 2}
+                  </span>
+                ) : null}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </ApCard>
   );
 }
 

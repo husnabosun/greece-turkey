@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { nextDeliveryStatus } from "@/features/marketplace/delivery-state";
+import {
+  DEFAULT_DELIVERY_IN_DAYS,
+  addDaysIso,
+  deliveryInDaysFromIso,
+  todayIsoDate,
+} from "@/features/marketplace/schedule";
 import type { DeliveryStatus, LabResult, LotUse } from "@/shared/types/database";
 
 export type ProcessorLot = {
@@ -360,6 +366,8 @@ export async function placeLotOffer(input: {
   farmerId: string;
   tons: number;
   pricePerKg: number;
+  /** Preferred arrival delay; defaults to 2 days. */
+  deliveryInDays?: number;
 }): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
@@ -367,6 +375,11 @@ export async function placeLotOffer(input: {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "needLogin" };
+
+  const deliveryInDays =
+    input.deliveryInDays != null && Number.isFinite(input.deliveryInDays)
+      ? Math.max(0, Math.round(input.deliveryInDays))
+      : DEFAULT_DELIVERY_IN_DAYS;
 
   const { error } = await supabase.from("offers").insert({
     lot_id: input.lotId,
@@ -376,27 +389,46 @@ export async function placeLotOffer(input: {
     status: "pending",
     tons: input.tons,
     price_per_kg: input.pricePerKg,
+    delivery_in_days: deliveryInDays,
   });
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
-export async function acceptIncomingOffer(offerId: string): Promise<{ ok: boolean; error?: string }> {
+export async function acceptIncomingOffer(
+  offerId: string,
+  opts?: { scheduledFor?: string; deliveryInDays?: number },
+): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
 
   const { data: offer, error: loadError } = await supabase
     .from("offers")
-    .select("id, lot_id, farmer_id, processor_id, tons, price_per_kg, status")
+    .select("id, lot_id, farmer_id, processor_id, tons, price_per_kg, status, delivery_in_days")
     .eq("id", offerId)
     .maybeSingle();
   if (loadError || !offer) return { ok: false, error: loadError?.message ?? "notFound" };
 
+  const deliveryInDays =
+    opts?.scheduledFor != null
+      ? deliveryInDaysFromIso(opts.scheduledFor)
+      : opts?.deliveryInDays != null && Number.isFinite(opts.deliveryInDays)
+        ? Math.max(0, Math.round(opts.deliveryInDays))
+        : offer.delivery_in_days ?? DEFAULT_DELIVERY_IN_DAYS;
+  const scheduledFor = opts?.scheduledFor ?? addDaysIso(todayIsoDate(), deliveryInDays);
+
   if (offer.status !== "accepted") {
-    const { error } = await supabase.from("offers").update({ status: "accepted" }).eq("id", offerId);
+    const { error } = await supabase
+      .from("offers")
+      .update({ status: "accepted", delivery_in_days: deliveryInDays })
+      .eq("id", offerId);
     if (error) return { ok: false, error: error.message };
   }
 
-  const { data: existing } = await supabase.from("deliveries").select("id").eq("offer_id", offerId).maybeSingle();
+  const { data: existing } = await supabase
+    .from("deliveries")
+    .select("id, scheduled_for")
+    .eq("offer_id", offerId)
+    .maybeSingle();
   if (!existing) {
     const { error: deliveryError } = await supabase.from("deliveries").insert({
       offer_id: offer.id,
@@ -406,11 +438,24 @@ export async function acceptIncomingOffer(offerId: string): Promise<{ ok: boolea
       tons: offer.tons,
       price_per_kg: offer.price_per_kg,
       status: "scheduled",
+      scheduled_for: scheduledFor,
     });
     if (deliveryError) return { ok: false, error: deliveryError.message };
+  } else if (!existing.scheduled_for) {
+    await supabase.from("deliveries").update({ scheduled_for: scheduledFor }).eq("id", existing.id);
   }
 
   return { ok: true };
+}
+
+export async function scheduleDelivery(
+  deliveryId: string,
+  scheduledFor: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  const { error } = await supabase.from("deliveries").update({ scheduled_for: scheduledFor }).eq("id", deliveryId);
+  return error ? { ok: false, error: error.message } : { ok: true };
 }
 
 export async function counterIncomingOffer(
