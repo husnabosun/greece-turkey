@@ -41,7 +41,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input." }, { status: 400 });
   }
 
-  const { email, password, role, locale, display_name, company_name } = parsed.data;
+  const email = parsed.data.email.trim().toLowerCase();
+  const { password, role, locale, display_name, company_name } = parsed.data;
 
   if (role === "processor" && !company_name?.trim()) {
     return NextResponse.json({ error: "Company name is required for processors." }, { status: 400 });

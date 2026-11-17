@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { homePathForRole } from "@/core/auth/routing";
@@ -36,6 +37,25 @@ async function resolveHomePath(
   return homePathForRole(role);
 }
 
+/** Read from the live DOM so browser autofill is not lost (React state often stays empty). */
+function credentialsFromForm(form: HTMLFormElement) {
+  const data = new FormData(form);
+  const email = String(data.get("email") ?? "").trim().toLowerCase();
+  const password = String(data.get("password") ?? "");
+  const displayName = String(data.get("display_name") ?? "").trim();
+  const companyName = String(data.get("company_name") ?? "").trim();
+  return { email, password, displayName, companyName };
+}
+
+function authErrorMessage(error: { message: string; code?: string }, t: (key: string) => string) {
+  const code = error.code ?? "";
+  const msg = error.message.toLowerCase();
+  if (code === "invalid_credentials" || msg.includes("invalid login credentials")) {
+    return t("invalidCredentials");
+  }
+  return error.message;
+}
+
 export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
   const t = useTranslations("auth");
   const locale = useLocale();
@@ -46,19 +66,34 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
   const [companyName, setCompanyName] = useState("");
   const [role, setRole] = useState<UserRole>("farmer");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [debugLine, setDebugLine] = useState<string | null>(null);
 
-  async function onLogin(e: React.FormEvent) {
+  async function onLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const supabase = tryCreateBrowserClient();
     if (!supabase) {
       toast.error(t("missingSupabase"));
       return;
     }
+    const { email: loginEmail, password: loginPassword } = credentialsFromForm(e.currentTarget);
+    setDebugLine(
+      t("loginDebug", { email: loginEmail || "(κενό)", length: loginPassword.length }),
+    );
+    if (!loginEmail || !loginPassword) {
+      toast.error(t("invalidCredentials"));
+      return;
+    }
+    setEmail(loginEmail);
+    setPassword(loginPassword);
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginEmail,
+      password: loginPassword,
+    });
     if (error) {
       setLoading(false);
-      toast.error(error.message);
+      toast.error(authErrorMessage(error, t));
       return;
     }
     const home = await resolveHomePath(supabase);
@@ -67,17 +102,31 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
     router.replace(home);
   }
 
-  async function onRegister(e: React.FormEvent) {
+  async function onRegister(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const supabase = tryCreateBrowserClient();
     if (!supabase) {
       toast.error(t("missingSupabase"));
       return;
     }
-    if (role === "processor" && !companyName.trim()) {
+    const {
+      email: regEmail,
+      password: regPassword,
+      displayName: regName,
+      companyName: regCompany,
+    } = credentialsFromForm(e.currentTarget);
+    if (role === "processor" && !regCompany) {
       toast.error(t("companyRequired"));
       return;
     }
+    if (!regEmail || !regPassword) {
+      toast.error(t("invalidCredentials"));
+      return;
+    }
+    setEmail(regEmail);
+    setPassword(regPassword);
+    setDisplayName(regName);
+    setCompanyName(regCompany);
     setLoading(true);
 
     // Server creates an already-confirmed user (no email gate), then we sign in.
@@ -85,12 +134,12 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email,
-        password,
+        email: regEmail,
+        password: regPassword,
         role,
         locale,
-        display_name: displayName || email.split("@")[0],
-        company_name: role === "processor" ? companyName : null,
+        display_name: regName || regEmail.split("@")[0],
+        company_name: role === "processor" ? regCompany : null,
       }),
     });
     const registerJson = (await registerRes.json().catch(() => null)) as
@@ -102,10 +151,13 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
       return;
     }
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: regEmail,
+      password: regPassword,
+    });
     if (signInError) {
       setLoading(false);
-      toast.error(signInError.message);
+      toast.error(authErrorMessage(signInError, t));
       return;
     }
 
@@ -134,18 +186,24 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
           </Tabs>
         ) : null}
 
-        <form onSubmit={mode === "login" ? onLogin : onRegister} className="space-y-3">
+        <form onSubmit={mode === "login" ? onLogin : onRegister} className="space-y-3" autoComplete="on">
           {mode === "register" ? (
             <>
               <div className="space-y-1.5">
                 <Label htmlFor="name">{t("displayName")}</Label>
-                <Input id="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+                <Input
+                  id="name"
+                  name="display_name"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                />
               </div>
               {role === "processor" ? (
                 <div className="space-y-1.5">
                   <Label htmlFor="company">{t("companyName")}</Label>
                   <Input
                     id="company"
+                    name="company_name"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
                     required
@@ -159,6 +217,7 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
             <Label htmlFor="email">{t("email")}</Label>
             <Input
               id="email"
+              name="email"
               type="email"
               autoComplete="email"
               required
@@ -168,16 +227,38 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="password">{t("password")}</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              required
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? t("hidePassword") : t("showPassword")}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" aria-hidden />
+                ) : (
+                  <Eye className="h-4 w-4" aria-hidden />
+                )}
+              </button>
+            </div>
           </div>
+
+          {debugLine ? (
+            <p className="rounded-md bg-muted px-3 py-2 font-mono text-xs text-muted-foreground">
+              {debugLine}
+            </p>
+          ) : null}
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? t("loading") : mode === "login" ? t("loginCta") : t("registerCta")}

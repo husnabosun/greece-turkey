@@ -71,6 +71,30 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
     qualityScore = qs?.score ?? null;
   }
 
+  const { data: field } = await supabase
+    .from("fields")
+    .select("lat, lon")
+    .eq("id", input.fieldId)
+    .maybeSingle();
+  const lat = field?.lat ?? null;
+  const lon = field?.lon ?? null;
+
+  // Prefer a Mapbox place label when coords exist (same source as the farmer home line).
+  let town: string | null = null;
+  if (lat != null && lon != null) {
+    try {
+      const { reverseGeocodePlace } = await import("@/features/fields/reverse-geocode");
+      const place = await reverseGeocodePlace(lat, lon, "en");
+      if (place) {
+        const [t, ...rest] = place.split(",").map((s) => s.trim());
+        town = t || null;
+        if (rest.length) region = rest.join(", ");
+      }
+    } catch {
+      /* keep region fallback */
+    }
+  }
+
   const { data: row, error } = await supabase
     .from("lots")
     .insert({
@@ -83,8 +107,11 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
       price_per_kg: input.pricePerKg,
       negotiable: input.negotiable,
       delivery_mode: input.delivery,
+      town,
       region,
       country,
+      lat,
+      lon,
       harvest_start: period.start,
       harvest_end: period.end,
       quality_score: qualityScore,

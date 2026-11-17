@@ -193,6 +193,9 @@ export type Lot = {
   town: string | null;
   region: string;
   country: CountryCode | null;
+  /** Grove centroid snapshot (from field at list time) for processor map. */
+  lat: number | null;
+  lon: number | null;
   harvest_start: string | null;
   harvest_end: string | null;
   quality_score: number | null;
@@ -266,6 +269,8 @@ export type MarketplaceLot = {
   town: string | null;
   region: string;
   country: CountryCode | null;
+  lat: number | null;
+  lon: number | null;
   harvest_start: string | null;
   harvest_end: string | null;
   quality_score: number | null;

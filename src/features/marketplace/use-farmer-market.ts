@@ -234,8 +234,35 @@ export function useFarmerMarket(fieldIds: string[]) {
 export async function acceptOffer(offerId: string): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
-  const { error } = await supabase.from("offers").update({ status: "accepted" }).eq("id", offerId);
-  return error ? { ok: false, error: error.message } : { ok: true };
+
+  const { data: offer, error: loadError } = await supabase
+    .from("offers")
+    .select("id, lot_id, farmer_id, processor_id, tons, price_per_kg, status")
+    .eq("id", offerId)
+    .maybeSingle();
+  if (loadError || !offer) return { ok: false, error: loadError?.message ?? "notFound" };
+
+  if (offer.status !== "accepted") {
+    const { error } = await supabase.from("offers").update({ status: "accepted" }).eq("id", offerId);
+    if (error) return { ok: false, error: error.message };
+  }
+
+  // Safety net: trigger should insert delivery; if RLS blocked it, create here.
+  const { data: existing } = await supabase.from("deliveries").select("id").eq("offer_id", offerId).maybeSingle();
+  if (!existing) {
+    const { error: deliveryError } = await supabase.from("deliveries").insert({
+      offer_id: offer.id,
+      lot_id: offer.lot_id,
+      farmer_id: offer.farmer_id,
+      processor_id: offer.processor_id,
+      tons: offer.tons,
+      price_per_kg: offer.price_per_kg,
+      status: "scheduled",
+    });
+    if (deliveryError) return { ok: false, error: deliveryError.message };
+  }
+
+  return { ok: true };
 }
 
 export async function counterOffer(

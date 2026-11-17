@@ -87,13 +87,15 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
 
   async function onAccept(offer: MarketOffer) {
     setBusyOfferId(offer.id);
+    toast.message(t("accepting"));
     try {
       const result = await acceptOffer(offer.id);
       if (!result.ok) {
         toast.error(result.error ?? t("actionFailed"));
         return;
       }
-      toast.success(t("acceptedOk"));
+      toast.success(t("acceptedOkDetail"));
+      setTab("sales");
       await reload();
     } finally {
       setBusyOfferId(null);
@@ -103,20 +105,24 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   async function onCounter(offer: MarketOffer) {
     const suggested = roundPrice(offer.pricePerKg + 0.05);
     const raw = window.prompt(t("counterPrompt"), String(suggested));
-    if (raw == null) return;
+    if (raw == null) {
+      toast.message(t("counterCancelled"));
+      return;
+    }
     const price = Number(raw.replace(",", "."));
     if (!Number.isFinite(price) || price <= 0) {
       toast.error(t("invalidPrice"));
       return;
     }
     setBusyOfferId(offer.id);
+    toast.message(t("countering"));
     try {
       const result = await counterOffer(offer, roundPrice(price));
       if (!result.ok) {
         toast.error(result.error ?? t("actionFailed"));
         return;
       }
-      toast.success(t("counteredOk"));
+      toast.success(t("counteredOkDetail"));
       await reload();
     } finally {
       setBusyOfferId(null);
@@ -343,6 +349,11 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
 
       {tab === "offers" ? (
         <div className="mt-4 space-y-3">
+          {marketLoading ? (
+            <div className="rounded-[18px] border border-line bg-card p-4 text-ap-small font-semibold text-muted-foreground">
+              {t("loadingMarket")}
+            </div>
+          ) : null}
           <section className="rounded-[18px] border border-line bg-card p-3">
             {activeDelivery ? (
               <>
@@ -362,6 +373,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                 <div className="mt-3">
                   <StatusSteps steps={steps} current={DELIVERY_STEP[activeDelivery.status] ?? 0} />
                 </div>
+                <p className="mt-2 text-ap-small font-semibold text-muted-foreground">{t("deliveryNextHint")}</p>
                 {activeDelivery.status === "scheduled" || activeDelivery.status === "weighed" ? (
                   <div className="mt-2 flex items-center gap-2.5 rounded-xl bg-ap-accent-soft p-2.5">
                     <FlaskConical className="size-5 shrink-0 text-ap-accent" />
@@ -374,7 +386,8 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               </>
             ) : (
               <>
-                <p className="text-ap-small text-muted-foreground">{t("noActiveSales")}</p>
+                <p className="text-ap-small font-semibold text-ink">{t("noActiveSalesTitle")}</p>
+                <p className="mt-1 text-ap-small text-muted-foreground">{t("noActiveSales")}</p>
                 <div className="mt-3 opacity-40">
                   <StatusSteps steps={steps} current={-1} />
                 </div>
@@ -385,7 +398,8 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
           <SectionTitle>{t("offersForField")}</SectionTitle>
           {openOffers.length === 0 ? (
             <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
-              <p className="text-ap-small text-muted-foreground">{t("noIncomingOffers")}</p>
+              <p className="text-ap-small font-semibold text-ink">{t("noIncomingOffersTitle")}</p>
+              <p className="mt-1 text-ap-small text-muted-foreground">{t("noIncomingOffers")}</p>
             </div>
           ) : (
             openOffers.map((offer) => (
@@ -509,6 +523,9 @@ function OfferCard({
           <span className="text-ap-small font-medium text-muted-foreground"> {perKg}</span>
         </p>
       </div>
+      {busy ? (
+        <p className="mt-2 text-ap-small font-semibold text-muted-foreground">…</p>
+      ) : null}
       <div className="mt-3 flex justify-end gap-2">
         <button
           type="button"
@@ -516,7 +533,7 @@ function OfferCard({
           onClick={onCounter}
           className="h-9 rounded-full border border-ink bg-card px-4 text-ap-pill font-bold text-ink disabled:opacity-50"
         >
-          {counter}
+          {busy ? "…" : counter}
         </button>
         <button
           type="button"
@@ -524,7 +541,7 @@ function OfferCard({
           onClick={onAccept}
           className={cn("h-9 rounded-full px-4 text-ap-pill font-bold text-white disabled:opacity-50", acceptClass)}
         >
-          {accept}
+          {busy ? "…" : accept}
         </button>
       </div>
     </div>

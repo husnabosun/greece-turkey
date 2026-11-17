@@ -65,21 +65,50 @@ export function StatCard({
   hint,
   icon,
   compact = false,
+  href,
 }: {
   label: string;
   value: string;
   hint?: string;
   icon: ReactNode;
   compact?: boolean;
+  /** When set, the whole card navigates (overview shortcuts). */
+  href?: string;
 }) {
-  return (
-    <ApCard className={cn("min-w-[160px] flex-1", compact ? "p-3" : "p-4")}>
+  const body = (
+    <>
       <div className="flex items-center justify-between">
         <p className="text-[13px] leading-[18px] font-semibold text-muted-foreground">{label}</p>
         <span className={cn("flex items-center justify-center rounded-full bg-soft", compact ? "size-7" : "size-9")}>{icon}</span>
       </div>
       <p className={cn("font-extrabold text-ink", compact ? "mt-1 text-[24px] leading-7" : "mt-2 text-[32px] leading-[38px]")}>{value}</p>
       {hint ? <p className="mt-0.5 text-[11px] leading-[14px] font-medium text-muted-foreground">{hint}</p> : null}
+    </>
+  );
+
+  if (href) {
+    const className = cn(
+      "min-w-[160px] flex-1 rounded-[18px] border border-line bg-card transition-colors hover:border-ink/30 hover:bg-soft/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30",
+      compact ? "p-3" : "p-4",
+    );
+    // Hash links stay on-page; next-intl Link can mangle `#section`.
+    if (href.startsWith("#")) {
+      return (
+        <a href={href} aria-label={label} className={className}>
+          {body}
+        </a>
+      );
+    }
+    return (
+      <Link href={href} aria-label={label} className={className}>
+        {body}
+      </Link>
+    );
+  }
+
+  return (
+    <ApCard className={cn("min-w-[160px] flex-1", compact ? "p-3" : "p-4")}>
+      {body}
     </ApCard>
   );
 }

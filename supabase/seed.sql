@@ -129,3 +129,26 @@ select
   now() - interval '5 days'
 from public.fields f
 where (select count(*) from public.scans s where s.field_id = f.id) < 2;
+
+-- Marketplace note:
+-- Do NOT auto-create lots from fields. Lots appear only when a farmer publishes
+-- via Market → New listing (`publishLot`). Seeding fake ads confuses Find olives.
+
+-- One open buy request per processor account (optional demo request).
+insert into public.buy_requests (
+  processor_id, variety, tons, filled_tons, min_score, region, window_label, no_banned, shared_with_farmers, active
+)
+select
+  p.id,
+  'koroneiki',
+  12,
+  0,
+  75,
+  'Peloponnese',
+  '15–25 Nov',
+  true,
+  true,
+  true
+from public.profiles p
+where p.role = 'processor'
+  and not exists (select 1 from public.buy_requests b where b.processor_id = p.id);
