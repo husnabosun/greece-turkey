@@ -112,7 +112,9 @@ function presentedFromRow(row: {
     return {
       ...dx.presented,
       confidence: dx.presented.confidence ?? row.confidence ?? undefined,
-      source: dx.presented.source ?? (row.source === "gemini" || row.source === "demo" ? row.source : undefined),
+      source:
+        dx.presented.source ??
+        (row.source === "gemini" || row.source === "demo" || row.source === "model" ? row.source : undefined),
       latin: dx.presented.latin ?? row.latin_name ?? undefined,
       title: dx.presented.title || row.title || "Scan",
     };
@@ -127,7 +129,7 @@ function presentedFromRow(row: {
     tone: "neutral",
     pillKey: "watch",
     confidence: row.confidence ?? undefined,
-    source: row.source === "gemini" || row.source === "demo" ? row.source : undefined,
+    source: row.source === "gemini" || row.source === "demo" || row.source === "model" ? row.source : undefined,
     actionKind: mode === "trap" ? "trap" : "care",
     showNoChemicals: true,
   };

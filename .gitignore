@@ -36,6 +36,11 @@ yarn-error.log*
 .env.*
 !.env.example
 
+# Google Cloud / Vertex AI credentials — never commit
+gcp-service-account.json
+*-service-account.json
+**/service-account*.json
+
 # vercel
 .vercel
 

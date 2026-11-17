@@ -13,9 +13,17 @@ const publicEnvSchema = z.object({
 
 const serverEnvSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional().or(z.literal("")),
+  /** @deprecated Prefer Vertex AI via GOOGLE_CLOUD_* + service account. Kept for local fallback. */
   GEMINI_API_KEY: z.string().optional().or(z.literal("")),
-  GEMINI_MODEL: z.string().default("gemini-2.5-flash"),
+  GEMINI_MODEL: z.string().default("gemini-3.5-flash"),
+  GOOGLE_CLOUD_PROJECT: z.string().optional().or(z.literal("")),
+  GOOGLE_CLOUD_LOCATION: z.string().default("global"),
+  GOOGLE_APPLICATION_CREDENTIALS: z.string().optional().or(z.literal("")),
   AGROMONITORING_API_KEY: z.string().optional().or(z.literal("")),
+  /** Optional Hugging Face token (needed if the leaf Space is private). */
+  HF_TOKEN: z.string().optional().or(z.literal("")),
+  /** Gradio Space id that serves leaf_disease.tflite. Default: hupus/agropulse-leaf */
+  LEAF_HF_SPACE: z.string().default("hupus/agropulse-leaf"),
 });
 
 export const publicEnv = publicEnvSchema.parse({
@@ -30,7 +38,12 @@ export function getServerEnv() {
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     GEMINI_MODEL: process.env.GEMINI_MODEL,
+    GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
+    GOOGLE_CLOUD_LOCATION: process.env.GOOGLE_CLOUD_LOCATION,
+    GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
     AGROMONITORING_API_KEY: process.env.AGROMONITORING_API_KEY,
+    HF_TOKEN: process.env.HF_TOKEN,
+    LEAF_HF_SPACE: process.env.LEAF_HF_SPACE,
   });
 }
 

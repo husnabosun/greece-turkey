@@ -30,7 +30,7 @@ export const DEMO_FRUIT: FruitResult = {
 export const DEMO_TRAP: TrapResult = {
   flyCount: 8,
   confidence: 0.65,
-  notes: "Demo count — connect GEMINI_API_KEY for a live read.",
+  notes: "Demo count — connect Vertex AI (GOOGLE_CLOUD_PROJECT + service account) for a live read.",
 };
 
 export function demoAdvice(fieldName: string): AdviceResult {

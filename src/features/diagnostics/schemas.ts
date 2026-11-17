@@ -8,7 +8,7 @@ export const LANGUAGE_NAME: Record<Language, string> = {
   el: "Greek",
 };
 
-export const MAX_IMAGE_BYTES = 1_000_000;
+export const MAX_IMAGE_BYTES = 4_000_000;
 export const MAX_IMAGE_BASE64 = Math.ceil((MAX_IMAGE_BYTES * 4) / 3);
 
 const image = z.string().min(100).max(MAX_IMAGE_BASE64);
@@ -18,7 +18,10 @@ const short = (n: number) => z.string().max(n);
 export const readLabelRequest = z.object({ imageBase64: image });
 
 export const diagnoseRequest = z.object({
+  /** Primary image (kept for older clients). */
   imageBase64: image,
+  /** Extra photos from the same capture session (max 3 more). */
+  imageBase64List: z.array(image).max(4).optional(),
   mode: z.enum(["leaf", "fruit", "trap"]),
   /** Optional field/weather context for better diagnosis. */
   context: z
@@ -105,6 +108,19 @@ export const labelResult = z.object({
 export const FRUIT_DIAGNOSES = ["olive fly sting", "other damage", "healthy", "unclear"] as const;
 export const LEAF_LABELS = ["Healthy", "Olive Peacock Spot", "Aculus Olearius"] as const;
 
+function coerceLeafLabel(raw: unknown): (typeof LEAF_LABELS)[number] | unknown {
+  if (typeof raw !== "string") return raw;
+  const n = raw.trim().toLowerCase();
+  if (n === "healthy" || n.includes("υγι")) return "Healthy";
+  if (n.includes("peacock") || n.includes("spilocaea") || n.includes("cyclocon") || n.includes("κυκλοκ")) {
+    return "Olive Peacock Spot";
+  }
+  if (n.includes("aculus") || n.includes("mite") || n.includes("ακάρε")) return "Aculus Olearius";
+  return raw;
+}
+
+const leafLabel = z.preprocess(coerceLeafLabel, z.enum(LEAF_LABELS));
+
 export const fruitResult = z.object({
   diagnosis: z.enum(FRUIT_DIAGNOSES),
   confidence,
@@ -118,10 +134,10 @@ export const trapResult = z.object({
 });
 
 export const leafResult = z.object({
-  label: z.enum(LEAF_LABELS),
+  label: leafLabel,
   confidence,
   top3: z
-    .array(z.object({ label: z.enum(LEAF_LABELS), confidence }))
+    .array(z.object({ label: leafLabel, confidence }))
     .min(1)
     .max(3),
   symptoms: z.array(z.string().max(120)).max(5).optional(),

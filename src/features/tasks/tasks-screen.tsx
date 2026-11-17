@@ -4,14 +4,18 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Bell, Check, ChevronLeft } from "lucide-react";
+import { scanCameraHrefForTask } from "@/features/diagnostics/open-scan-camera";
+import { useFarmerFields } from "@/features/fields/use-farmer-fields";
+import { AddTaskForm } from "@/features/tasks/add-task-form";
 import { TaskCard } from "@/features/tasks/task-card";
-import { completeTask, useFarmerTasks } from "@/features/tasks/use-farmer-tasks";
+import { completeTask, dismissTask, useFarmerTasks } from "@/features/tasks/use-farmer-tasks";
 import { Link, useRouter } from "@/shared/i18n/navigation";
 
 export function TasksScreen() {
   const t = useTranslations("farmerTasks");
   const router = useRouter();
-  const { tasks, loading, reload } = useFarmerTasks();
+  const { fields } = useFarmerFields();
+  const { tasks, loading, reload, markLocalDone, removeLocal, prependLocal } = useFarmerTasks();
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const open = tasks.filter((task) => !task.done);
@@ -22,14 +26,31 @@ export function TasksScreen() {
 
   async function markDone(taskId: string, message?: string) {
     setBusyId(taskId);
+    markLocalDone(taskId);
     try {
       const result = await completeTask(taskId);
       if (!result.ok) {
         toast.error(result.error ?? t("actionFailed"));
+        await reload();
         return;
       }
       toast.success(message ?? t("markedDone"));
-      await reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function dismiss(taskId: string) {
+    setBusyId(taskId);
+    removeLocal(taskId);
+    try {
+      const result = await dismissTask(taskId);
+      if (!result.ok) {
+        toast.error(result.error ?? t("actionFailed"));
+        await reload();
+        return;
+      }
+      toast.success(t("dismissed"));
     } finally {
       setBusyId(null);
     }
@@ -41,6 +62,7 @@ export function TasksScreen() {
     no: t("no"),
     recheckNow: t("recheckNow"),
     markDone: t("markDone"),
+    dismiss: t("dismiss"),
   };
 
   return (
@@ -76,6 +98,13 @@ export function TasksScreen() {
         <span className="shrink-0 text-ap-body font-extrabold text-good">{t("scorePlus", { n: doneCount })}</span>
       </div>
 
+      <div className="mt-3">
+        <AddTaskForm
+          fields={fields.map((f) => ({ id: f.id, name: f.name }))}
+          onCreated={(task) => prependLocal(task)}
+        />
+      </div>
+
       {loading ? (
         <div className="mt-4 space-y-3">
           <div className="h-28 animate-pulse rounded-[18px] bg-soft" />
@@ -95,16 +124,17 @@ export function TasksScreen() {
                 key={task.id}
                 task={task}
                 busy={busyId === task.id}
-                onPhoto={() => router.push("/farmer/scan")}
+                onPhoto={() => router.push(scanCameraHrefForTask(task))}
                 onSprayYes={() => {
                   void (async () => {
                     await markDone(task.id, t("sprayNoted"));
-                    router.push("/farmer/logbook?add=1");
+                    router.push(`/farmer/logbook?add=1&fieldId=${encodeURIComponent(task.fieldId)}`);
                   })();
                 }}
                 onSprayNo={() => void markDone(task.id, t("noSprayNoted"))}
-                onRecheck={() => router.push("/farmer/scan")}
+                onRecheck={() => router.push(scanCameraHrefForTask(task))}
                 onPlain={() => void markDone(task.id)}
+                onDismiss={() => void dismiss(task.id)}
                 labels={labels}
               />
             ))}

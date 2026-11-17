@@ -12,7 +12,10 @@ export type Presented = {
   tone: PillTone;
   pillKey: PillKey;
   confidence?: number;
-  source?: "gemini" | "demo";
+  source?: "gemini" | "model" | "demo";
+  modelVersion?: string;
+  /** Why the server fell back to demo (when source === "demo"). */
+  demoReason?: string;
   actionKind: ActionKind;
   showNoChemicals: boolean;
 };

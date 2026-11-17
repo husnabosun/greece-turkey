@@ -8,7 +8,7 @@ type SaveInput = {
   mode: CaptureMode;
   dataUrl: string;
   rawResult: unknown;
-  source: "gemini" | "demo";
+  source: "gemini" | "model" | "demo";
   presented: Presented;
 };
 

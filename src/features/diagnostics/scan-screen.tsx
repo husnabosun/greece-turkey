@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import {
   Bug,
@@ -27,8 +28,9 @@ import type { ActionKind, CaptureMode, PillKey, Presented, SavedScan } from "@/f
 import { scanNeedsRecheck, useFarmerScans } from "@/features/diagnostics/use-farmer-scans";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { varietyAgronomyContext } from "@/features/fields/olive-varieties";
+import { completeTasksAfterScan } from "@/features/tasks/use-farmer-tasks";
 import { AiTag, ApButton, Chip, FieldChips, Pill, PrivacyLine, type PillTone } from "@/shared/components/brand";
-import { Link } from "@/shared/i18n/navigation";
+import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 import { FIELD_DOTS } from "@/shared/theme/tokens";
 
@@ -52,7 +54,11 @@ const BOX: Record<PillTone, string> = {
 
 export function ScanScreen() {
   const t = useTranslations("farmerScan");
+  const tTasks = useTranslations("farmerTasks");
   const locale = useLocale();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
   const { fields, loading: fieldsLoading } = useFarmerFields();
   const { scans, loading: scansLoading, setScans, error: scansError } = useFarmerScans();
   const [view, setView] = useState<View>("list");
@@ -60,12 +66,16 @@ export function ScanScreen() {
   const [filter, setFilter] = useState<string | "all">("all");
   const [onlyDue, setOnlyDue] = useState(false);
   const [fieldId, setFieldId] = useState<string | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [treeId, setTreeId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<string[]>([]);
   const [analysing, setAnalysing] = useState(false);
   const [picking, setPicking] = useState(false);
+  const bootstrappedParams = useRef(false);
   const libraryRef = useRef<HTMLInputElement>(null);
   const shutterRef = useRef<HTMLInputElement>(null);
+  const addMoreRef = useRef<HTMLInputElement>(null);
 
   const viewFields = useMemo(
     () =>
@@ -87,6 +97,34 @@ export function ScanScreen() {
   useEffect(() => {
     if (filter !== "all" && !viewFields.some((f) => f.id === filter)) setFilter("all");
   }, [filter, viewFields]);
+
+  /** Deep-link from a task: open camera with that field / mode / taskId. */
+  useEffect(() => {
+    if (bootstrappedParams.current) return;
+    const wantsCamera = searchParams.get("camera") === "1";
+    const qField = searchParams.get("fieldId");
+    const qMode = searchParams.get("mode");
+    const qTask = searchParams.get("taskId");
+    const qTree = searchParams.get("treeId");
+    if (!wantsCamera && !qField && !qMode && !qTask && !qTree) return;
+    if (fieldsLoading) return;
+
+    bootstrappedParams.current = true;
+    if (qField && viewFields.some((f) => f.id === qField)) {
+      setFieldId(qField);
+      setFilter(qField);
+    }
+    if (qMode === "leaf" || qMode === "fruit" || qMode === "trap") setMode(qMode);
+    if (qTask) setTaskId(qTask);
+    if (qTree) setTreeId(qTree);
+    if (wantsCamera) {
+      setPhotos([]);
+      setAnalysing(false);
+      setPicking(false);
+      setView("camera");
+    }
+    router.replace(pathname);
+  }, [searchParams, fieldsLoading, viewFields, router, pathname]);
 
   const activeField = viewFields.find((f) => f.id === fieldId) ?? null;
   const active = scans.find((s) => s.id === activeId) ?? null;
@@ -118,7 +156,7 @@ export function ScanScreen() {
   }, [scans, filter, onlyDue, viewFields, t]);
 
   function openCamera() {
-    setPreview(null);
+    setPhotos([]);
     setAnalysing(false);
     setPicking(false);
     setView("camera");
@@ -126,27 +164,40 @@ export function ScanScreen() {
 
   function onFile(file: File | null) {
     if (!file || analysing) return;
-    if (file.size > 1_000_000) {
+    if (photos.length >= 4) {
+      toast.error(t("maxPhotos"));
+      return;
+    }
+    if (file.size > 4_000_000) {
       toast.error(t("tooBig"));
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       const url = String(reader.result);
-      setPreview(url);
-      void analyse(url);
+      setPhotos((prev) => (prev.length >= 4 ? prev : [...prev, url]));
     };
     reader.readAsDataURL(file);
   }
 
-  async function analyse(dataUrl: string) {
+  function removePhoto(index: number) {
+    if (analysing) return;
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function analyse(selected: string[]) {
     if (!activeField) {
       toast.error(t("needField"));
       return;
     }
+    if (selected.length === 0) {
+      toast.error(t("needPhoto"));
+      return;
+    }
+    const primary = selected[0];
     setAnalysing(true);
     try {
-      const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+      const toBase64 = (dataUrl: string) => (dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl);
       const agro = varietyAgronomyContext(activeField.variety_slug ?? activeField.variety);
       const context = {
         fieldName: activeField.name.slice(0, 60),
@@ -163,7 +214,12 @@ export function ScanScreen() {
       const res = await fetch("/api/ai/diagnose", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, imageBase64: base64, context }),
+        body: JSON.stringify({
+          mode,
+          imageBase64: toBase64(primary),
+          imageBase64List: selected.map(toBase64),
+          context,
+        }),
       });
       const json: unknown = await res.json();
       if (!isRecord(json) || json.ok !== true) {
@@ -176,7 +232,8 @@ export function ScanScreen() {
 
       const rawResult = isRecord(payload) ? payload.result : null;
       const source =
-        isRecord(payload) && (payload.source === "gemini" || payload.source === "demo")
+        isRecord(payload) &&
+        (payload.source === "gemini" || payload.source === "demo" || payload.source === "model")
           ? payload.source
           : "demo";
 
@@ -184,7 +241,7 @@ export function ScanScreen() {
         fieldId: activeField.id,
         fieldName: activeField.name,
         mode,
-        dataUrl,
+        dataUrl: primary,
         rawResult,
         source,
         presented,
@@ -197,19 +254,33 @@ export function ScanScreen() {
           fieldId: activeField.id,
           fieldName: activeField.name,
           at: new Date().toISOString(),
-          preview: dataUrl,
+          preview: primary,
           storagePath: null,
           presented,
         };
         setScans((prev) => [local, ...prev]);
         setActiveId(local.id);
+        setPhotos([]);
         setView("result");
         return;
       }
 
-      toast.success(t("saved"));
+      const taskResult = await completeTasksAfterScan({
+        fieldId: activeField.id,
+        taskId,
+        treeId,
+      });
+      setTaskId(null);
+      setTreeId(null);
+
+      if (taskResult.ok && taskResult.completedId) {
+        toast.success(tTasks("scanCompletedTask"));
+      } else {
+        toast.success(t("saved"));
+      }
       setScans((prev) => [persisted.scan, ...prev.filter((s) => s.id !== persisted.scan.id)]);
       setActiveId(persisted.scan.id);
+      setPhotos([]);
       setView("result");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("failed"));
@@ -267,67 +338,136 @@ export function ScanScreen() {
         </div>
 
         <div className="relative mx-4 mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] bg-[#1B1B1B]">
-          {preview && analysing ? (
+          {photos.length > 0 ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="" className="absolute inset-0 size-full object-cover opacity-50" />
+            <img
+              src={photos[0]}
+              alt=""
+              className={cn("absolute inset-0 size-full object-contain", analysing && "opacity-40")}
+            />
           ) : null}
-          <div className="relative flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
-            <Camera className="size-8 text-[#8A8A8A]" aria-hidden />
-            {analysing ? (
-              <p className="text-ap-body font-semibold text-white/70">{t("analysing")}</p>
-            ) : (
-              <>
-                <p className="text-ap-body font-semibold text-white/70">{t("cameraOff")}</p>
-                <button
-                  type="button"
-                  onClick={() => libraryRef.current?.click()}
-                  className="inline-flex h-11 items-center justify-center rounded-full bg-white px-6 text-ap-btn text-ink"
-                >
-                  {t("choosePhoto")}
-                </button>
-              </>
-            )}
-          </div>
-          <p className="pointer-events-none absolute bottom-4 left-1/2 max-w-[90%] -translate-x-1/2 rounded-full bg-black/50 px-3 py-1.5 text-center text-ap-body font-semibold text-white">
-            {hint}
-          </p>
+
+          {analysing ? (
+            <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center">
+              <span className="relative flex size-16 items-center justify-center">
+                <span className="absolute inset-0 animate-ping rounded-full bg-white/20" />
+                <span className="absolute inset-2 animate-spin rounded-full border-2 border-white/25 border-t-white" />
+                <Leaf className="relative size-6 text-white" aria-hidden />
+              </span>
+              <div>
+                <p className="text-ap-card font-extrabold text-white">{t("analysing")}</p>
+                <p className="mt-1 text-ap-body font-semibold text-white/70">{t("analysingHint")}</p>
+              </div>
+            </div>
+          ) : photos.length > 0 ? (
+            <div className="relative z-10 mt-auto flex flex-col gap-3 bg-gradient-to-t from-black/80 via-black/45 to-transparent px-4 pt-16 pb-4">
+              <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {photos.map((src, i) => (
+                  <div key={`${i}-${src.slice(0, 24)}`} className="relative shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={src}
+                      alt=""
+                      className={cn(
+                        "size-16 rounded-xl object-cover ring-2",
+                        i === 0 ? "ring-white" : "ring-white/30",
+                      )}
+                    />
+                    <button
+                      type="button"
+                      aria-label={t("removePhoto")}
+                      onClick={() => removePhoto(i)}
+                      className="absolute -top-1.5 -right-1.5 flex size-6 items-center justify-center rounded-full bg-[#E5473A] text-white"
+                    >
+                      <X className="size-3.5" aria-hidden />
+                    </button>
+                  </div>
+                ))}
+                {photos.length < 4 ? (
+                  <button
+                    type="button"
+                    onClick={() => addMoreRef.current?.click()}
+                    className="flex size-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border border-dashed border-white/40 bg-white/10 text-white"
+                  >
+                    <ImageIcon className="size-4" aria-hidden />
+                    <span className="text-[10px] font-bold">{t("addPhoto")}</span>
+                  </button>
+                ) : null}
+              </div>
+              <p className="text-center text-ap-small font-semibold text-white/75">{t("reviewHint")}</p>
+              <button
+                type="button"
+                onClick={() => void analyse(photos)}
+                className="inline-flex h-12 w-full items-center justify-center rounded-full bg-white text-ap-btn text-ink"
+              >
+                {t("analyseNow")}
+              </button>
+            </div>
+          ) : (
+            <div className="relative flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
+              <Camera className="size-8 text-[#8A8A8A]" aria-hidden />
+              <p className="text-ap-body font-semibold text-white/70">{t("cameraOff")}</p>
+              <button
+                type="button"
+                onClick={() => libraryRef.current?.click()}
+                className="inline-flex h-11 items-center justify-center rounded-full bg-white px-6 text-ap-btn text-ink"
+              >
+                {t("choosePhoto")}
+              </button>
+              <p className="pointer-events-none absolute bottom-4 left-1/2 max-w-[90%] -translate-x-1/2 rounded-full bg-black/50 px-3 py-1.5 text-center text-ap-body font-semibold text-white">
+                {hint}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="mx-4 mt-2">
           <PrivacyLine className="text-white/55" />
         </div>
 
-        <div className="flex items-center justify-between px-8 pt-2 pb-4">
-          <button
-            type="button"
-            aria-label={t("gallery")}
-            onClick={() => libraryRef.current?.click()}
-            disabled={analysing}
-            className="flex size-12 items-center justify-center rounded-full bg-white/15 disabled:opacity-40"
-          >
-            <ImageIcon className="size-[22px]" aria-hidden />
-          </button>
-          <button
-            type="button"
-            aria-label={t("shutter")}
-            onClick={() => shutterRef.current?.click()}
-            disabled={analysing}
-            className="flex size-[76px] items-center justify-center rounded-full border-4 border-white disabled:opacity-40"
-          >
-            <span className="size-[58px] rounded-full bg-white" />
-          </button>
-          <button
-            type="button"
-            aria-label={t("history")}
-            onClick={() => setView("list")}
-            className="flex size-12 items-center justify-center rounded-full bg-white/15"
-          >
-            <History className="size-[22px]" aria-hidden />
-          </button>
-        </div>
+        {photos.length === 0 && !analysing ? (
+          <div className="flex items-center justify-between px-8 pt-2 pb-4">
+            <button
+              type="button"
+              aria-label={t("gallery")}
+              onClick={() => libraryRef.current?.click()}
+              className="flex size-12 items-center justify-center rounded-full bg-white/15"
+            >
+              <ImageIcon className="size-[22px]" aria-hidden />
+            </button>
+            <button
+              type="button"
+              aria-label={t("shutter")}
+              onClick={() => shutterRef.current?.click()}
+              className="flex size-[76px] items-center justify-center rounded-full border-4 border-white"
+            >
+              <span className="size-[58px] rounded-full bg-white" />
+            </button>
+            <button
+              type="button"
+              aria-label={t("history")}
+              onClick={() => setView("list")}
+              className="flex size-12 items-center justify-center rounded-full bg-white/15"
+            >
+              <History className="size-[22px]" aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <div className="h-4 pb-[env(safe-area-inset-bottom)]" />
+        )}
 
         <input
           ref={libraryRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            onFile(e.target.files?.[0] ?? null);
+            e.target.value = "";
+          }}
+        />
+        <input
+          ref={addMoreRef}
           type="file"
           accept="image/*"
           className="hidden"
@@ -520,12 +660,16 @@ function ResultView({
         </div>
       </div>
 
-      <div className="relative mt-2.5 h-[200px] overflow-hidden rounded-[18px] bg-soft">
+      <div className="relative mt-2.5 min-h-[280px] overflow-hidden rounded-[18px] bg-[#111] sm:min-h-[340px]">
         {scan.preview ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={scan.preview} alt={presented.title} className="size-full object-cover" />
+          <img
+            src={scan.preview}
+            alt={presented.title}
+            className="mx-auto max-h-[55vh] min-h-[280px] w-full object-contain sm:min-h-[340px]"
+          />
         ) : (
-          <div className="flex size-full items-center justify-center">
+          <div className="flex min-h-[280px] items-center justify-center">
             <Leaf className="size-10 text-muted-foreground" aria-hidden />
           </div>
         )}
@@ -557,7 +701,11 @@ function ResultView({
             ) : null}
           </div>
         ) : null}
-        {presented.source === "demo" ? <p className="mt-1 text-ap-small text-muted-foreground">{t("demoNote")}</p> : null}
+        {presented.source === "demo" ? (
+          <p className="mt-1 text-ap-small text-muted-foreground">
+            {demoNoteFor(presented.demoReason, t)}
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-3.5 flex items-center justify-between gap-2">
@@ -625,10 +773,41 @@ function actionSet(kind: ActionKind, t: TFn): { icon: LucideIcon; title: string;
   ];
 }
 
+function demoNoteFor(reason: string | undefined, t: TFn): string {
+  switch (reason) {
+    case "no_key":
+      return t("demoReasonNoKey");
+    case "timeout":
+      return t("demoReasonTimeout");
+    case "schema":
+      return t("demoReasonSchema");
+    case "parse":
+    case "empty":
+      return t("demoReasonParse");
+    case "billing":
+      return t("demoReasonBilling");
+    case "api":
+      return t("demoReasonApi");
+    case "space":
+      return t("demoReasonSpace");
+    case "quota":
+      return t("demoReasonQuota");
+    case "no_token":
+      return t("demoReasonNoToken");
+    default:
+      return t("demoNote");
+  }
+}
+
 function buildPresented(data: unknown, t: TFn): Presented | null {
   if (!isRecord(data) || !isRecord(data.result)) return null;
   const result = data.result;
-  const source = data.source === "gemini" || data.source === "demo" ? data.source : undefined;
+  const source =
+    data.source === "gemini" || data.source === "demo" || data.source === "model"
+      ? data.source
+      : undefined;
+  const modelVersion = typeof data.modelVersion === "string" ? data.modelVersion : undefined;
+  const demoReason = typeof data.demoReason === "string" ? data.demoReason : undefined;
   const confidence = asConfidence(result.confidence);
 
   if (data.mode === "leaf" && typeof result.label === "string") {
@@ -660,6 +839,8 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
       pillKey,
       confidence,
       source,
+      modelVersion,
+      demoReason,
       actionKind: toneGood ? "healthy" : "care",
       showNoChemicals: !toneGood,
     };
@@ -695,6 +876,7 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
       pillKey,
       confidence,
       source,
+      demoReason,
       actionKind: toneGood ? "healthy" : "care",
       showNoChemicals: !toneGood,
     };
@@ -712,6 +894,7 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
       pillKey,
       confidence,
       source,
+      demoReason,
       actionKind: "trap",
       showNoChemicals: tone !== "good",
     };

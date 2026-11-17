@@ -22,8 +22,10 @@ import {
 import { formatStremmata } from "@/features/fields/area";
 import { reverseGeocodePlace } from "@/features/fields/reverse-geocode";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
+import { scanCameraHref, scanCameraHrefForTask } from "@/features/diagnostics/open-scan-camera";
+import { AddTaskForm } from "@/features/tasks/add-task-form";
 import { TaskCard } from "@/features/tasks/task-card";
-import { completeTask, useFarmerTasks } from "@/features/tasks/use-farmer-tasks";
+import { completeTask, dismissTask, useFarmerTasks } from "@/features/tasks/use-farmer-tasks";
 import { LEVEL_RANK, THREAT_BY_ID, type ThreatId } from "@/features/weather-risk/risk";
 import { riskLevelLabel, threatLabel, threatTip } from "@/features/weather-risk/threat-labels";
 import { useFieldRiskColors } from "@/features/weather-risk/use-field-risk-colors";
@@ -101,7 +103,14 @@ export function DashboardScreen() {
   const pathname = usePathname();
   const router = useRouter();
   const { fields, loading: fieldsLoading, error: fieldsError } = useFarmerFields();
-  const { tasks, loading: tasksLoading, reload: reloadTasks } = useFarmerTasks();
+  const {
+    tasks,
+    loading: tasksLoading,
+    reload: reloadTasks,
+    markLocalDone,
+    removeLocal,
+    prependLocal,
+  } = useFarmerTasks();
   const [selected, setSelected] = useState<string | "all">("all");
   const [displayName, setDisplayName] = useState("");
   const [profilePlace, setProfilePlace] = useState("");
@@ -231,14 +240,31 @@ export function DashboardScreen() {
 
   async function markTaskDone(taskId: string, message?: string) {
     setBusyTaskId(taskId);
+    markLocalDone(taskId);
     try {
       const result = await completeTask(taskId);
       if (!result.ok) {
         toast.error(result.error ?? tTasks("actionFailed"));
+        await reloadTasks();
         return;
       }
       toast.success(message ?? tTasks("markedDone"));
-      await reloadTasks();
+    } finally {
+      setBusyTaskId(null);
+    }
+  }
+
+  async function dismissHomeTask(taskId: string) {
+    setBusyTaskId(taskId);
+    removeLocal(taskId);
+    try {
+      const result = await dismissTask(taskId);
+      if (!result.ok) {
+        toast.error(result.error ?? tTasks("actionFailed"));
+        await reloadTasks();
+        return;
+      }
+      toast.success(tTasks("dismissed"));
     } finally {
       setBusyTaskId(null);
     }
@@ -250,6 +276,7 @@ export function DashboardScreen() {
     no: tTasks("no"),
     recheckNow: tTasks("recheckNow"),
     markDone: tTasks("markDone"),
+    dismiss: tTasks("dismiss"),
   };
 
   const primary = shown.find((f) => f.lat != null && f.lon != null) ?? shown[0] ?? null;
@@ -477,7 +504,14 @@ export function DashboardScreen() {
                   label={t("ctaScan")}
                   variant={tone.btn}
                   icon={<Camera className="size-4" aria-hidden />}
-                  onClick={() => router.push("/farmer/scan")}
+                  onClick={() =>
+                    router.push(
+                      scanCameraHref({
+                        fieldId: primary?.id,
+                        mode: scanMode,
+                      }),
+                    )
+                  }
                 />
               ) : (
                 <ApButton
@@ -513,6 +547,12 @@ export function DashboardScreen() {
               </Link>
             }
           />
+          <div className="mt-2">
+            <AddTaskForm
+              fields={fields.map((f) => ({ id: f.id, name: f.name }))}
+              onCreated={(task) => prependLocal(task)}
+            />
+          </div>
           {tasksLoading ? (
             <div className="mt-2.5 space-y-2.5">
               <Skeleton className="h-24 w-full rounded-[18px]" />
@@ -528,16 +568,17 @@ export function DashboardScreen() {
                   task={task}
                   compact
                   busy={busyTaskId === task.id}
-                  onPhoto={() => router.push("/farmer/scan")}
+                  onPhoto={() => router.push(scanCameraHrefForTask(task))}
                   onSprayYes={() => {
                     void (async () => {
                       await markTaskDone(task.id, tTasks("sprayNoted"));
-                      router.push("/farmer/logbook?add=1");
+                      router.push(`/farmer/logbook?add=1&fieldId=${encodeURIComponent(task.fieldId)}`);
                     })();
                   }}
                   onSprayNo={() => void markTaskDone(task.id, tTasks("noSprayNoted"))}
-                  onRecheck={() => router.push("/farmer/scan")}
+                  onRecheck={() => router.push(scanCameraHrefForTask(task))}
                   onPlain={() => void markTaskDone(task.id)}
+                  onDismiss={() => void dismissHomeTask(task.id)}
                   labels={taskLabels}
                 />
               ))}
