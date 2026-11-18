@@ -26,11 +26,16 @@ import { Pill } from "@/shared/components/brand/pill";
 import { StatusSteps } from "@/shared/components/brand/status-steps";
 import { Link, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
-import { euroPrice, euroTotal, saleTotal } from "@/features/marketplace/pricing";
+import { euroPrice, euroTotal, formatTons, saleTotal } from "@/features/marketplace/pricing";
 import { trustBadges } from "@/features/marketplace/badges";
 import { canAdvanceDelivery, deliveryStepIndex, nextDeliveryStatus } from "@/features/marketplace/delivery-state";
 import { reverseGeocodePlace } from "@/features/fields/reverse-geocode";
-import { defaultVarietySlug, marketplaceVarietyOptions, resolveOliveCountry } from "@/features/fields/olive-varieties";
+import {
+  defaultVarietySlug,
+  marketplaceVarietyOptions,
+  resolveOliveCountry,
+  varietyLabelFromStored,
+} from "@/features/fields/olive-varieties";
 import { LotsMap } from "./lots-map";
 import {
   Amount,
@@ -52,10 +57,14 @@ import {
   type LotBadge,
   type WeekDayCell,
 } from "./processor-kit";
+import { marketRegionOptions, regionLabel } from "./regions";
 import {
   DAY_CAPACITY_TONS,
   DEFAULT_DELIVERY_IN_DAYS,
   addDaysIso,
+  formatWindowLabel,
+  localizeStoredWindowLabel,
+  nextDeliveryWindows,
   nextSevenDays,
   parseIsoDate,
   todayIsoDate,
@@ -77,8 +86,6 @@ import {
   type ProcessorOffer,
 } from "./use-processor-market";
 
-const PROVINCES = ["Crete", "Messinia", "Peloponnese", "Laconia", "Aydın", "Balıkesir", "İzmir"] as const;
-const WINDOW_KEYS = ["window1", "window2", "window3", "window4"] as const;
 const SCORE_OPTIONS = ["70", "75", "80", "85"] as const;
 const DEMO_EXCHANGE = 0.8;
 
@@ -108,8 +115,7 @@ function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"p
 
 function useVarietyLabel() {
   const locale = useLocale();
-  const options = useMemo(() => marketplaceVarietyOptions(locale), [locale]);
-  return (slug: string) => options.find((o) => o.value === slug)?.label ?? slug;
+  return (slug: string) => varietyLabelFromStored(slug, locale);
 }
 
 /** Resolve "Town, Province" from lot lat/lon (same Mapbox path as farmer home). */
@@ -187,7 +193,7 @@ function SupplyWeekBars({
             />
           </div>
           <span className="text-[10px] font-semibold text-muted-foreground">{labels[i]}</span>
-          <span className="text-[11px] font-bold text-ink">{tons > 0 ? `${tons % 1 ? tons.toFixed(1) : tons}t` : "–"}</span>
+          <span className="text-[11px] font-bold text-ink">{tons > 0 ? formatTons(tons) : "–"}</span>
         </div>
       ))}
     </div>
@@ -215,7 +221,7 @@ export function ProcessorOverviewScreen() {
   const [busyOfferId, setBusyOfferId] = useState<string | null>(null);
   const [acceptOffer, setAcceptOffer] = useState<ProcessorOffer | null>(null);
   const [acceptDate, setAcceptDate] = useState(() => addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
-  const [selectedDay, setSelectedDay] = useState<string | null>(() => todayIsoDate());
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
   const greet = overviewGreeting(locale, company);
   const weekDates = useMemo(() => nextSevenDays(), []);
@@ -328,7 +334,7 @@ export function ProcessorOverviewScreen() {
         overloaded: tons >= DAY_CAPACITY_TONS,
         chips: dayDeliveries.map((d) => ({
           id: d.id,
-          label: `${d.lotVariety ? varietyLabel(d.lotVariety) : t("anonymousGrove")} · ${d.tons % 1 ? d.tons.toFixed(1) : d.tons} t`,
+          label: `${d.lotVariety ? varietyLabel(d.lotVariety) : t("anonymousGrove")} · ${formatTons(d.tons, locale)}`,
         })),
       };
     });
@@ -340,14 +346,8 @@ export function ProcessorOverviewScreen() {
 
   const onAdvanceFromDay = async (d: ProcessorDelivery) => {
     if (!canAdvanceDelivery(d.status)) return;
-    toast.message(t("advancing"));
-    const res = await advanceDelivery(d.id, d.status, { labResult: "passed" });
-    if (!res.ok) {
-      toast.error(res.error ?? t("saveFailed"));
-      return;
-    }
-    toast.success(t("advanced"));
-    await reload();
+    // Weighbridge / lab need inputs — open the Deliveries page for the confirm dialog.
+    router.push("/processor/deliveries");
   };
 
   const onQuickSchedule = async (deliveryId: string, iso: string) => {
@@ -526,7 +526,7 @@ export function ProcessorOverviewScreen() {
                 <div>
                   <p className="text-[14px] font-extrabold text-ink">{d.farmerName ?? d.lotRegion ?? t("anonymousGrove")}</p>
                   <p className="text-[12px] font-medium text-muted-foreground">
-                    {[d.lotVariety ? varietyLabel(d.lotVariety) : null, `${d.tons} t`].filter(Boolean).join(" · ")}
+                    {[d.lotVariety ? varietyLabel(d.lotVariety) : null, formatTons(d.tons, locale)].filter(Boolean).join(" · ")}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -744,7 +744,8 @@ export function ProcessorOverviewScreen() {
                             })
                           : t("unscheduledShort"),
                         d.lotVariety ? varietyLabel(d.lotVariety) : null,
-                        `${d.tons} t`,
+                        formatTons(d.tons, locale),
+                        d.lotRegion ? regionLabel(d.lotRegion, locale) : null,
                         t(`step.${d.status}` as "step.scheduled"),
                       ]
                         .filter(Boolean)
@@ -779,9 +780,9 @@ export function ProcessorOverviewScreen() {
                 <div key={row.region} className="relative rounded-[16px] border border-line bg-background p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="text-[15px] font-extrabold text-ink">{row.region}</p>
+                      <p className="text-[15px] font-extrabold text-ink">{regionLabel(row.region, locale)}</p>
                       <p className="text-[12px] font-medium text-muted-foreground">
-                        {t("regionTotalTons", { n: total % 1 ? total.toFixed(1) : String(total) })}
+                        {t("regionTotalTonsLabel", { tons: formatTons(total, locale) })}
                       </p>
                     </div>
                     <span className="rounded-full bg-soft px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
@@ -933,7 +934,8 @@ export function ProcessorRequestsScreen() {
   const [variety, setVariety] = useState(() => defaultVarietySlug(resolveOliveCountry({ locale }).country));
   const [tons, setTons] = useState("10");
   const [minScore, setMinScore] = useState("75");
-  const [windowKey, setWindowKey] = useState<string>(WINDOW_KEYS[1]!);
+  const deliveryWindows = useMemo(() => nextDeliveryWindows(4, 10), []);
+  const [windowKey, setWindowKey] = useState("w1");
   const [province, setProvince] = useState("Peloponnese");
   const [noBanned, setNoBanned] = useState<"required" | "optional">("required");
   const [saving, setSaving] = useState(false);
@@ -941,8 +943,10 @@ export function ProcessorRequestsScreen() {
   const [acceptOffer, setAcceptOffer] = useState<ProcessorOffer | null>(null);
   const [acceptDate, setAcceptDate] = useState(() => addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
   const weekDates = useMemo(() => nextSevenDays(), []);
+  const regionOptions = useMemo(() => marketRegionOptions(locale), [locale]);
 
   const openRequests = requests.filter((r) => r.active);
+  const selectedWindow = deliveryWindows.find((w) => w.key === windowKey) ?? deliveryWindows[1] ?? deliveryWindows[0];
   const offersForRequest = (requestId: string) =>
     offers.filter(
       (o) =>
@@ -958,12 +962,15 @@ export function ProcessorRequestsScreen() {
       return;
     }
     setSaving(true);
+    const windowLabel = selectedWindow
+      ? formatWindowLabel(selectedWindow.start, selectedWindow.end, locale)
+      : formatWindowLabel(todayIsoDate(), addDaysIso(todayIsoDate(), 9), locale);
     const res = await createBuyRequest({
       variety,
       tons: tonsN,
       minScore: Number(minScore) || 0,
       region: province,
-      windowLabel: t(windowKey as "window1"),
+      windowLabel,
       noBanned: noBanned === "required",
     });
     setSaving(false);
@@ -1122,14 +1129,18 @@ export function ProcessorRequestsScreen() {
                 <div className="flex flex-wrap items-center gap-4">
                   <Initials text={initialsOf(varietyLabel(req.variety))} size={44} />
                   <div className="min-w-[200px] flex-1">
-                    <p className="text-[16px] font-extrabold text-ink">
-                      {varietyLabel(req.variety)} · {req.tons} t
-                    </p>
-                    <p className="text-[13px] font-medium text-muted-foreground">
-                      {[req.region, req.windowLabel, t("scorePlus", { score: String(req.minScore) })]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
+                      <p className="text-[16px] font-extrabold text-ink">
+                    {varietyLabel(req.variety)} · {formatTons(req.tons, locale)}
+                  </p>
+                  <p className="text-[13px] font-medium text-muted-foreground">
+                    {[
+                        req.region ? regionLabel(req.region, locale) : null,
+                        localizeStoredWindowLabel(req.windowLabel, locale),
+                        t("scorePlus", { score: String(req.minScore) }),
+                      ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
                     <div className="mt-2 h-2 max-w-[280px] overflow-hidden rounded-full bg-soft">
                       <div className="h-full rounded-full bg-ink" style={{ width: `${pct}%` }} />
                     </div>
@@ -1209,13 +1220,16 @@ export function ProcessorRequestsScreen() {
             label={t("deliveryWindow")}
             value={windowKey}
             onChange={setWindowKey}
-            options={WINDOW_KEYS.map((k) => ({ value: k, label: t(k) }))}
+            options={deliveryWindows.map((w) => ({
+              value: w.key,
+              label: formatWindowLabel(w.start, w.end, locale),
+            }))}
           />
           <ChipGroup
             label={t("province")}
             value={province}
             onChange={setProvince}
-            options={PROVINCES.map((p) => ({ value: p, label: p }))}
+            options={regionOptions}
           />
           <ChipGroup
             label={t("noBannedProducts")}
@@ -1248,35 +1262,70 @@ export function ProcessorDeliveriesScreen() {
   const completed = deliveries.filter((d) => d.status === "paid");
   const tonnesBought = completed.reduce((s, d) => s + d.tons, 0);
   const totalSpent = completed.reduce((s, d) => s + saleTotal(d.tons, d.pricePerKg), 0);
+  const scoredCompleted = completed.filter((d) => d.qualityScoreSnapshot != null);
   const avgQuality =
-    completed.length === 0
+    scoredCompleted.length === 0
       ? null
       : Math.round(
-          completed.reduce((s, d) => s + (d.qualityScoreSnapshot ?? 0), 0) /
-            Math.max(1, completed.filter((d) => d.qualityScoreSnapshot != null).length),
+          scoredCompleted.reduce((s, d) => s + (d.qualityScoreSnapshot as number), 0) / scoredCompleted.length,
         );
   const bannedFreeShare =
     completed.length === 0
       ? null
       : Math.round((completed.filter((d) => d.bannedFree !== false).length / completed.length) * 100);
 
-  const onAdvance = async (id: string, status: (typeof active)[number]["status"]) => {
-    const next = nextDeliveryStatus(status);
-    toast.message(t("advancing"));
-    const res = await advanceDelivery(id, status, {
-      labResult: "passed",
-    });
-    if (!res.ok) {
-      toast.error(res.error ?? t("saveFailed"));
-      return;
-    }
-    toast.success(
-      next
-        ? t("advancedDetail", { status: t(`step.${next}` as "step.weighed") })
-        : t("advanced"),
-    );
-    await reload();
+  const [advanceTarget, setAdvanceTarget] = useState<(typeof active)[number] | null>(null);
+  const [weighKg, setWeighKg] = useState("");
+  const [labOk, setLabOk] = useState<"passed" | "failed">("passed");
+  const [advancing, setAdvancing] = useState(false);
+
+  const openAdvance = (d: (typeof active)[number]) => {
+    setAdvanceTarget(d);
+    setWeighKg(String(Math.round(d.tons * 1000)));
+    setLabOk("passed");
   };
+
+  const onAdvanceConfirm = async () => {
+    if (!advanceTarget) return;
+    const next = nextDeliveryStatus(advanceTarget.status);
+    setAdvancing(true);
+    toast.message(t("advancing"));
+    try {
+      const extras =
+        advanceTarget.status === "scheduled"
+          ? { actualKg: Number(weighKg.replace(",", ".")) || undefined }
+          : advanceTarget.status === "weighed"
+            ? { labResult: labOk }
+            : undefined;
+      if (advanceTarget.status === "scheduled") {
+        const kg = Number(weighKg.replace(",", "."));
+        if (!Number.isFinite(kg) || kg <= 0) {
+          toast.error(t("saveFailed"));
+          return;
+        }
+      }
+      const res = await advanceDelivery(advanceTarget.id, advanceTarget.status, extras);
+      if (!res.ok) {
+        toast.error(res.error ?? t("saveFailed"));
+        return;
+      }
+      toast.success(
+        next ? t("advancedDetail", { status: t(`step.${next}` as "step.weighed") }) : t("advanced"),
+      );
+      setAdvanceTarget(null);
+      await reload();
+    } finally {
+      setAdvancing(false);
+    }
+  };
+
+  const sortedActive = useMemo(() => {
+    return [...active].sort((a, b) => {
+      const da = parseIsoDate(a.scheduledFor) ?? "9999-99-99";
+      const db = parseIsoDate(b.scheduledFor) ?? "9999-99-99";
+      return da.localeCompare(db);
+    });
+  }, [active]);
 
   return (
     <div className="space-y-5">
@@ -1323,7 +1372,7 @@ export function ProcessorDeliveriesScreen() {
           </ApCard>
         ) : (
           <div className="space-y-4">
-            {active.map((d) => {
+            {sortedActive.map((d) => {
               const step = deliveryStepIndex(d.status);
               const nextLabel =
                 d.status === "scheduled"
@@ -1337,11 +1386,13 @@ export function ProcessorDeliveriesScreen() {
                 <ApCard key={d.id} className="p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-[200px] flex-1">
-                      <p className="text-[11px] font-bold tracking-[1px] text-ap-accent uppercase">{t("inProgress")}</p>
-                      <p className="text-[16px] font-extrabold text-ink">
-                        {d.farmerName ?? d.lotRegion ?? t("anonymousGrove")}
-                      </p>
-                      <p className="text-[13px] text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-[16px] font-extrabold text-ink">
+                          {d.farmerName ?? d.lotRegion ?? t("anonymousGrove")}
+                        </p>
+                        <Pill tone="warn">{t(`step.${d.status}` as "step.scheduled")}</Pill>
+                      </div>
+                      <p className="mt-1 text-[13px] text-muted-foreground">
                         {[
                           parseIsoDate(d.scheduledFor)
                             ? new Date(`${parseIsoDate(d.scheduledFor)}T12:00:00`).toLocaleDateString(locale, {
@@ -1351,8 +1402,9 @@ export function ProcessorDeliveriesScreen() {
                               })
                             : t("unscheduledShort"),
                           d.lotVariety ? varietyLabel(d.lotVariety) : null,
-                          `${d.tons} t`,
-                          d.lotRegion,
+                          formatTons(d.tons, locale),
+                          euroPrice(d.pricePerKg, locale),
+                          d.lotRegion ? regionLabel(d.lotRegion, locale) : null,
                         ]
                           .filter(Boolean)
                           .join(" · ")}
@@ -1360,7 +1412,7 @@ export function ProcessorDeliveriesScreen() {
                     </div>
                     <div className="text-right">
                       <p className="text-[22px] font-extrabold text-ink">
-                        {euroTotal(saleTotal(d.tons, d.pricePerKg))}
+                        {euroTotal(saleTotal(d.tons, d.pricePerKg), locale)}
                       </p>
                       <p className="text-[12px] text-muted-foreground">{t("expected")}</p>
                     </div>
@@ -1374,9 +1426,14 @@ export function ProcessorDeliveriesScreen() {
                       variant="dark"
                       icon={<Scale className="size-4" />}
                       disabled={!canAdvanceDelivery(d.status)}
-                      onClick={() => void onAdvance(d.id, d.status)}
+                      onClick={() => openAdvance(d)}
                     />
-                    <ApButton label={t("downloadReport")} variant="outline" icon={<Download className="size-4" />} disabled />
+                    <ApButton
+                      label={t("downloadReport")}
+                      variant="outline"
+                      icon={<Download className="size-4" />}
+                      onClick={() => toast.message(t("downloadReportSoon"))}
+                    />
                   </div>
                 </ApCard>
               );
@@ -1424,20 +1481,63 @@ export function ProcessorDeliveriesScreen() {
               completed.map((d, i) => (
                 <div key={d.id} className={cn("flex flex-wrap items-center justify-between gap-3 px-4 py-3", i > 0 && "border-t border-line")}>
                   <div>
-                    <p className="text-[16px] font-extrabold text-ink">{d.farmerName ?? d.lotRegion ?? "—"}</p>
+                    <p className="text-[16px] font-extrabold text-ink">{d.farmerName ?? (d.lotRegion ? regionLabel(d.lotRegion, locale) : "—")}</p>
                     <p className="text-[13px] font-medium text-muted-foreground">
-                      {[d.lotVariety ? varietyLabel(d.lotVariety) : null, `${d.tons} t`, euroPrice(d.pricePerKg)]
+                      {[
+                        d.lotVariety ? varietyLabel(d.lotVariety) : null,
+                        formatTons(d.tons, locale),
+                        euroPrice(d.pricePerKg, locale),
+                      ]
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
                   </div>
-                  <p className="text-[16px] font-extrabold text-ink">{euroTotal(saleTotal(d.tons, d.pricePerKg))}</p>
+                  <p className="text-[16px] font-extrabold text-ink">{euroTotal(saleTotal(d.tons, d.pricePerKg), locale)}</p>
                 </div>
               ))
             )}
           </Panel>
         </div>
       )}
+
+      <Dialog
+        open={advanceTarget != null}
+        onClose={() => setAdvanceTarget(null)}
+        title={t("advanceStepTitle")}
+        subtitle={
+          advanceTarget
+            ? `${advanceTarget.farmerName ?? advanceTarget.lotRegion ?? ""} · ${advanceTarget.tons} t`
+            : undefined
+        }
+        actionLabel={advancing ? t("loading") : t("advance")}
+        actionDisabled={advancing}
+        onAction={() => void onAdvanceConfirm()}
+      >
+        {advanceTarget?.status === "scheduled" ? (
+          <>
+            <TextField label={t("weighKgLabel")} value={weighKg} onChange={setWeighKg} suffix="kg" inputMode="decimal" />
+            <p className="text-[12px] font-medium text-muted-foreground">{t("weighKgHint")}</p>
+          </>
+        ) : null}
+        {advanceTarget?.status === "weighed" ? (
+          <ChipGroup
+            label={t("labResultLabel")}
+            value={labOk}
+            onChange={(v) => setLabOk(v as "passed" | "failed")}
+            options={[
+              { value: "passed", label: t("labPassed") },
+              { value: "failed", label: t("labFailed") },
+            ]}
+          />
+        ) : null}
+        {advanceTarget?.status === "lab_checked" ? (
+          <p className="text-[14px] font-medium text-muted-foreground">
+            {t("confirmPaymentBody", {
+              total: euroTotal(saleTotal(advanceTarget.tons, advanceTarget.pricePerKg), locale),
+            })}
+          </p>
+        ) : null}
+      </Dialog>
     </div>
   );
 }
@@ -1521,20 +1621,32 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={`${varietyLabel(lot.variety)} · ${lot.tons} t`}
-        subtitle={t("lotDetailSubtitle")}
+        title={`${varietyLabel(lot.variety)} · ${formatTons(lot.tons, locale)}`}
+        subtitle={
+          lot.status === "sold"
+            ? t("lotDetailSubtitleSold")
+            : lot.status === "reserved"
+              ? t("lotDetailSubtitleReserved")
+              : t("lotDetailSubtitle")
+        }
         action={
-          <ApButton
-            label={sent ? t("offerSent") : t("makeOffer")}
-            variant="dark"
-            disabled={sent}
-            onClick={() => {
-              setTons(String(Math.min(5, lot.tons)));
-              setPrice(String(lot.pricePerKg ?? DEMO_EXCHANGE));
-              setArriveOn(addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
-              setOpen(true);
-            }}
-          />
+          lot.status === "listed" ? (
+            <ApButton
+              label={sent ? t("offerSent") : t("makeOffer")}
+              variant="dark"
+              disabled={sent}
+              onClick={() => {
+                setTons(String(Math.min(5, lot.tons)));
+                setPrice(String(lot.pricePerKg ?? DEMO_EXCHANGE));
+                setArriveOn(addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
+                setOpen(true);
+              }}
+            />
+          ) : (
+            <Pill tone={lot.status === "sold" ? "neutral" : "warn"}>
+              {lot.status === "sold" ? t("soldStatus") : lot.status === "reserved" ? t("reservedStatus") : lot.status}
+            </Pill>
+          )
         }
       />
 

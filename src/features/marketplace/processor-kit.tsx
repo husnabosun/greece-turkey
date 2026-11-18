@@ -221,7 +221,7 @@ export const initialsOf = (name: string) =>
     .join("");
 
 function scoreTone(score: number) {
-  if (score >= 85) return { bg: "bg-good-soft", text: "text-good" };
+  if (score >= 80) return { bg: "bg-good-soft", text: "text-good" };
   if (score >= 70) return { bg: "bg-warn-soft", text: "text-warn-text" };
   return { bg: "bg-risk-soft", text: "text-risk" };
 }

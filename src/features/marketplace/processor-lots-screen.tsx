@@ -5,7 +5,7 @@ import { ArrowUpDown, FlaskConical, Leaf, Plus, Search, SlidersHorizontal, X } f
 import { toast } from "sonner";
 import { useLocale, useTranslations } from "next-intl";
 import { publicEnv } from "@/core/config/env";
-import { marketplaceVarietyOptions } from "@/features/fields/olive-varieties";
+import { marketplaceVarietyOptions, varietyLabelFromStored } from "@/features/fields/olive-varieties";
 import { reverseGeocodePlace } from "@/features/fields/reverse-geocode";
 import { ApButton } from "@/shared/components/brand/ap-button";
 import { ApCard } from "@/shared/components/brand/ap-card";
@@ -13,7 +13,7 @@ import { Chip } from "@/shared/components/brand/chip";
 import { Link } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 import { trustBadges } from "@/features/marketplace/badges";
-import { euroPrice } from "@/features/marketplace/pricing";
+import { euroPrice, formatTons } from "@/features/marketplace/pricing";
 import { LotsMap } from "./lots-map";
 import {
   Amount,
@@ -29,6 +29,7 @@ import {
   TextField,
   type LotBadge,
 } from "./processor-kit";
+import { MARKET_REGIONS, regionLabel, regionMatches, resolveMarketRegion } from "./regions";
 import {
   DEFAULT_DELIVERY_IN_DAYS,
   addDaysIso,
@@ -43,49 +44,11 @@ import {
   type ProcessorLot,
 } from "./use-processor-market";
 
-const PROVINCES = ["Crete", "Messinia", "Peloponnese", "Laconia", "Aydın", "Balıkesir", "İzmir"] as const;
-
 type SortKey = "score" | "price" | "harvest" | "tons";
-
-const REGION_I18N: Record<(typeof PROVINCES)[number], { en: string; el: string; tr: string }> = {
-  Crete: { en: "Crete", el: "Κρήτη", tr: "Girit" },
-  Messinia: { en: "Messenia", el: "Μεσσηνία", tr: "Messinya" },
-  Peloponnese: { en: "Peloponnese", el: "Πελοπόννησος", tr: "Peloponez" },
-  Laconia: { en: "Laconia", el: "Λακωνία", tr: "Lakonya" },
-  Aydın: { en: "Aydın", el: "Αϊδίνιο", tr: "Aydın" },
-  Balıkesir: { en: "Balıkesir", el: "Μπαλικεσίρ", tr: "Balıkesir" },
-  İzmir: { en: "İzmir", el: "Σμύρνη", tr: "İzmir" },
-};
-
-function regionLabel(raw: string, locale: string): string {
-  const hit = PROVINCES.find(
-    (p) =>
-      p.toLowerCase() === raw.toLowerCase() ||
-      REGION_I18N[p].en.toLowerCase() === raw.toLowerCase() ||
-      REGION_I18N[p].el.toLowerCase() === raw.toLowerCase() ||
-      REGION_I18N[p].tr.toLowerCase() === raw.toLowerCase(),
-  );
-  if (!hit) return raw;
-  const lang = locale.startsWith("el") ? "el" : locale.startsWith("tr") ? "tr" : "en";
-  return REGION_I18N[hit][lang];
-}
-
-function regionMatches(lotRegion: string, place: string, selected: string): boolean {
-  if (selected === "all") return true;
-  const needle = selected.toLowerCase();
-  if (lotRegion.toLowerCase() === needle || place.toLowerCase().includes(needle)) return true;
-  const hit = PROVINCES.find((p) => p === selected);
-  if (!hit) return lotRegion === selected || place.includes(selected);
-  const aliases = [hit, REGION_I18N[hit].en, REGION_I18N[hit].el, REGION_I18N[hit].tr].map((s) =>
-    s.toLowerCase(),
-  );
-  return aliases.some((a) => lotRegion.toLowerCase() === a || place.toLowerCase().includes(a));
-}
 
 function useVarietyLabel() {
   const locale = useLocale();
-  const options = useMemo(() => marketplaceVarietyOptions(locale), [locale]);
-  return (slug: string) => options.find((o) => o.value === slug)?.label ?? slug;
+  return (slug: string) => varietyLabelFromStored(slug, locale);
 }
 
 function useLotPlaceLabels(lots: ProcessorLot[]) {
@@ -180,17 +143,9 @@ export function ProcessorLotsScreen() {
   const listed = useMemo(() => lots.filter((l) => l.status === "listed"), [lots]);
 
   const regionOptions = useMemo(() => {
-    const fromLots = listed.map((l) => l.region).filter(Boolean);
-    const keys = new Set<string>([...PROVINCES]);
-    for (const r of fromLots) {
-      const known = PROVINCES.find(
-        (p) =>
-          p.toLowerCase() === r.toLowerCase() ||
-          REGION_I18N[p].en.toLowerCase() === r.toLowerCase() ||
-          REGION_I18N[p].el.toLowerCase() === r.toLowerCase() ||
-          REGION_I18N[p].tr.toLowerCase() === r.toLowerCase(),
-      );
-      keys.add(known ?? r);
+    const keys = new Set<string>([...MARKET_REGIONS]);
+    for (const r of listed.map((l) => l.region).filter(Boolean)) {
+      keys.add(resolveMarketRegion(r) ?? r);
     }
     return [...keys].map((value) => ({
       value,
@@ -474,14 +429,14 @@ export function ProcessorLotsScreen() {
             <LotResultCard
               key={lot.id}
               href={`/processor/lots/${lot.id}`}
-              title={`${varietyLabel(lot.variety)} · ${lot.tons % 1 ? lot.tons.toFixed(1) : lot.tons} t`}
+              title={`${varietyLabel(lot.variety)} · ${formatTons(lot.tons, locale)}`}
               place={place}
-              harvest={harvestRangeLabel(lot.harvestStart, lot.harvestEnd)}
+              harvest={harvestRangeLabel(lot.harvestStart, lot.harvestEnd, locale)}
               score={lot.qualityScore}
               badges={<LotBadges badges={badges} max={3} />}
               price={
                 lot.pricePerKg != null ? (
-                  <Amount value={euroPrice(lot.pricePerKg)} unit="/kg" />
+                  <Amount value={euroPrice(lot.pricePerKg, locale)} unit="/kg" />
                 ) : (
                   <span className="text-[13px] font-semibold text-muted-foreground">{t("openToOffers")}</span>
                 )

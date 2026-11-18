@@ -12,6 +12,8 @@ import { Link, useRouter } from "@/shared/i18n/navigation";
 import { euroPrice, euroTotal, saleTotal } from "@/features/marketplace/pricing";
 import { varietyLabelFromStored } from "@/features/fields/olive-varieties";
 import { LotsMap, type LotMapPoint } from "@/features/marketplace/lots-map";
+import { regionLabel } from "@/features/marketplace/regions";
+import { formatTons } from "@/features/marketplace/pricing";
 import {
   DayChipPicker,
   Dialog,
@@ -178,7 +180,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
   const tags = offerTagLabels(offer, t);
   const harvest =
     lot?.harvestStart || lot?.harvestEnd
-      ? harvestRangeLabel(lot.harvestStart, lot.harvestEnd)
+      ? harvestRangeLabel(lot.harvestStart, lot.harvestEnd, locale)
       : "—";
   const mapToken = publicEnv.NEXT_PUBLIC_MAPBOX_TOKEN || undefined;
   const mapPoints: LotMapPoint[] =
@@ -190,9 +192,9 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
             lon: lot.lon,
             label: place,
             score: lot.qualityScore,
-            title: `${variety} · ${offer.tons} t`,
+            title: `${variety} · ${formatTons(offer.tons, locale)}`,
             subtitle: place,
-            priceLabel: `${euroPrice(offer.pricePerKg)} /kg`,
+            priceLabel: `${euroPrice(offer.pricePerKg, locale)} /kg`,
             useLabel: lot.useType === "table" ? t("useTable") : t("useOil"),
             harvestLabel: harvest,
           },
@@ -269,7 +271,8 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
               <h2 className="mt-1 text-[22px] font-extrabold text-ink">{place}</h2>
               <p className="mt-1 flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground">
                 <MapPin className="size-3.5 shrink-0" />
-                {[lot?.town, lot?.region].filter(Boolean).join(", ") || lot?.region || "—"}
+                {[lot?.town, lot?.region ? regionLabel(lot.region, locale) : null].filter(Boolean).join(", ") ||
+                  (lot?.region ? regionLabel(lot.region, locale) : "—")}
               </p>
               <p className="mt-1 text-[12px] font-semibold text-muted-foreground">
                 {t("identityHidden")}
@@ -282,21 +285,21 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
         <div className="space-y-5 px-5 py-5">
           <div>
             <p className="text-[11px] font-bold tracking-[1px] text-muted-foreground uppercase">
-              {t("asksPriceLabel")}
+              {offer.initiatedBy === "processor" ? t("yourOfferPrice") : t("asksPriceLabel")}
             </p>
             <p className="mt-1 text-[32px] leading-none font-extrabold text-ink">
-              {euroPrice(offer.pricePerKg)}
+              {euroPrice(offer.pricePerKg, locale)}
               <span className="ml-1 text-[14px] font-semibold text-muted-foreground">/kg</span>
             </p>
             <p className="mt-2 text-[14px] font-semibold text-muted-foreground">
-              {t("approx", { total: euroTotal(saleTotal(offer.tons, offer.pricePerKg)) })} ·{" "}
+              {t("approx", { total: euroTotal(saleTotal(offer.tons, offer.pricePerKg), locale) })} ·{" "}
               {offer.tons} t
             </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <DetailCell label={t("variety")} value={variety} />
-            <DetailCell label={t("tons")} value={`${offer.tons} t`} />
+            <DetailCell label={t("tons")} value={formatTons(offer.tons, locale)} />
             <DetailCell label={t("harvestPeriod")} value={harvest} />
             <DetailCell
               label={t("harvestDatesExact")}
@@ -382,6 +385,9 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
                 }}
               />
             </div>
+          ) : offer.initiatedBy === "processor" &&
+            (offer.status === "pending" || offer.status === "countered") ? (
+            <Pill tone="warn">{t("waitingFarmerReply")}</Pill>
           ) : (
             <Pill tone="neutral">{t("offerClosed")}</Pill>
           )}

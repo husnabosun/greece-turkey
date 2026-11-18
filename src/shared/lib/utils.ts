@@ -1,12 +1,19 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
 
 /**
  * Tailwind class merger (shadcn pattern).
- * Uses clsx + tailwind-merge so conflicting utilities (px-2 vs px-5, font-medium vs font-bold)
- * resolve correctly — the old `cn` package re-export could leave buttons/pills looking oversized
- * and not bold when classes conflicted.
+ * Custom `text-ap-*` tokens are font-size utilities — without extendTailwindMerge,
+ * twMerge treats them as text-color and strips them when other text-* classes win.
  */
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [{ text: ["ap-title", "ap-card", "ap-body", "ap-small", "ap-pill", "ap-btn"] }],
+    },
+  },
+});
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }

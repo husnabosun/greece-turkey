@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
-  ArrowLeftRight,
   ChevronUp,
   ClipboardList,
   Inbox,
@@ -41,9 +40,22 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function NavPill({ href, label, Icon, active }: { href: string; label: string; Icon: LucideIcon; active: boolean }) {
+function NavPill({
+  href,
+  label,
+  Icon,
+  active,
+  pillRef,
+}: {
+  href: string;
+  label: string;
+  Icon: LucideIcon;
+  active: boolean;
+  pillRef?: (el: HTMLAnchorElement | null) => void;
+}) {
   return (
     <Link
+      ref={pillRef}
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn("flex h-11 shrink-0 items-center gap-2.5 rounded-full px-3.5", active ? "bg-ink" : "hover:bg-soft")}
@@ -57,13 +69,17 @@ function NavPill({ href, label, Icon, active }: { href: string; label: string; I
 function UserMenu({
   company,
   panel,
-  switchLabel,
   logoutLabel,
+  placement,
+  trigger = "text",
+  initials,
 }: {
   company: string;
   panel: string;
-  switchLabel: string;
   logoutLabel: string;
+  placement: "up" | "down";
+  trigger?: "text" | "avatar";
+  initials?: string;
 }) {
   const tAuth = useTranslations("auth");
   const router = useRouter();
@@ -102,31 +118,39 @@ function UserMenu({
 
   return (
     <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="menu"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 rounded-full px-2 py-2 text-left text-[13px] font-semibold text-muted-foreground hover:bg-soft"
-      >
-        <span className="truncate">{company}</span>
-        <ChevronUp className={cn("size-4 shrink-0 transition-transform", open ? "rotate-0" : "rotate-180")} />
-      </button>
+      {trigger === "avatar" ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-haspopup="menu"
+          aria-label={company}
+          onClick={() => setOpen((v) => !v)}
+          className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+        >
+          <Initials text={initials || "PR"} size={36} />
+        </button>
+      ) : (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-haspopup="menu"
+          onClick={() => setOpen((v) => !v)}
+          className="flex w-full items-center justify-between gap-2 rounded-full px-2 py-2 text-left text-[13px] font-semibold text-muted-foreground hover:bg-soft"
+        >
+          <span className="truncate">{company}</span>
+          <ChevronUp className={cn("size-4 shrink-0 transition-transform", open ? "rotate-0" : "rotate-180")} />
+        </button>
+      )}
       {open ? (
         <div
           role="menu"
-          className="absolute bottom-full left-0 z-40 mb-2 w-full min-w-[200px] overflow-hidden rounded-2xl border border-line bg-card py-1 shadow-[0_12px_32px_rgba(0,0,0,.14)]"
+          className={cn(
+            "absolute z-40 min-w-[200px] overflow-hidden rounded-2xl border border-line bg-card py-1 shadow-[0_12px_32px_rgba(0,0,0,.14)]",
+            placement === "up" ? "bottom-full left-0 mb-2 w-full" : "top-full right-0 mt-2 w-56",
+          )}
         >
-          <p className="px-3 pt-2 pb-1 text-[11px] font-medium text-muted-foreground">{panel}</p>
-          <Link
-            href="/farmer/dashboard"
-            role="menuitem"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2 px-3 py-2.5 text-[13px] font-bold text-ink hover:bg-soft"
-          >
-            <ArrowLeftRight className="size-3.5" aria-hidden />
-            {switchLabel}
-          </Link>
+          <p className="truncate px-3 pt-2 pb-1 text-[12px] font-extrabold text-ink">{company}</p>
+          <p className="px-3 pb-2 text-[11px] font-medium text-muted-foreground">{panel}</p>
           <button
             type="button"
             role="menuitem"
@@ -150,6 +174,7 @@ export function ProcessorShell({ children }: { children: ReactNode }) {
   const fallback = t("processorFallback");
   const [company, setCompany] = useState(fallback);
   const [initials, setInitials] = useState("PR");
+  const activePillRef = useRef<HTMLAnchorElement | null>(null);
 
   const nav = useMemo(
     () =>
@@ -182,6 +207,10 @@ export function ProcessorShell({ children }: { children: ReactNode }) {
     })();
   }, [fallback]);
 
+  useEffect(() => {
+    activePillRef.current?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [pathname]);
+
   const panel = t("processorPanel");
 
   return (
@@ -210,36 +239,37 @@ export function ProcessorShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="flex-1" />
-        <UserMenu
-          company={company}
-          panel={panel}
-          switchLabel={t("switchView")}
-          logoutLabel={tAuth("logout")}
-        />
+        <UserMenu company={company} panel={panel} logoutLabel={tAuth("logout")} placement="up" />
       </aside>
 
-      <div className="border-b border-line bg-card px-4 pt-3 pb-3 min-[900px]:hidden">
-        <div className="flex items-center justify-between gap-2">
+      <div className="border-b border-line bg-card px-4 py-3 min-[900px]:hidden">
+        <div className="flex h-10 items-center justify-between gap-2">
           <BrandLogo size={30} />
           <UserMenu
             company={company}
             panel={panel}
-            switchLabel={t("switchView")}
             logoutLabel={tAuth("logout")}
+            placement="down"
+            trigger="avatar"
+            initials={initials}
           />
         </div>
-        <p className="mt-1 truncate text-[12px] leading-[16px] font-extrabold text-ink">{company}</p>
-        <p className="truncate text-[11px] leading-[14px] font-medium text-muted-foreground">{panel}</p>
         <nav className="-mx-4 mt-2.5 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {nav.map((item) => (
-            <NavPill
-              key={item.href}
-              href={item.href}
-              label={item.label}
-              Icon={item.Icon}
-              active={isActive(pathname, item.href)}
-            />
-          ))}
+          {nav.map((item) => {
+            const active = isActive(pathname, item.href);
+            return (
+              <NavPill
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                Icon={item.Icon}
+                active={active}
+                pillRef={active ? (el) => {
+                  activePillRef.current = el;
+                } : undefined}
+              />
+            );
+          })}
         </nav>
       </div>
 

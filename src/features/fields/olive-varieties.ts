@@ -238,9 +238,14 @@ const ALIASES: Record<string, string> = {
   halkidiki: "chalkidiki",
   konservolia: "konservolia",
   other: "other",
+  "other / local": "other",
+  "other/local": "other",
   άλλη: "other",
+  "άλλη / τοπική": "other",
   diğer: "other",
   diger: "other",
+  "diger / yerel": "other",
+  "diğer / yerel": "other",
 };
 
 function fold(s: string) {

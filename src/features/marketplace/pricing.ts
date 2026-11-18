@@ -7,10 +7,39 @@ const fromCents = (c: number) => c / 100;
 export const roundPrice = (n: number) => fromCents(Math.round(toCents(n) / 5) * 5);
 export const roundTotal = (n: number) => Math.round(n / 50) * 50;
 
-/** "€0.90" */
-export const euroPrice = (n: number) => `€${n.toFixed(2)}`;
-/** "€2,450" */
-export const euroTotal = (n: number) => `€${n.toLocaleString('en-US')}`;
+function localeTag(locale?: string) {
+  if (!locale) return "el-GR";
+  if (locale.startsWith("el")) return "el-GR";
+  if (locale.startsWith("tr")) return "tr-TR";
+  return "en-GB";
+}
+
+/** "1,55 €" / "€1.55" depending on locale. */
+export function euroPrice(n: number, locale?: string) {
+  return new Intl.NumberFormat(localeTag(locale), {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
+}
+
+/** "30.000 €" / "€30,000" depending on locale. */
+export function euroTotal(n: number, locale?: string) {
+  return new Intl.NumberFormat(localeTag(locale), {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+/** "4,5 t" */
+export function formatTons(n: number, locale?: string) {
+  const body = new Intl.NumberFormat(localeTag(locale), {
+    maximumFractionDigits: n % 1 ? 1 : 0,
+  }).format(n);
+  return `${body} t`;
+}
 
 /** "Banned in the last 12 months" window, in days. */
 export const BANNED_WINDOW_DAYS = 365;

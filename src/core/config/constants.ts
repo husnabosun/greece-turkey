@@ -1,4 +1,4 @@
-export const APP_NAME = "Agro Pulse AI";
+export const APP_NAME = "AgroPulse";
 
 export const LOCALES = ["el", "tr", "en"] as const;
 export type Locale = (typeof LOCALES)[number];

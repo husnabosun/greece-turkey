@@ -287,6 +287,10 @@ export function useProcessorMarket() {
 
       const deliveries: ProcessorDelivery[] = (deliveriesRes.data ?? []).map((row) => {
         const lot = lotById.get(row.lot_id);
+        const snapshot =
+          row.quality_score_snapshot == null
+            ? null
+            : Number(row.quality_score_snapshot);
         return {
           id: row.id,
           offerId: row.offer_id,
@@ -296,7 +300,8 @@ export function useProcessorMarket() {
           pricePerKg: Number(row.price_per_kg),
           scheduledFor: row.scheduled_for,
           actualKg: row.actual_kg == null ? null : Number(row.actual_kg),
-          qualityScoreSnapshot: row.quality_score_snapshot,
+          // Snapshot is often null on older rows — fall back to the lot score.
+          qualityScoreSnapshot: snapshot ?? lot?.qualityScore ?? null,
           bannedFree: row.banned_free,
           farmerName: nameByFarmer.get(row.farmer_id) ?? null,
           lotVariety: lot?.variety ?? null,
@@ -522,9 +527,27 @@ export async function advanceDelivery(
     status: DeliveryStatus;
     actual_kg?: number;
     lab_result?: LabResult;
+    quality_score_snapshot?: number;
   } = { status: next };
   if (next === "weighed" && extras?.actualKg != null) patch.actual_kg = extras.actualKg;
   if (next === "lab_checked") patch.lab_result = extras?.labResult ?? "passed";
+
+  // Persist lot score onto the delivery when first advancing, if still empty.
+  if (next === "weighed" || next === "lab_checked") {
+    const { data: delivery } = await supabase
+      .from("deliveries")
+      .select("quality_score_snapshot, lot_id")
+      .eq("id", deliveryId)
+      .maybeSingle();
+    if (delivery && delivery.quality_score_snapshot == null && delivery.lot_id) {
+      const { data: lot } = await supabase
+        .from("lots")
+        .select("quality_score")
+        .eq("id", delivery.lot_id)
+        .maybeSingle();
+      if (lot?.quality_score != null) patch.quality_score_snapshot = Number(lot.quality_score);
+    }
+  }
 
   const { error } = await supabase.from("deliveries").update(patch).eq("id", deliveryId);
   return error ? { ok: false, error: error.message } : { ok: true };
@@ -541,12 +564,13 @@ export function lotPlaceLabel(
   return lot.region || anonymous;
 }
 
-export function harvestRangeLabel(start: string | null, end: string | null) {
+export function harvestRangeLabel(start: string | null, end: string | null, locale = "el") {
   if (!start && !end) return "—";
+  const tag = locale.startsWith("el") ? "el-GR" : locale.startsWith("tr") ? "tr-TR" : "en-GB";
   const fmt = (d: string) => {
-    const dt = new Date(`${d}T00:00:00Z`);
+    const dt = new Date(`${d}T12:00:00`);
     if (Number.isNaN(dt.getTime())) return d;
-    return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    return dt.toLocaleDateString(tag, { day: "numeric", month: "short" });
   };
   if (start && end) return `${fmt(start)}–${fmt(end)}`;
   return fmt(start ?? end!);
