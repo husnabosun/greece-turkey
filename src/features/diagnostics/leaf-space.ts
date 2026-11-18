@@ -56,9 +56,7 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-function classifyError(message: string): LeafModelResult["ok"] extends false
-  ? Extract<LeafModelResult, { ok: false }>["reason"]
-  : never {
+function classifyError(message: string): Extract<LeafModelResult, { ok: false }>["reason"] {
   if (/timeout/i.test(message)) return "timeout";
   if (/ZeroGPU|runs limit|quota|Authenticate with a Hugging Face token/i.test(message)) {
     return "quota";

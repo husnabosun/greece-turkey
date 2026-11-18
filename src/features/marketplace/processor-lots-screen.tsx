@@ -44,7 +44,6 @@ import {
 } from "./use-processor-market";
 
 const PROVINCES = ["Crete", "Messinia", "Peloponnese", "Laconia", "Aydın", "Balıkesir", "İzmir"] as const;
-const DEMO_EXCHANGE = 0.8;
 
 type SortKey = "score" | "price" | "harvest" | "tons";
 

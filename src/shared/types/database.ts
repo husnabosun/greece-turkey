@@ -233,6 +233,7 @@ export type Offer = {
   tons: number;
   price_per_kg: number;
   delivery_in_days: number | null;
+  buy_request_id: string | null;
   counter_of: string | null;
   message: string | null;
 } & Timestamps;

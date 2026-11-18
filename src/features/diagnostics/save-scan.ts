@@ -1,6 +1,7 @@
 import { STORAGE_BUCKETS } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import type { CaptureMode, Presented, SavedScan, ScanDiagnosisJson } from "@/features/diagnostics/scan-types";
+import type { Json } from "@/shared/types/database";
 
 type SaveInput = {
   fieldId: string;
@@ -55,14 +56,16 @@ export async function saveFarmerScan(input: SaveInput): Promise<SaveResult> {
     .insert({
       field_id: input.fieldId,
       farmer_id: user.id,
+      tree_id: null,
       mode: input.mode,
       storage_path: path,
       title: input.presented.title,
       latin_name: input.presented.latin ?? null,
-      diagnosis,
+      diagnosis: diagnosis as unknown as Json,
       confidence: input.presented.confidence ?? null,
       fly_count: flyCount,
       spot_count: null,
+      model_version: input.presented.modelVersion ?? null,
       source: input.source,
       captured_at: new Date().toISOString(),
     })

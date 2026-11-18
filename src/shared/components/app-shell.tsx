@@ -25,7 +25,7 @@ function isActive(pathname: string, href: string) {
 }
 
 /** Farmer chrome: no top app bar (demo). Language + sign-out live in Home settings. */
-export function AppShell({ brand: _brand, links, children }: Props) {
+export function AppShell({ links, children }: Props) {
   const pathname = usePathname();
 
   return (

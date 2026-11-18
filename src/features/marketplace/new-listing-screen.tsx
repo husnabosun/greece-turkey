@@ -11,7 +11,7 @@ import { publishLot } from "@/features/marketplace/save-lot";
 import { Link, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 
-function useLabel(use: string, t: (key: "useOil" | "useDual" | "useTable") => string) {
+function labelForPrimaryUse(use: string, t: (key: "useOil" | "useDual" | "useTable") => string) {
   if (use === "OIL") return t("useOil");
   if (use === "DUAL") return t("useDual");
   if (use === "TABLE") return t("useTable");
@@ -138,7 +138,7 @@ export function NewListingScreen({
               if (!agro) return null;
               return (
                 <span className="rounded-full bg-soft px-2 py-0.5 text-ap-pill font-bold text-muted-foreground">
-                  {useLabel(agro.primary_use, t)} · {agro.avg_oil_yield_pct[0]}–{agro.avg_oil_yield_pct[1]}%
+                  {labelForPrimaryUse(agro.primary_use, t)} · {agro.avg_oil_yield_pct[0]}–{agro.avg_oil_yield_pct[1]}%
                 </span>
               );
             })()}
@@ -303,7 +303,7 @@ export function NewListingScreen({
               const result = await publishLot({
                 fieldId: field.id,
                 variety: field.variety,
-                varietySlug: field.variety_slug,
+                varietySlug: field.variety_slug ?? null,
                 tons,
                 pricePerKg: price,
                 negotiable,

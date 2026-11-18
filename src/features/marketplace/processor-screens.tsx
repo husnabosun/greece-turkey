@@ -5,7 +5,6 @@ import {
   ClipboardList,
   Download,
   Euro,
-  FlaskConical,
   Gauge,
   Inbox,
   Leaf,
@@ -24,7 +23,6 @@ import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { ApButton } from "@/shared/components/brand/ap-button";
 import { ApCard } from "@/shared/components/brand/ap-card";
 import { Pill } from "@/shared/components/brand/pill";
-import { Chip } from "@/shared/components/brand/chip";
 import { StatusSteps } from "@/shared/components/brand/status-steps";
 import { Link, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
@@ -83,43 +81,6 @@ const PROVINCES = ["Crete", "Messinia", "Peloponnese", "Laconia", "Aydın", "Bal
 const WINDOW_KEYS = ["window1", "window2", "window3", "window4"] as const;
 const SCORE_OPTIONS = ["70", "75", "80", "85"] as const;
 const DEMO_EXCHANGE = 0.8;
-
-type SortKey = "score" | "price" | "harvest" | "tons";
-
-const REGION_I18N: Record<(typeof PROVINCES)[number], { en: string; el: string; tr: string }> = {
-  Crete: { en: "Crete", el: "Κρήτη", tr: "Girit" },
-  Messinia: { en: "Messenia", el: "Μεσσηνία", tr: "Messinya" },
-  Peloponnese: { en: "Peloponnese", el: "Πελοπόννησος", tr: "Peloponez" },
-  Laconia: { en: "Laconia", el: "Λακωνία", tr: "Lakonya" },
-  Aydın: { en: "Aydın", el: "Αϊδίνιο", tr: "Aydın" },
-  Balıkesir: { en: "Balıkesir", el: "Μπαλικεσίρ", tr: "Balıkesir" },
-  İzmir: { en: "İzmir", el: "Σμύρνη", tr: "İzmir" },
-};
-
-function regionLabel(raw: string, locale: string): string {
-  const hit = PROVINCES.find(
-    (p) =>
-      p.toLowerCase() === raw.toLowerCase() ||
-      REGION_I18N[p].en.toLowerCase() === raw.toLowerCase() ||
-      REGION_I18N[p].el.toLowerCase() === raw.toLowerCase() ||
-      REGION_I18N[p].tr.toLowerCase() === raw.toLowerCase(),
-  );
-  if (!hit) return raw;
-  const lang = locale.startsWith("el") ? "el" : locale.startsWith("tr") ? "tr" : "en";
-  return REGION_I18N[hit][lang];
-}
-
-function regionMatches(lotRegion: string, place: string, selected: string): boolean {
-  if (selected === "all") return true;
-  const needle = selected.toLowerCase();
-  if (lotRegion.toLowerCase() === needle || place.toLowerCase().includes(needle)) return true;
-  const hit = PROVINCES.find((p) => p === selected);
-  if (!hit) return lotRegion === selected || place.includes(selected);
-  const aliases = [hit, REGION_I18N[hit].en, REGION_I18N[hit].el, REGION_I18N[hit].tr].map((s) =>
-    s.toLowerCase(),
-  );
-  return aliases.some((a) => lotRegion.toLowerCase() === a || place.toLowerCase().includes(a));
-}
 
 function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"processor">>): LotBadge[] {
   const trust = trustBadges(
@@ -278,11 +239,6 @@ export function ProcessorOverviewScreen() {
       setCompany(name);
     })();
   }, [tNav]);
-
-  const openAccept = (offer: ProcessorOffer) => {
-    setAcceptOffer(offer);
-    setAcceptDate(addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
-  };
 
   const onAcceptConfirm = async () => {
     if (!acceptOffer) return;
@@ -668,7 +624,6 @@ export function ProcessorOverviewScreen() {
                 const lot = offer.lot;
                 const place = lot ? lotPlaceLabel(lot, t("anonymousGrove")) : t("anonymousGrove");
                 const badges = lot ? lotBadgesFor(lot, t) : [];
-                const busy = busyOfferId === offer.id;
                 return (
                   <LotRow
                     key={offer.id}
