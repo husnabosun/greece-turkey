@@ -4,3 +4,4 @@ export { AIBox, AiTag, PrivacyLine } from "./ai-box";
 export { StatusSteps } from "./status-steps";
 export { ApButton } from "./ap-button";
 export { ApCard, SectionHeader } from "./ap-card";
+export { BrandLogo, BRAND_LOGO_SRC } from "./brand-logo";

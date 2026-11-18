@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   description:
     "AgriTech & B2B olive oil supply-chain platform for Mediterranean growers and processors.",
   applicationName: APP_NAME,
+  // Favicon / apple-touch come from `src/app/favicon.ico`, `icon.png`, `apple-icon.png`.
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

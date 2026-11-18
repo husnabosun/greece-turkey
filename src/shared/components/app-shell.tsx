@@ -1,9 +1,9 @@
 "use client";
 
 import type { ComponentType, ReactNode } from "react";
-import { Leaf } from "lucide-react";
 import { Link, usePathname } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
+import { BrandLogo } from "@/shared/components/brand";
 import { SignOutButton } from "@/features/auth/sign-out-button";
 
 export type AppShellLink = {
@@ -25,17 +25,14 @@ function isActive(pathname: string, href: string) {
 }
 
 /** Farmer chrome: no top app bar (demo). Language + sign-out live in Home settings. */
-export function AppShell({ brand, links, children }: Props) {
+export function AppShell({ brand: _brand, links, children }: Props) {
   const pathname = usePathname();
 
   return (
     <div className="flex min-h-dvh bg-background text-ink">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line bg-sidebar text-sidebar-foreground md:flex">
         <div className="flex items-center gap-2 border-b border-line px-4 py-4">
-          <span className="flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <Leaf className="size-4" aria-hidden />
-          </span>
-          <p className="truncate text-sm font-extrabold tracking-tight">{brand}</p>
+          <BrandLogo size={36} />
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {links.map(({ href, label, icon: Icon }) => {

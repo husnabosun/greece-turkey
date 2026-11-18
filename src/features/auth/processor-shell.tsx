@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { Initials, initialsOf } from "@/features/marketplace/processor-kit";
+import { BrandLogo } from "@/shared/components/brand";
 import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 
@@ -38,29 +39,6 @@ function isActive(pathname: string, href: string) {
     return pathname === "/processor" || pathname === "/processor/" || pathname === "/processor/overview";
   }
   return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function Logo({ size = 36 }: { size?: number }) {
-  return (
-    <span className="inline-flex items-center gap-2.5">
-      <span
-        className="inline-flex items-center justify-center bg-ink"
-        style={{ width: size, height: size, borderRadius: size * 0.3 }}
-      >
-        <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 24 24" aria-hidden>
-          <path
-            d="M4 19 L12 5 L20 19"
-            stroke="#B9E09A"
-            strokeWidth={4}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-          />
-        </svg>
-      </span>
-      <span className="text-[16px] leading-5 font-extrabold text-ink">AgroPulse</span>
-    </span>
-  );
 }
 
 function NavPill({ href, label, Icon, active }: { href: string; label: string; Icon: LucideIcon; active: boolean }) {
@@ -212,7 +190,7 @@ export function ProcessorShell({ children }: { children: ReactNode }) {
         className="fixed inset-y-0 left-0 z-30 hidden w-[240px] flex-col border-r border-line bg-card px-4 py-5 min-[900px]:flex"
         aria-label={panel}
       >
-        <Logo />
+        <BrandLogo size={36} />
         <div className="mt-6 flex items-center gap-3 rounded-2xl border border-line bg-background p-3">
           <Initials text={initials} size={44} />
           <div className="min-w-0 flex-1">
@@ -242,7 +220,7 @@ export function ProcessorShell({ children }: { children: ReactNode }) {
 
       <div className="border-b border-line bg-card px-4 pt-3 pb-3 min-[900px]:hidden">
         <div className="flex items-center justify-between gap-2">
-          <Logo size={30} />
+          <BrandLogo size={30} />
           <UserMenu
             company={company}
             panel={panel}
