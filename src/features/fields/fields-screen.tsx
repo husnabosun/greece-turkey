@@ -443,12 +443,16 @@ export function FieldsScreen() {
                 <Camera className="size-4" />
                 {t("scanTree")}
               </Link>
-              <button
-                type="button"
+              <Link
+                href={
+                  active
+                    ? `/farmer/scan?field=${encodeURIComponent(active.id)}`
+                    : "/farmer/scan"
+                }
                 className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border border-line bg-card text-ap-pill font-bold text-ink"
               >
                 {t("seeScans")}
-              </button>
+              </Link>
             </div>
           </div>
         </div>

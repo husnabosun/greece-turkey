@@ -8,7 +8,8 @@ import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { euCheck } from "@/features/logbook/eu-check";
 import { deleteLogbookEntry, saveLogbookEntry } from "@/features/logbook/save-logbook-entry";
 import { safeHarvestDays, useFarmerLogbook, type LogbookEntryView } from "@/features/logbook/use-farmer-logbook";
-import { AiTag, FieldChips, Pill, PrivacyLine } from "@/shared/components/brand";
+import { BottomSheet } from "@/features/marketplace/processor-kit";
+import { AiTag, ApButton, FieldChips, Pill, PrivacyLine } from "@/shared/components/brand";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { cn } from "@/shared/lib/utils";
@@ -25,6 +26,8 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
   const [onlyIssues, setOnlyIssues] = useState(false);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Entry | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const viewFields = useMemo(
     () => fields.map((f, i) => ({ id: f.id, name: f.name, color: FIELD_DOTS[i % FIELD_DOTS.length] })),
@@ -167,18 +170,7 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
                 <SprayCard
                   entry={entry}
                   locale={locale}
-                  onDelete={() => {
-                    if (!window.confirm(t("deleteConfirm"))) return;
-                    void (async () => {
-                      const res = await deleteLogbookEntry(entry.id);
-                      if (!res.ok) {
-                        toast.error(res.error ?? t("saveFailed"));
-                        return;
-                      }
-                      setEntries((prev) => prev.filter((e) => e.id !== entry.id));
-                      toast.success(t("deleted"));
-                    })();
-                  }}
+                  onDelete={() => setDeleteTarget(entry)}
                 />
               </div>
             </div>
@@ -194,6 +186,56 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
         <Camera className="size-[18px]" aria-hidden />
         {t("addSpray")}
       </button>
+
+      <BottomSheet
+        open={deleteTarget != null}
+        onClose={() => {
+          if (!deleting) setDeleteTarget(null);
+        }}
+        title={t("deleteTitle")}
+        footer={
+          <div className="flex flex-col gap-2">
+            <ApButton
+              label={t("delete")}
+              variant="risk"
+              className="w-full"
+              disabled={deleting}
+              onClick={() => {
+                void (async () => {
+                  if (!deleteTarget) return;
+                  setDeleting(true);
+                  try {
+                    const res = await deleteLogbookEntry(deleteTarget.id);
+                    if (!res.ok) {
+                      toast.error(res.error ?? t("saveFailed"));
+                      return;
+                    }
+                    setEntries((prev) => prev.filter((e) => e.id !== deleteTarget.id));
+                    setDeleteTarget(null);
+                    toast.success(t("deleted"));
+                  } finally {
+                    setDeleting(false);
+                  }
+                })();
+              }}
+            />
+            <ApButton
+              label={t("cancel")}
+              variant="outline"
+              className="w-full"
+              disabled={deleting}
+              onClick={() => setDeleteTarget(null)}
+            />
+          </div>
+        }
+      >
+        {deleteTarget ? (
+          <div className="space-y-2">
+            <p className="text-ap-card font-extrabold text-ink">{deleteTarget.product}</p>
+            <p className="text-ap-small text-muted-foreground">{t("deleteConfirm")}</p>
+          </div>
+        ) : null}
+      </BottomSheet>
 
       {adding ? (
         <AddSpraySheet

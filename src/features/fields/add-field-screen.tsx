@@ -409,7 +409,7 @@ function PillBtn({ on, onClick, children }: { on: boolean; onClick: () => void; 
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex h-[30px] items-center rounded-full border px-3 text-ap-pill font-bold",
+        "inline-flex min-h-11 items-center rounded-full border px-3 text-ap-pill font-bold",
         on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
       )}
     >

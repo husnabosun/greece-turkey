@@ -21,10 +21,16 @@ import {
   deliveryPayableKg,
   deliveryStepIndex,
 } from "@/features/marketplace/delivery-state";
-import { BottomSheet } from "@/features/marketplace/processor-kit";
+import { BottomSheet, DayChipPicker } from "@/features/marketplace/processor-kit";
 import { formatEuro, formatEuroPerKg, formatTons } from "@/features/marketplace/pricing";
 import { formatRequestWindow, isRequestWindowExpired } from "@/features/marketplace/request-window";
 import { regionLabel } from "@/features/marketplace/regions";
+import {
+  DEFAULT_DELIVERY_IN_DAYS,
+  addDaysIso,
+  nextSevenDays,
+  todayIsoDate,
+} from "@/features/marketplace/schedule";
 import {
   acceptOffer,
   counterOffer,
@@ -191,6 +197,10 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const [filters, setFilters] = useState<FilterKey[]>(["fits"]);
   const [busyOfferId, setBusyOfferId] = useState<string | null>(null);
   const [acceptTarget, setAcceptTarget] = useState<MarketOffer | null>(null);
+  const [acceptDate, setAcceptDate] = useState(() =>
+    addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS),
+  );
+  const weekDates = useMemo(() => nextSevenDays(), []);
   const [counterTarget, setCounterTarget] = useState<MarketOffer | null>(null);
   const [counterPrice, setCounterPrice] = useState("");
   const [rejectTarget, setRejectTarget] = useState<MarketOffer | null>(null);
@@ -281,18 +291,29 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     return list;
   }, [requests, filters, fields, fieldCards]);
 
+  function openAccept(offer: MarketOffer) {
+    if (offer.initiatedBy !== "processor") return;
+    setAcceptDate(addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
+    setAcceptTarget(offer);
+  }
+
   async function confirmAccept() {
     const offer = acceptTarget;
     if (!offer || offer.initiatedBy !== "processor") return;
     setBusyOfferId(offer.id);
     const toastId = toast.loading(t("accepting"));
     try {
-      const result = await acceptOffer(offer.id);
+      const result = await acceptOffer(offer.id, { scheduledFor: acceptDate });
       if (!result.ok) {
         toast.error(result.error ?? t("actionFailed"), { id: toastId });
         return;
       }
-      toast.success(t("acceptedOkDetail"), { id: toastId });
+      const dateLabel = new Date(`${acceptDate}T12:00:00`).toLocaleDateString(locale, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+      toast.success(t("acceptedScheduled", { date: dateLabel }), { id: toastId });
       setAcceptTarget(null);
       setTab("sales");
       await reload();
@@ -507,7 +528,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               reject={t("reject")}
               perKg={t("perKg")}
               acceptClass="bg-ink"
-              onAccept={() => setAcceptTarget(bestOffer)}
+              onAccept={() => openAccept(bestOffer)}
               onCounter={() => openCounter(bestOffer)}
               onReject={() => void onRejectBid(bestOffer)}
             />
@@ -829,7 +850,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                               })
                       }
                       nested
-                      onAccept={() => setAcceptTarget(offer)}
+                      onAccept={() => openAccept(offer)}
                       onCounter={() => openCounter(offer)}
                       onReject={() => void onRejectBid(offer)}
                     />
@@ -947,7 +968,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
         onAction={() => void confirmAccept()}
       >
         {acceptTarget ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <p className="text-ap-body text-muted-foreground">{acceptTarget.processorName}</p>
             <p className="text-ap-card font-extrabold text-ink">
               {formatTons(acceptTarget.tons, locale)} × {formatEuroPerKg(acceptTarget.pricePerKg, locale)}
@@ -955,6 +976,19 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
             <p className="text-[22px] font-extrabold text-ink">
               {formatEuro(acceptTarget.tons * 1000 * acceptTarget.pricePerKg, locale)}
             </p>
+            <DayChipPicker
+              label={t("arriveOn")}
+              days={weekDates}
+              value={acceptDate}
+              onChange={setAcceptDate}
+              formatDay={(iso) =>
+                new Date(`${iso}T12:00:00`).toLocaleDateString(locale, {
+                  weekday: "short",
+                  day: "numeric",
+                })
+              }
+              todayLabel={t("todayShort")}
+            />
             <p className="text-ap-small text-muted-foreground">{t("confirmSaleHint")}</p>
           </div>
         ) : null}
