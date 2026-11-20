@@ -143,7 +143,15 @@ export function ProcessorDeliveriesScreen() {
         toast.error(res.error ?? t("saveFailed"));
         return;
       }
-      toast.success(t("deliveryScheduled", { date: scheduleDate }));
+      toast.success(
+        t("deliveryScheduled", {
+          date: new Date(`${scheduleDate}T12:00:00`).toLocaleDateString(locale, {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+          }),
+        }),
+      );
       setScheduleTarget(null);
       await reload();
     } finally {
@@ -155,7 +163,7 @@ export function ProcessorDeliveriesScreen() {
     if (!advanceTarget) return;
     const next = nextDeliveryStatus(advanceTarget.status);
     setAdvancing(true);
-    toast.message(t("advancing"));
+    const toastId = toast.loading(t("advancing"));
     try {
       const extras =
         advanceTarget.status === "scheduled"
@@ -166,19 +174,20 @@ export function ProcessorDeliveriesScreen() {
       if (advanceTarget.status === "scheduled") {
         const kg = Number(weighKg.replace(",", "."));
         if (!Number.isFinite(kg) || kg <= 0) {
-          toast.error(t("saveFailed"));
+          toast.error(t("saveFailed"), { id: toastId });
           return;
         }
       }
       const res = await advanceDelivery(advanceTarget.id, advanceTarget.status, extras);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(res.error ?? t("saveFailed"), { id: toastId });
         return;
       }
       toast.success(
         next
           ? t("advancedDetail", { status: t(`step.${next}` as "step.weighed") })
           : t("advanced"),
+        { id: toastId },
       );
       setAdvanceTarget(null);
       await reload();

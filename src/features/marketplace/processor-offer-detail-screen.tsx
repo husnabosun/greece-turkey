@@ -83,14 +83,19 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
   const onAcceptConfirm = async () => {
     if (!offer) return;
     setBusy(true);
-    toast.message(t("accepting"));
+    const toastId = toast.loading(t("accepting"));
     try {
       const res = await acceptIncomingOffer(offer.id, { scheduledFor: acceptDate });
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(res.error ?? t("saveFailed"), { id: toastId });
         return;
       }
-      toast.success(t("acceptedScheduled", { date: acceptDate }));
+      const dateLabel = new Date(`${acceptDate}T12:00:00`).toLocaleDateString(locale, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+      toast.success(t("acceptedScheduled", { date: dateLabel }), { id: toastId });
       setAcceptOpen(false);
       await reload();
       router.push("/processor/deliveries");
@@ -132,14 +137,14 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
       return;
     }
     setBusy(true);
-    toast.message(t("countering"));
+    const toastId = toast.loading(t("countering"));
     try {
       const res = await counterIncomingOffer(offer, next);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(res.error ?? t("saveFailed"), { id: toastId });
         return;
       }
-      toast.success(t("counterSentDetail"));
+      toast.success(t("counterSentDetail"), { id: toastId });
       setCounterOpen(false);
       await reload();
     } finally {
