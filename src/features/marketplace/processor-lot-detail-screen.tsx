@@ -461,7 +461,7 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
   );
 
   return (
-    <div className={cn("mx-auto w-full max-w-[1200px]", listed ? "pb-24 min-[900px]:pb-8" : "pb-8")}>
+    <div className={cn("mx-auto w-full max-w-[1200px]", listed ? "pb-40 min-[900px]:pb-8" : "pb-8")}>
       <div className="mb-4">
         <Link
           href="/processor/lots"
@@ -610,7 +610,7 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
       </div>
 
       {listed ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-card p-3 pb-[calc(env(safe-area-inset-bottom)+12px)] min-[900px]:hidden">
+        <div className="fixed inset-x-0 bottom-[64px] z-40 border-t border-line bg-card p-3 min-[900px]:hidden">
           <ApButton
             label={sent ? t("offerSent") : t("makeOffer")}
             variant="dark"

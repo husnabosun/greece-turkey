@@ -23,7 +23,7 @@ export default function RootNotFound() {
             Ο σύνδεσμος δεν υπάρχει ή η σελίδα μετακινήθηκε.
           </p>
           <Link
-            href="/el/processor/overview"
+            href="/el"
             style={{
               marginTop: 12,
               display: "inline-flex",
@@ -37,7 +37,7 @@ export default function RootNotFound() {
               textDecoration: "none",
             }}
           >
-            Πίσω στην επισκόπηση
+            Επιστροφή στην αρχική
           </Link>
         </div>
       </body>

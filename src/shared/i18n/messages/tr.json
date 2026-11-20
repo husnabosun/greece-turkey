@@ -20,7 +20,7 @@
   "errors": {
     "notFoundTitle": "Sayfa bulunamadı",
     "notFoundBody": "Bu bağlantı yok veya sayfa taşındı.",
-    "backHome": "Genel bakışa dön"
+    "backHome": "Ana sayfaya dön"
   },
   "common": {
     "aiDemo": "Demo",
@@ -627,7 +627,7 @@
     "offers": "Teklifler",
     "deliveries": "Teslimatlar",
     "findOlives": "Zeytin bul",
-    "requests": "Taleplerim",
+    "requests": "Talepler",
     "switchView": "Görünümü değiştir",
     "processorPanel": "İşleyici paneli",
     "processorFallback": "İşleyici"
@@ -796,6 +796,8 @@
     "sortMostTons": "En çok ton",
     "moreVarieties": "+{n} daha",
     "viewLot": "Partiyi gör",
+    "viewList": "Liste",
+    "viewMap": "Harita",
     "openToOffers": "Teklife açık",
     "requestsTitle": "Taleplerim",
     "requestsSubtitle": "Ne almak istediğiniz. Çiftçiler talebinize teklif gönderir.",
@@ -942,7 +944,7 @@
       "completeRecordsWhy": "İlaçlama ve tarla kayıtları eksiksiz ({records}%).",
       "noBanned": "Yasaklı ürün yok",
       "noBannedWhy": "AB’de onaylı olmayan ürün kullanılmadı.",
-      "labSuggested": "Lab testi önerilir"
+      "labSuggested": "Lab kontrolü"
     }
   },
   "riskThreats": {

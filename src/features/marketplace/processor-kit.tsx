@@ -325,20 +325,24 @@ export function ChipGroup({
   options,
   value,
   onChange,
+  chipClassName,
 }: {
-  label: string;
+  label?: string;
   options: { value: string; label: string }[];
   value: string;
   onChange: (v: string) => void;
+  chipClassName?: string;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-[11px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{label}</p>
+      {label ? (
+        <p className="text-[11px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{label}</p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {options.map((o) => {
           const on = o.value === value;
           return (
-            <Chip key={o.value} tone="black" on={on} onClick={() => onChange(o.value)}>
+            <Chip key={o.value} tone="black" on={on} onClick={() => onChange(o.value)} className={chipClassName}>
               <span className={cn("text-[12px] leading-4 font-bold", on ? "text-white" : "text-ink")}>{o.label}</span>
             </Chip>
           );
@@ -580,6 +584,12 @@ export function WeekStrip({
   );
 }
 
+function compactScoreTone(score: number) {
+  if (score >= 80) return { soft: "bg-good-soft", text: "text-good" };
+  if (score >= 70) return { soft: "bg-warn-soft", text: "text-warn-text" };
+  return { soft: "bg-risk-soft", text: "text-risk" };
+}
+
 export function LotResultCard({
   href,
   title,
@@ -590,6 +600,7 @@ export function LotResultCard({
   price,
   priceHint,
   ctaLabel,
+  scoreLabel,
   selected = false,
   onHover,
 }: {
@@ -601,40 +612,50 @@ export function LotResultCard({
   badges: ReactNode;
   price: ReactNode;
   priceHint?: string;
-  ctaLabel: string;
+  /** Optional full-width CTA; omit when the whole card is the link. */
+  ctaLabel?: string;
+  scoreLabel?: string;
   selected?: boolean;
   onHover?: () => void;
 }) {
+  const tone = score != null ? compactScoreTone(score) : null;
   return (
-    <div onMouseEnter={onHover}>
-      <ApCard
-        className={cn(
-          "flex h-full flex-col gap-3 p-4 transition-colors",
-          selected && "border-good bg-good-soft/30",
-        )}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-[18px] leading-6 font-extrabold text-ink">{title}</p>
-            <p className="mt-1 text-[13px] leading-[18px] font-medium text-muted-foreground">
-              {place}
-              {harvest ? ` · ${harvest}` : ""}
-            </p>
-          </div>
-          {score != null ? <ScoreBox score={score} large /> : null}
+    <Link
+      href={href}
+      onMouseEnter={onHover}
+      className={cn(
+        "flex h-full flex-col gap-3 rounded-[18px] border border-line bg-card p-4 transition-colors hover:border-ink/30 hover:bg-soft/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30",
+        selected && "border-good bg-good-soft/30",
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[16px] leading-5 font-extrabold text-ink">{title}</p>
+          <p className="mt-1 truncate text-[13px] leading-[18px] font-medium text-muted-foreground">
+            {place}
+            {harvest ? ` · ${harvest}` : ""}
+          </p>
         </div>
-        <div className="min-h-[24px]">{badges}</div>
-        <div className="mt-auto flex flex-wrap items-end justify-between gap-3 border-t border-line pt-3">
-          <div className="min-w-0">
-            <div className="text-[16px] font-extrabold text-ink">{price}</div>
-            {priceHint ? <p className="text-[11px] font-medium text-muted-foreground">{priceHint}</p> : null}
+        {score != null && tone ? (
+          <div
+            title={scoreLabel}
+            className={cn("flex size-12 shrink-0 items-center justify-center rounded-[14px]", tone.soft)}
+          >
+            <span className={cn("text-[18px] leading-none font-extrabold", tone.text)}>{score}</span>
           </div>
-          <Link href={href}>
-            <ApButton label={ctaLabel} variant="dark" />
-          </Link>
-        </div>
-      </ApCard>
-    </div>
+        ) : null}
+      </div>
+      <div className="flex min-h-[24px] flex-wrap gap-1">{badges}</div>
+      <div className="mt-auto border-t border-line pt-3">
+        <div className="text-[16px] font-extrabold text-ink">{price}</div>
+        {priceHint ? <p className="text-[11px] font-medium text-muted-foreground">{priceHint}</p> : null}
+        {ctaLabel ? (
+          <div className="mt-3">
+            <ApButton label={ctaLabel} variant="dark" className="w-full" />
+          </div>
+        ) : null}
+      </div>
+    </Link>
   );
 }
 

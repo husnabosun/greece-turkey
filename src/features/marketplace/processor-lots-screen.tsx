@@ -13,7 +13,7 @@ import { Chip } from "@/shared/components/brand/chip";
 import { Link, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 import { trustBadges } from "@/features/marketplace/badges";
-import { euroPrice, formatTons } from "@/features/marketplace/pricing";
+import { formatEuro, formatEuroPerKg, formatTons } from "@/features/marketplace/pricing";
 import { LotsMap } from "./lots-map";
 import {
   Amount,
@@ -45,6 +45,9 @@ import {
 } from "./use-processor-market";
 
 type SortKey = "score" | "price" | "harvest" | "tons";
+type MobileView = "list" | "map";
+
+const CHIP_TOUCH = "min-h-11 h-auto py-2";
 
 function useVarietyLabel() {
   const locale = useLocale();
@@ -108,7 +111,7 @@ function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"p
     why: b.why,
   }));
   if (lot.labResult == null && (lot.qualityScore ?? 100) < 80) {
-    out.push({ id: "lab-suggested", label: t("badge.labSuggested") });
+    out.push({ id: "lab-suggested", label: t("labTestSuggested") });
   }
   if (lot.hasBannedSpray) {
     out.unshift({ id: "banned", label: t("noBannedProducts") });
@@ -134,6 +137,7 @@ export function ProcessorLotsScreen() {
   const [sort, setSort] = useState<SortKey>("score");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
+  const [mobileView, setMobileView] = useState<MobileView>("list");
   const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
   const [offerLot, setOfferLot] = useState<ProcessorLot | null>(null);
   const [offerTons, setOfferTons] = useState("5");
@@ -205,7 +209,9 @@ export function ProcessorLotsScreen() {
               use: l.useType === "table" ? t("filterTable") : t("filterOil"),
             }),
             priceLabel:
-              l.pricePerKg != null ? `${euroPrice(l.pricePerKg, locale)} /kg · ${t("farmerPrice")}` : t("openToOffers"),
+              l.pricePerKg != null
+                ? `${formatEuroPerKg(l.pricePerKg, locale)} · ${t("farmerPrice")}`
+                : t("openToOffers"),
             useLabel: l.useType === "table" ? t("filterTable") : t("filterOil"),
             harvestLabel: harvestRangeLabel(l.harvestStart, l.harvestEnd, locale),
           };
@@ -270,30 +276,28 @@ export function ProcessorLotsScreen() {
     await reload();
   };
 
-  const sortLabel =
-    sort === "price"
-      ? t("sortLowestPrice")
-      : sort === "harvest"
-        ? t("sortNearestHarvest")
-        : sort === "tons"
-          ? t("sortMostTons")
-          : t("sortBestScore");
+  const sortOptions: { value: SortKey; label: string }[] = [
+    { value: "score", label: t("sortBestScore") },
+    { value: "price", label: t("sortLowestPrice") },
+    { value: "harvest", label: t("sortNearestHarvest") },
+    { value: "tons", label: t("sortMostTons") },
+  ];
 
   const filtersBody = (
     <>
       <div className="flex flex-col gap-1.5">
         <p className="text-[11px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{t("variety")}</p>
         <div className="flex flex-wrap gap-2">
-          <Chip tone="black" on={variety === "all"} onClick={() => setVariety("all")}>
+          <Chip tone="black" on={variety === "all"} onClick={() => setVariety("all")} className={CHIP_TOUCH}>
             <span className={cn("text-[12px] font-bold", variety === "all" ? "text-white" : "text-ink")}>{t("filterAll")}</span>
           </Chip>
           {visibleVarieties.map((v) => (
-            <Chip key={v.value} tone="black" on={variety === v.value} onClick={() => setVariety(v.value)}>
+            <Chip key={v.value} tone="black" on={variety === v.value} onClick={() => setVariety(v.value)} className={CHIP_TOUCH}>
               <span className={cn("text-[12px] font-bold", variety === v.value ? "text-white" : "text-ink")}>{v.label}</span>
             </Chip>
           ))}
           {!varietyExpanded && extraVarieties.length > 0 ? (
-            <Chip tone="black" on={false} onClick={() => setVarietyExpanded(true)}>
+            <Chip tone="black" on={false} onClick={() => setVarietyExpanded(true)} className={CHIP_TOUCH}>
               <span className="text-[12px] font-bold text-ink">{t("moreVarieties", { n: extraVarieties.length })}</span>
             </Chip>
           ) : null}
@@ -304,6 +308,7 @@ export function ProcessorLotsScreen() {
         label={t("province")}
         value={province}
         onChange={setProvince}
+        chipClassName={CHIP_TOUCH}
         options={[{ value: "all", label: t("filterAll") }, ...regionOptions]}
       />
 
@@ -327,12 +332,12 @@ export function ProcessorLotsScreen() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Chip tone="black" on={noBanned} onClick={() => setNoBanned((v) => !v)}>
+        <Chip tone="black" on={noBanned} onClick={() => setNoBanned((v) => !v)} className={CHIP_TOUCH}>
           <span className={cn("text-[12px] font-bold", noBanned ? "text-white" : "text-ink")}>{t("noBannedProducts")}</span>
         </Chip>
-        <Chip tone="black" on={labSuggested} onClick={() => setLabSuggested((v) => !v)}>
+        <Chip tone="black" on={labSuggested} onClick={() => setLabSuggested((v) => !v)} className={CHIP_TOUCH}>
           <span className={cn("inline-flex items-center gap-1.5 text-[12px] font-bold", labSuggested ? "text-white" : "text-ink")}>
-            <FlaskConical className="size-3.5" />
+            <FlaskConical className="size-3.5 shrink-0" />
             {t("labTestSuggested")}
           </span>
         </Chip>
@@ -347,7 +352,7 @@ export function ProcessorLotsScreen() {
           <button
             type="button"
             onClick={() => setVariety("all")}
-            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
+            className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
           >
             {varietyLabel(variety)}
             <X className="size-3.5" />
@@ -357,7 +362,7 @@ export function ProcessorLotsScreen() {
           <button
             type="button"
             onClick={() => setProvince("all")}
-            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
+            className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
           >
             {regionLabel(province, locale)}
             <X className="size-3.5" />
@@ -367,7 +372,7 @@ export function ProcessorLotsScreen() {
           <button
             type="button"
             onClick={() => setMinScore(0)}
-            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
+            className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
           >
             {t("minScoreValue", { score: minScore })}
             <X className="size-3.5" />
@@ -377,7 +382,7 @@ export function ProcessorLotsScreen() {
           <button
             type="button"
             onClick={() => setNoBanned(false)}
-            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
+            className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
           >
             {t("noBannedProducts")}
             <X className="size-3.5" />
@@ -387,7 +392,7 @@ export function ProcessorLotsScreen() {
           <button
             type="button"
             onClick={() => setLabSuggested(false)}
-            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
+            className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
           >
             {t("labTestSuggested")}
             <X className="size-3.5" />
@@ -398,6 +403,26 @@ export function ProcessorLotsScreen() {
         </button>
       </div>
     ) : null;
+
+  const mapBlock = (className?: string) => (
+    <LotsMap
+      token={mapToken}
+      points={mapPoints}
+      selectedId={selectedMapId}
+      onSelect={setSelectedMapId}
+      onOpenLot={(id) => router.push(`/processor/lots/${id}`)}
+      className={className}
+      labels={{
+        locate: t("mapLocate"),
+        zoomIn: t("mapZoomIn"),
+        zoomOut: t("mapZoomOut"),
+        needToken: t("mapNeedToken"),
+        empty: t("mapEmpty"),
+        qualityScore: t("qualityScore"),
+        openLot: t("openLot"),
+      }}
+    />
+  );
 
   const resultsBlock =
     listed.length === 0 && !loading ? (
@@ -423,7 +448,10 @@ export function ProcessorLotsScreen() {
         />
       </ApCard>
     ) : (
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div
+        className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2 min-[900px]:gap-4"
+        onMouseLeave={() => setSelectedMapId(null)}
+      >
         {shown.map((lot) => {
           const badges = lotBadgesFor(lot, t).slice(0, 3);
           const place = regionLabel(lot.region, locale);
@@ -435,16 +463,16 @@ export function ProcessorLotsScreen() {
               place={place}
               harvest={harvestRangeLabel(lot.harvestStart, lot.harvestEnd, locale)}
               score={lot.qualityScore}
+              scoreLabel={t("qualityScore")}
               badges={<LotBadges badges={badges} max={3} />}
               price={
                 lot.pricePerKg != null ? (
-                  <Amount value={euroPrice(lot.pricePerKg, locale)} unit="/kg" />
+                  <Amount value={formatEuro(lot.pricePerKg, locale)} unit="/kg" />
                 ) : (
                   <span className="text-[13px] font-semibold text-muted-foreground">{t("openToOffers")}</span>
                 )
               }
               priceHint={lot.pricePerKg != null ? t("farmerPrice") : undefined}
-              ctaLabel={t("viewLot")}
               selected={selectedMapId === lot.id}
               onHover={() => setSelectedMapId(lot.id)}
             />
@@ -453,62 +481,87 @@ export function ProcessorLotsScreen() {
       </div>
     );
 
+  const useFilterSegmented = (
+    <Segmented
+      value={useFilter}
+      onChange={setUseFilter}
+      options={[
+        { value: "all", label: t("filterAll") },
+        { value: "oil", label: t("filterOil") },
+        { value: "table", label: t("filterTable") },
+      ]}
+    />
+  );
+
+  const sortSelect = (
+    <label className="inline-flex items-center gap-2">
+      <span className="sr-only">{t("sort")}</span>
+      <select
+        value={sort}
+        onChange={(e) => setSort(e.target.value as SortKey)}
+        className="h-10 rounded-full border border-line bg-card px-3 text-[13px] font-bold text-ink outline-none focus:border-ink"
+        aria-label={t("sort")}
+      >
+        {sortOptions.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-4">
       <PageHeader title={t("findTitle")} subtitle={t("findSubtitle")} />
-
-      <Segmented
-        fullWidth
-        value={useFilter}
-        onChange={setUseFilter}
-        options={[
-          { value: "all", label: t("filterAll") },
-          { value: "oil", label: t("filterOil") },
-          { value: "table", label: t("filterTable") },
-        ]}
-      />
 
       {error === "needSupabase" || error === "needLogin" ? (
         <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{t(error)}</ApCard>
       ) : null}
 
-      <LotsMap
-        token={mapToken}
-        points={mapPoints}
-        selectedId={selectedMapId}
-        onSelect={setSelectedMapId}
-        onOpenLot={(id) => router.push(`/processor/lots/${id}`)}
-        labels={{
-          locate: t("mapLocate"),
-          zoomIn: t("mapZoomIn"),
-          zoomOut: t("mapZoomOut"),
-          needToken: t("mapNeedToken"),
-          empty: t("mapEmpty"),
-          qualityScore: t("qualityScore"),
-          openLot: t("openLot"),
-        }}
-      />
+      {/* —— Mobile —— */}
+      <div className="space-y-3 min-[900px]:hidden">
+        <div className="flex gap-2">
+          <ApButton
+            label={activeFilterCount > 0 ? t("filtersWithCount", { n: activeFilterCount }) : t("filters")}
+            variant="outline"
+            icon={<SlidersHorizontal className="size-4" />}
+            onClick={() => setFiltersOpen(true)}
+            className="flex-1"
+          />
+          <ApButton
+            label={t("sort")}
+            variant="outline"
+            icon={<ArrowUpDown className="size-4" />}
+            onClick={() => setSortOpen(true)}
+            className="flex-1"
+          />
+        </div>
 
-      <div className="flex gap-2 min-[900px]:hidden">
-        <ApButton
-          label={activeFilterCount > 0 ? t("filtersWithCount", { n: activeFilterCount }) : t("filters")}
-          variant="outline"
-          icon={<SlidersHorizontal className="size-4" />}
-          onClick={() => setFiltersOpen(true)}
-          className="flex-1"
-        />
-        <ApButton
-          label={t("sort")}
-          variant="outline"
-          icon={<ArrowUpDown className="size-4" />}
-          onClick={() => setSortOpen(true)}
-          className="flex-1"
-        />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[16px] font-extrabold text-ink">{t("lotsCount", { count: shown.length })}</p>
+          <Segmented
+            value={mobileView}
+            onChange={setMobileView}
+            options={[
+              { value: "list", label: t("viewList") },
+              { value: "map", label: t("viewMap") },
+            ]}
+          />
+        </div>
+
+        <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{useFilterSegmented}</div>
+        {activeChips}
+
+        {mobileView === "map"
+          ? mapBlock("!h-[60vh] !min-h-[60vh] min-[900px]:!h-[60vh]")
+          : resultsBlock}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 min-[900px]:grid-cols-[260px_minmax(0,1fr)]">
-        <aside className="hidden min-[900px]:block">
-          <ApCard className="sticky top-4 space-y-4 p-4">
+      {/* —— Desktop —— */}
+      <div className="hidden gap-6 min-[900px]:grid min-[900px]:grid-cols-[1fr_420px]">
+        <div className="min-w-0 space-y-4">
+          <ApCard className="space-y-4 p-4">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[15px] font-extrabold text-ink">{t("filters")}</p>
               {activeFilterCount > 0 ? (
@@ -518,30 +571,25 @@ export function ProcessorLotsScreen() {
               ) : null}
             </div>
             {filtersBody}
-            <div className="border-t border-line pt-3">
-              <ChipGroup
-                label={t("sort")}
-                value={sort}
-                onChange={(v) => setSort(v as SortKey)}
-                options={[
-                  { value: "score", label: t("sortBestScore") },
-                  { value: "price", label: t("sortLowestPrice") },
-                  { value: "harvest", label: t("sortNearestHarvest") },
-                  { value: "tons", label: t("sortMostTons") },
-                ]}
-              />
-            </div>
           </ApCard>
-        </aside>
 
-        <div className="min-w-0 space-y-3">
-          <div>
-            <p className="text-[16px] font-extrabold text-ink">{t("lotsCount", { count: shown.length })}</p>
-            <p className="text-[12px] font-medium text-muted-foreground">{sortLabel}</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {useFilterSegmented}
+              <p className="text-[16px] font-extrabold text-ink">{t("lotsCount", { count: shown.length })}</p>
+            </div>
+            {sortSelect}
           </div>
+
           {activeChips}
           {resultsBlock}
         </div>
+
+        <aside className="min-w-0">
+          <div className="sticky top-8 h-[calc(100vh-120px)] overflow-hidden rounded-[18px]">
+            {mapBlock("!h-full !min-h-full !max-h-none min-[900px]:!h-full min-[900px]:!min-h-full")}
+          </div>
+        </aside>
       </div>
 
       <BottomSheet
@@ -554,24 +602,28 @@ export function ProcessorLotsScreen() {
         {filtersBody}
       </BottomSheet>
 
-      <BottomSheet
-        open={sortOpen}
-        onClose={() => setSortOpen(false)}
-        title={t("sort")}
-        actionLabel={t("applySort")}
-        onAction={() => setSortOpen(false)}
-      >
-        <ChipGroup
-          label={t("sort")}
-          value={sort}
-          onChange={(v) => setSort(v as SortKey)}
-          options={[
-            { value: "score", label: t("sortBestScore") },
-            { value: "price", label: t("sortLowestPrice") },
-            { value: "harvest", label: t("sortNearestHarvest") },
-            { value: "tons", label: t("sortMostTons") },
-          ]}
-        />
+      <BottomSheet open={sortOpen} onClose={() => setSortOpen(false)} title={t("sort")}>
+        <div className="flex flex-col gap-2">
+          {sortOptions.map((o) => {
+            const on = sort === o.value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => {
+                  setSort(o.value);
+                  setSortOpen(false);
+                }}
+                className={cn(
+                  "flex min-h-11 items-center rounded-xl border px-4 text-left text-[14px] font-bold",
+                  on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink hover:bg-soft",
+                )}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
       </BottomSheet>
 
       <Dialog

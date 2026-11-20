@@ -20,7 +20,7 @@
   "errors": {
     "notFoundTitle": "Page not found",
     "notFoundBody": "This link doesn’t exist or the page was moved.",
-    "backHome": "Back to overview"
+    "backHome": "Back to home"
   },
   "common": {
     "aiDemo": "Demo",
@@ -627,7 +627,7 @@
     "offers": "Offers",
     "deliveries": "Deliveries",
     "findOlives": "Find olives",
-    "requests": "My requests",
+    "requests": "Requests",
     "switchView": "Switch view",
     "processorPanel": "Processor panel",
     "processorFallback": "Processor"
@@ -796,6 +796,8 @@
     "sortMostTons": "Most tonnes",
     "moreVarieties": "+{n} more",
     "viewLot": "View lot",
+    "viewList": "List",
+    "viewMap": "Map",
     "openToOffers": "Open to offers",
     "requestsTitle": "My requests",
     "requestsSubtitle": "What you want to buy. Farmers send offers against your request.",
@@ -942,7 +944,7 @@
       "completeRecordsWhy": "Spray and field records are complete ({records}%).",
       "noBanned": "No banned products",
       "noBannedWhy": "No product that is not approved in the EU.",
-      "labSuggested": "Lab test suggested"
+      "labSuggested": "Lab check"
     }
   },
   "riskThreats": {
