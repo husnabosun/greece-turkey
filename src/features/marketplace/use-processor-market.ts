@@ -73,6 +73,7 @@ export type ProcessorDelivery = {
   pricePerKg: number;
   scheduledFor: string | null;
   actualKg: number | null;
+  labResult: LabResult | null;
   qualityScoreSnapshot: number | null;
   bannedFree: boolean | null;
   farmerName: string | null;
@@ -206,7 +207,7 @@ export function useProcessorMarket() {
         supabase
           .from("deliveries")
           .select(
-            "id, offer_id, lot_id, farmer_id, status, tons, price_per_kg, scheduled_for, actual_kg, quality_score_snapshot, banned_free",
+            "id, offer_id, lot_id, farmer_id, status, tons, price_per_kg, scheduled_for, actual_kg, lab_result, quality_score_snapshot, banned_free",
           )
           .eq("processor_id", user.id)
           .order("created_at", { ascending: false }),
@@ -302,6 +303,7 @@ export function useProcessorMarket() {
           pricePerKg: Number(row.price_per_kg),
           scheduledFor: row.scheduled_for,
           actualKg: row.actual_kg == null ? null : Number(row.actual_kg),
+          labResult: (row.lab_result as LabResult | null) ?? null,
           // Snapshot is often null on older rows — fall back to the lot score.
           qualityScoreSnapshot: snapshot ?? lot?.qualityScore ?? null,
           bannedFree: row.banned_free,
@@ -453,6 +455,15 @@ export async function placeLotOffer(input: {
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
+function acceptRpcError(err: { message?: string } | null): string {
+  const raw = err?.message ?? "saveFailed";
+  if (raw.includes("offer_not_pending")) return "offerNotPending";
+  if (raw.includes("lot_not_listed")) return "lotAlreadySold";
+  if (raw.includes("forbidden")) return "forbidden";
+  if (raw.includes("offer_not_found")) return "notFound";
+  return raw;
+}
+
 export async function acceptIncomingOffer(
   offerId: string,
   opts?: { scheduledFor?: string; deliveryInDays?: number },
@@ -460,50 +471,23 @@ export async function acceptIncomingOffer(
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
 
-  const { data: offer, error: loadError } = await supabase
-    .from("offers")
-    .select("id, lot_id, farmer_id, processor_id, tons, price_per_kg, status, delivery_in_days")
-    .eq("id", offerId)
-    .maybeSingle();
-  if (loadError || !offer) return { ok: false, error: loadError?.message ?? "notFound" };
-
   const deliveryInDays =
     opts?.scheduledFor != null
       ? deliveryInDaysFromIso(opts.scheduledFor)
       : opts?.deliveryInDays != null && Number.isFinite(opts.deliveryInDays)
         ? Math.max(0, Math.round(opts.deliveryInDays))
-        : offer.delivery_in_days ?? DEFAULT_DELIVERY_IN_DAYS;
-  const scheduledFor = opts?.scheduledFor ?? addDaysIso(todayIsoDate(), deliveryInDays);
+        : undefined;
+  const scheduledFor =
+    opts?.scheduledFor ??
+    (deliveryInDays != null ? addDaysIso(todayIsoDate(), deliveryInDays) : undefined);
 
-  if (offer.status !== "accepted") {
-    const { error } = await supabase
-      .from("offers")
-      .update({ status: "accepted", delivery_in_days: deliveryInDays })
-      .eq("id", offerId);
-    if (error) return { ok: false, error: error.message };
-  }
+  const { error } = await supabase.rpc("accept_offer", {
+    p_offer_id: offerId,
+    p_scheduled_for: scheduledFor ?? null,
+    p_delivery_in_days: deliveryInDays ?? null,
+  });
 
-  const { data: existing } = await supabase
-    .from("deliveries")
-    .select("id, scheduled_for")
-    .eq("offer_id", offerId)
-    .maybeSingle();
-  if (!existing) {
-    const { error: deliveryError } = await supabase.from("deliveries").insert({
-      offer_id: offer.id,
-      lot_id: offer.lot_id,
-      farmer_id: offer.farmer_id,
-      processor_id: offer.processor_id,
-      tons: offer.tons,
-      price_per_kg: offer.price_per_kg,
-      status: "scheduled",
-      scheduled_for: scheduledFor,
-    });
-    if (deliveryError) return { ok: false, error: deliveryError.message };
-  } else if (!existing.scheduled_for) {
-    await supabase.from("deliveries").update({ scheduled_for: scheduledFor }).eq("id", existing.id);
-  }
-
+  if (error) return { ok: false, error: acceptRpcError(error) };
   return { ok: true };
 }
 
@@ -575,6 +559,16 @@ export async function advanceDelivery(
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
 
+  // Block payment (and any further advance) after a failed lab check.
+  const { data: existing } = await supabase
+    .from("deliveries")
+    .select("lab_result, quality_score_snapshot, lot_id")
+    .eq("id", deliveryId)
+    .maybeSingle();
+  if (existing?.lab_result === "failed") {
+    return { ok: false, error: "labFailedBlocked" };
+  }
+
   const patch: {
     status: DeliveryStatus;
     actual_kg?: number;
@@ -586,16 +580,11 @@ export async function advanceDelivery(
 
   // Persist lot score onto the delivery when first advancing, if still empty.
   if (next === "weighed" || next === "lab_checked") {
-    const { data: delivery } = await supabase
-      .from("deliveries")
-      .select("quality_score_snapshot, lot_id")
-      .eq("id", deliveryId)
-      .maybeSingle();
-    if (delivery && delivery.quality_score_snapshot == null && delivery.lot_id) {
+    if (existing && existing.quality_score_snapshot == null && existing.lot_id) {
       const { data: lot } = await supabase
         .from("lots")
         .select("quality_score")
-        .eq("id", delivery.lot_id)
+        .eq("id", existing.lot_id)
         .maybeSingle();
       if (lot?.quality_score != null) patch.quality_score_snapshot = Number(lot.quality_score);
     }

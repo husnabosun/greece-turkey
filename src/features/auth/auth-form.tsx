@@ -67,7 +67,6 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
   const [role, setRole] = useState<UserRole>("farmer");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [debugLine, setDebugLine] = useState<string | null>(null);
 
   async function onLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -77,9 +76,6 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
       return;
     }
     const { email: loginEmail, password: loginPassword } = credentialsFromForm(e.currentTarget);
-    setDebugLine(
-      t("loginDebug", { email: loginEmail || "(κενό)", length: loginPassword.length }),
-    );
     if (!loginEmail || !loginPassword) {
       toast.error(t("invalidCredentials"));
       return;
@@ -254,11 +250,6 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
             </div>
           </div>
 
-          {debugLine ? (
-            <p className="rounded-md bg-muted px-3 py-2 font-mono text-xs text-muted-foreground">
-              {debugLine}
-            </p>
-          ) : null}
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? t("loading") : mode === "login" ? t("loginCta") : t("registerCta")}

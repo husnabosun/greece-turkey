@@ -119,6 +119,13 @@ export function DashboardScreen() {
   const [offerCount, setOfferCount] = useState(0);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
+  const [greeting, setGreeting] = useState<"greetingMorning" | "greetingAfternoon" | "greetingEvening">(
+    "greetingAfternoon",
+  );
+
+  useEffect(() => {
+    setGreeting(greetingKey());
+  }, []);
 
   useEffect(() => {
     const supabase = tryCreateBrowserClient();
@@ -365,8 +372,8 @@ export function DashboardScreen() {
     <div className="w-full flex-1">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="text-ap-title text-ink">
-            {t(greetingKey())},
+          <h1 className="text-ap-title text-ink" suppressHydrationWarning>
+            {t(greeting)},
             <br />
             {displayName || t("farmerFallback")}
           </h1>

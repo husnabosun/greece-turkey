@@ -214,7 +214,7 @@ export function ProcessorDeliveriesScreen() {
                       label={nextLabel}
                       variant="dark"
                       icon={<Scale className="size-4" />}
-                      disabled={!canAdvanceDelivery(d.status)}
+                      disabled={!canAdvanceDelivery(d.status, d.labResult)}
                       onClick={() => openAdvance(d)}
                     />
                     <ApButton

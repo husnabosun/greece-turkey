@@ -20,9 +20,10 @@ export function SignOutButton({ className }: { className?: string }) {
       return;
     }
     setLoading(true);
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
     setLoading(false);
     router.replace("/login");
+    router.refresh();
   }
 
   return (

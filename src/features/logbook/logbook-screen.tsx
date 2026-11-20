@@ -243,7 +243,9 @@ function SprayCard({ entry, locale }: { entry: Entry; locale: string }) {
           <p className="text-ap-card text-ink">{entry.banned ? t("bannedUsed") : entry.product}</p>
           <p className="text-ap-body text-muted-foreground">{meta}</p>
         </div>
-        <Pill tone={entry.banned ? "risk" : "warn"}>{entry.banned ? t("notAllowed") : t("allowed")}</Pill>
+        <Pill tone={entry.banned ? "risk" : "warn"}>
+          {entry.banned ? t("notAllowed") : entry.substances.length ? t("allowed") : t("allowed")}
+        </Pill>
       </div>
       {entry.banned ? (
         <div className="mt-2 rounded-lg bg-[#F8D3C8] p-2">
@@ -413,6 +415,11 @@ function AddSpraySheet({
           <div className="mt-3 flex items-center gap-2 rounded-lg bg-risk-soft p-2.5">
             <TriangleAlert className="size-4 shrink-0 text-risk" aria-hidden />
             <p className="text-ap-small font-semibold text-risk">{t("bannedWarn", { substance: check.hits.join(", ") })}</p>
+          </div>
+        ) : check.status === "unknown" ? (
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-soft p-2.5">
+            <TriangleAlert className="size-4 shrink-0 text-ap-accent" aria-hidden />
+            <p className="text-ap-small font-semibold text-ink">{t("unknownSubstance")}</p>
           </div>
         ) : null}
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import type { FieldTree } from "@/shared/types/database";
 import type { MapTree, MapTreeStatus } from "@/features/fields/field-health-map";
-import { DEMO_FIELD_TREES, pickDefaultTreeId } from "@/features/fields/demo-trees";
+import { pickDefaultTreeId } from "@/features/fields/demo-trees";
 
 type State = {
   trees: MapTree[];
@@ -26,7 +26,7 @@ function toMapTree(row: FieldTree, displayId: number): MapTree | null {
   };
 }
 
-/** Loads `field_trees` for one field. Falls back to demo dots when the table is empty. */
+/** Loads `field_trees` for one field. Empty when none exist (no fake demo dots). */
 export function useFieldTrees(fieldId: string | null | undefined) {
   const [state, setState] = useState<State>({ trees: [], loading: Boolean(fieldId), fromDemo: false });
 
@@ -43,7 +43,7 @@ export function useFieldTrees(fieldId: string | null | undefined) {
       const supabase = tryCreateBrowserClient();
       if (!supabase) {
         if (!cancelled) {
-          setState({ trees: DEMO_FIELD_TREES, loading: false, fromDemo: true });
+          setState({ trees: [], loading: false, fromDemo: false });
         }
         return;
       }
@@ -57,7 +57,7 @@ export function useFieldTrees(fieldId: string | null | undefined) {
       if (cancelled) return;
 
       if (error || !data?.length) {
-        setState({ trees: DEMO_FIELD_TREES, loading: false, fromDemo: true });
+        setState({ trees: [], loading: false, fromDemo: false });
         return;
       }
 
@@ -66,9 +66,9 @@ export function useFieldTrees(fieldId: string | null | undefined) {
         .filter((t): t is MapTree => t != null);
 
       setState({
-        trees: trees.length ? trees : DEMO_FIELD_TREES,
+        trees,
         loading: false,
-        fromDemo: trees.length === 0,
+        fromDemo: false,
       });
     })();
 

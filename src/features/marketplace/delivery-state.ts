@@ -1,5 +1,5 @@
 import { DELIVERY_PIPELINE } from "@/core/config/constants";
-import type { DeliveryStatus } from "@/shared/types/database";
+import type { DeliveryStatus, LabResult } from "@/shared/types/database";
 
 export type PipelineStatus = (typeof DELIVERY_PIPELINE)[number];
 
@@ -22,7 +22,28 @@ export function deliveryStepIndex(status: DeliveryStatus): number {
   return DELIVERY_PIPELINE.indexOf(status);
 }
 
-/** True when the processor may record weighbridge / lab / payment. */
-export function canAdvanceDelivery(status: DeliveryStatus): boolean {
+/**
+ * True when the processor may record weighbridge / lab / payment.
+ * Lab failure blocks payment — renegotiation required.
+ */
+export function canAdvanceDelivery(
+  status: DeliveryStatus,
+  labResult?: LabResult | null,
+): boolean {
+  if (labResult === "failed") return false;
   return nextDeliveryStatus(status) !== null;
+}
+
+/** Payable kg: weighbridge when present, else contracted tons. */
+export function deliveryPayableKg(tons: number, actualKg?: number | null): number {
+  if (actualKg != null && Number.isFinite(actualKg) && actualKg > 0) return actualKg;
+  return tons * 1000;
+}
+
+export function deliveryPayableAmount(
+  tons: number,
+  pricePerKg: number,
+  actualKg?: number | null,
+): number {
+  return deliveryPayableKg(tons, actualKg) * pricePerKg;
 }

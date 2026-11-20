@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -60,6 +60,7 @@ export function AddFieldScreen() {
   const [varietySlug, setVarietySlug] = useState(() => defaultVarietySlug(oliveCountry));
   const [irrigated, setIrrigated] = useState(false);
   const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
 
   const varietyGroups = useMemo(
     () => varietiesGrouped(locale, mapLon, profileCountry),
@@ -111,6 +112,7 @@ export function AddFieldScreen() {
   }
 
   async function saveField() {
+    if (saving || saveLock.current) return;
     if (!name.trim()) {
       toast.error(t("needName"));
       return;
@@ -129,6 +131,7 @@ export function AddFieldScreen() {
       return;
     }
 
+    saveLock.current = true;
     setSaving(true);
     try {
       const {
@@ -157,6 +160,7 @@ export function AddFieldScreen() {
       });
 
       if (error) {
+        saveLock.current = false;
         toast.error(error.message);
         return;
       }

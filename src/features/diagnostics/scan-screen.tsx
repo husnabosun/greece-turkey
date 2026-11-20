@@ -69,6 +69,8 @@ export function ScanScreen() {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [treeId, setTreeId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  /** Demo / unsaved result shown once — never written to DB or history. */
+  const [ephemeralScan, setEphemeralScan] = useState<SavedScan | null>(null);
   const [photos, setPhotos] = useState<string[]>([]);
   const [analysing, setAnalysing] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -127,7 +129,10 @@ export function ScanScreen() {
   }, [searchParams, fieldsLoading, viewFields, router, pathname]);
 
   const activeField = viewFields.find((f) => f.id === fieldId) ?? null;
-  const active = scans.find((s) => s.id === activeId) ?? null;
+  const active =
+    (ephemeralScan && ephemeralScan.id === activeId ? ephemeralScan : null) ??
+    scans.find((s) => s.id === activeId) ??
+    null;
 
   useEffect(() => {
     if (!scansError) return;
@@ -236,6 +241,37 @@ export function ScanScreen() {
         (payload.source === "gemini" || payload.source === "demo" || payload.source === "model")
           ? payload.source
           : "demo";
+
+      // Low-confidence leaf results: ask for a better photo, do not save.
+      if (
+        mode === "leaf" &&
+        source !== "demo" &&
+        presented.confidence != null &&
+        presented.confidence < 0.7
+      ) {
+        toast.message(t("lowConfidence"));
+        setAnalysing(false);
+        return;
+      }
+
+      // Never persist demo / fallback results as real history or quality input.
+      if (source === "demo") {
+        toast.message(t("demoNotSaved"));
+        const local: SavedScan = {
+          id: crypto.randomUUID(),
+          fieldId: activeField.id,
+          fieldName: activeField.name,
+          at: new Date().toISOString(),
+          preview: primary,
+          storagePath: null,
+          presented,
+        };
+        setEphemeralScan(local);
+        setActiveId(local.id);
+        setPhotos([]);
+        setView("result");
+        return;
+      }
 
       const persisted = await saveFarmerScan({
         fieldId: activeField.id,

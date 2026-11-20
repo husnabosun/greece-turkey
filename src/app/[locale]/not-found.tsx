@@ -14,6 +14,9 @@ async function homeHref() {
     if (profile?.role === "processor" || user.user_metadata?.role === "processor") {
       return "/processor/overview";
     }
+    if (profile?.role === "farmer" || user.user_metadata?.role === "farmer") {
+      return "/farmer/dashboard";
+    }
     return "/";
   } catch {
     return "/";

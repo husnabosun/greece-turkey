@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { ArrowRight, Check, ChevronLeft, Trees } from "lucide-react";
@@ -65,13 +65,14 @@ export function NewListingScreen({
   }, [fields, fieldId, currentId]);
 
   const defaultStart = useMemo(() => isoToday(), []);
-  const [tonsText, setTonsText] = useState("2.5");
+  const [tonsText, setTonsText] = useState("");
   const [harvestStart, setHarvestStart] = useState(defaultStart);
   const [harvestEnd, setHarvestEnd] = useState(() => addDaysIso(defaultStart, 7));
   const [negotiable, setNegotiable] = useState(false);
   const [delivery, setDelivery] = useState<"pickup" | "deliver">("pickup");
-  const [priceText, setPriceText] = useState("0.80");
+  const [priceText, setPriceText] = useState("");
   const [publishing, setPublishing] = useState(false);
+  const publishLock = useRef(false);
 
   if (loading) {
     return (
@@ -282,7 +283,7 @@ export function NewListingScreen({
         type="button"
         disabled={publishing || !field}
         onClick={() => {
-          if (!field) return;
+          if (!field || publishing || publishLock.current) return;
           const tons = parsePositiveNumber(tonsText);
           const price = parsePositiveNumber(priceText);
           if (tons == null) {
@@ -297,6 +298,7 @@ export function NewListingScreen({
             toast.error(t("invalidHarvestRange"));
             return;
           }
+          publishLock.current = true;
           void (async () => {
             setPublishing(true);
             try {
@@ -314,6 +316,7 @@ export function NewListingScreen({
                 buyRequestId: targetRequestId,
               });
               if (!result.ok) {
+                publishLock.current = false;
                 toast.error(
                   t(
                     result.error === "needLogin" ||

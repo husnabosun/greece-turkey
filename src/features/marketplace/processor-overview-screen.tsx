@@ -303,7 +303,7 @@ export function ProcessorOverviewScreen() {
     : [];
 
   const onAdvanceFromDay = async (d: ProcessorDelivery) => {
-    if (!canAdvanceDelivery(d.status)) return;
+    if (!canAdvanceDelivery(d.status, d.labResult)) return;
     // Weighbridge / lab need inputs — open the Deliveries page for the confirm dialog.
     router.push("/processor/deliveries");
   };
@@ -461,7 +461,7 @@ export function ProcessorOverviewScreen() {
                         <span className="text-[14px] font-extrabold text-ink">
                           {formatEuro(saleTotal(d.tons, d.pricePerKg), locale)}
                         </span>
-                        {canAdvanceDelivery(d.status) ? (
+                        {canAdvanceDelivery(d.status, d.labResult) ? (
                           <ApButton
                             label={nextLabel}
                             variant="dark"
