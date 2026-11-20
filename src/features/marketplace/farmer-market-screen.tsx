@@ -23,6 +23,7 @@ import {
 } from "@/features/marketplace/delivery-state";
 import { BottomSheet } from "@/features/marketplace/processor-kit";
 import { formatEuro, formatEuroPerKg, formatTons } from "@/features/marketplace/pricing";
+import { formatRequestWindow, isRequestWindowExpired } from "@/features/marketplace/request-window";
 import { regionLabel } from "@/features/marketplace/regions";
 import {
   acceptOffer,
@@ -244,7 +245,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   ];
 
   const filteredRequests = useMemo(() => {
-    let list = [...requests];
+    let list = requests.filter((req) => !isRequestWindowExpired(req.windowLabel));
     if (filters.includes("fits")) {
       list = list.filter((req) => bestFieldForRequest(fields, fieldCards, req) != null);
     }
@@ -968,12 +969,18 @@ function ActiveDeliveryCard({
     .join(" · ");
   const failed = delivery.labResult === "failed";
   const step = deliveryStepIndex(delivery.status as "scheduled" | "weighed" | "lab_checked" | "paid");
+  const stepCaptions = [
+    when,
+    delivery.actualKg != null ? `${new Intl.NumberFormat(locale).format(payableKg)} kg` : null,
+    delivery.labResult === "passed" ? "✓" : delivery.labResult === "failed" ? "✗" : null,
+    delivery.status === "paid" ? formatEuro(amount, locale) : null,
+  ];
 
   return (
     <div className={cn("rounded-[18px] border bg-card p-3", failed ? "border-risk" : "border-line")}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-bold tracking-[1px] text-ap-accent uppercase">{inProgress}</p>
+          <p className="text-ap-small font-bold text-ap-accent">{inProgress}</p>
           <p className="text-ap-card text-ink">{delivery.fieldName ?? "—"}</p>
           <p className="text-ap-body text-muted-foreground">{delivery.processorName ?? "—"}</p>
           <p className="mt-1 text-ap-small font-semibold text-ink">{meta}</p>
@@ -996,7 +1003,7 @@ function ActiveDeliveryCard({
         </div>
       </div>
       <div className="mt-3">
-        <StatusSteps steps={steps} current={step < 0 ? 0 : step} />
+        <StatusSteps steps={steps} current={step < 0 ? 0 : step} captions={stepCaptions} />
       </div>
       <p className="mt-2 text-ap-small font-semibold text-muted-foreground">{nextHint}</p>
       {failed ? (
@@ -1060,16 +1067,25 @@ function RequestCard({
           <p className="text-ap-small text-muted-foreground">
             {varietyLabel(req.variety, locale)} · {formatTons(req.tons, locale)}
             {req.region ? ` · ${regionLabel(req.region, locale)}` : ""}
-            {req.windowLabel ? ` · ${req.windowLabel}` : ""}
+            {req.windowLabel
+              ? ` · ${formatRequestWindow(req.windowLabel, locale) ?? req.windowLabel}`
+              : ""}
           </p>
         </div>
-        <p className="shrink-0 text-ap-small font-bold text-muted-foreground">{req.minScore}+</p>
+        <p className="shrink-0 text-ap-small font-bold text-muted-foreground">
+          {req.minScore}+
+        </p>
       </div>
       <p className="mt-2 text-ap-small text-muted-foreground">{filledOf}</p>
-      <div className="mt-2 flex items-center gap-2.5 rounded-xl bg-soft p-2.5">
+      <div
+        className={cn(
+          "mt-2 flex items-center gap-2.5 rounded-xl p-2.5",
+          fits ? "bg-good-soft" : "bg-risk-soft/60",
+        )}
+      >
         <div className="min-w-0 flex-1">
-          <p className={cn("text-ap-body font-bold", fits ? "text-ink" : "text-risk")}>
-            {fits ? canSellLabel : mismatch}
+          <p className={cn("text-ap-body font-bold", fits ? "text-good" : "text-risk")}>
+            {fits ? `✓ ${canSellLabel}` : `✗ ${mismatch}`}
           </p>
           {fits && fitField ? (
             <p className="text-ap-small text-muted-foreground">

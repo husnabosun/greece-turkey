@@ -69,7 +69,7 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
   }
 
   return (
-    <div className="relative w-full flex-1">
+    <div className="relative w-full flex-1 pb-28">
       <div className="flex items-center gap-3">
         <h1 className="flex-1 text-ap-title text-ink">{t("title")}</h1>
         <button

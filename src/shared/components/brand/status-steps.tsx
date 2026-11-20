@@ -1,14 +1,24 @@
 import { Check } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
-export function StatusSteps({ steps, current }: { steps: string[]; current: number }) {
+export function StatusSteps({
+  steps,
+  current,
+  captions,
+}: {
+  steps: string[];
+  current: number;
+  /** Optional date/meta under each step label (B3). */
+  captions?: (string | null | undefined)[];
+}) {
   return (
     <div className="flex">
       {steps.map((label, i) => {
         const done = i < current;
         const active = i === current;
+        const caption = captions?.[i];
         return (
-          <div key={label} className="flex min-w-0 flex-1 flex-col items-center">
+          <div key={`${label}-${i}`} className="flex min-w-0 flex-1 flex-col items-center">
             <div className="flex h-6 w-full items-center justify-center">
               <div className={cn("h-0.5 flex-1", i === 0 ? "bg-transparent" : i <= current ? "bg-good" : "bg-line")} />
               <div
@@ -35,6 +45,11 @@ export function StatusSteps({ steps, current }: { steps: string[]; current: numb
             >
               {label}
             </p>
+            {caption ? (
+              <p className="mt-0.5 max-w-full truncate px-0.5 text-center text-[10px] text-muted-foreground">
+                {caption}
+              </p>
+            ) : null}
           </div>
         );
       })}

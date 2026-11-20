@@ -105,10 +105,24 @@ export function FieldHealthMap({
     let ro: ResizeObserver | null = null;
     const timers: number[] = [];
 
+    const midOfBounds = (
+      b: [[number, number], [number, number]] | null,
+    ): [number, number] | null => (b ? [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2] : null);
+    const geomPoly = parseFieldPolygon(geom);
+    let outlineMid: [number, number] | null = null;
+    if (outlines?.length) {
+      for (const o of outlines) {
+        const p = parseFieldPolygon(o.geom);
+        outlineMid = p ? midOfBounds(boundsFromPolygon(p)) : null;
+        if (outlineMid) break;
+      }
+    }
     const center: [number, number] =
       lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat)
         ? [lon, lat]
-        : DEFAULT_FIELD_CENTER;
+        : midOfBounds(geomPoly ? boundsFromPolygon(geomPoly) : null) ??
+          outlineMid ??
+          DEFAULT_FIELD_CENTER;
 
     const boot = () => {
       if (removed || mapRef.current) return;
