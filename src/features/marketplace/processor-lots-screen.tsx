@@ -5,7 +5,7 @@ import { ArrowUpDown, FlaskConical, Leaf, Plus, Search, SlidersHorizontal, X } f
 import { toast } from "sonner";
 import { useLocale, useTranslations } from "next-intl";
 import { publicEnv } from "@/core/config/env";
-import { marketplaceVarietyOptions, varietyLabelFromStored } from "@/features/fields/olive-varieties";
+import { marketplaceVarietyOptions, varietyLabel as varietyLabelFn } from "@/features/fields/olive-varieties";
 import { reverseGeocodePlace } from "@/features/fields/reverse-geocode";
 import { ApButton } from "@/shared/components/brand/ap-button";
 import { ApCard } from "@/shared/components/brand/ap-card";
@@ -48,7 +48,7 @@ type SortKey = "score" | "price" | "harvest" | "tons";
 
 function useVarietyLabel() {
   const locale = useLocale();
-  return (slug: string) => varietyLabelFromStored(slug, locale);
+  return (slug: string) => varietyLabelFn(slug, locale);
 }
 
 function useLotPlaceLabels(lots: ProcessorLot[]) {
@@ -74,7 +74,8 @@ function useLotPlaceLabels(lots: ProcessorLot[]) {
         lotsRef.current.map(async (lot) => {
           if (lot.lat == null || lot.lon == null) return;
           if (lot.town) {
-            next[lot.id] = `${lot.town}${lot.region ? `, ${lot.region}` : ""}`;
+            const region = lot.region ? regionLabel(lot.region, locale) : "";
+            next[lot.id] = `${lot.town}${region ? `, ${region}` : ""}`;
             return;
           }
           const place = await reverseGeocodePlace(lot.lat, lot.lon, locale);
@@ -189,26 +190,26 @@ export function ProcessorLotsScreen() {
       shown
         .filter((l) => l.lat != null && l.lon != null)
         .map((l) => {
-          const place = lotPlaceLabel(l, t("anonymousGrove"), placeById[l.id]);
+          const place = lotPlaceLabel(l, t("anonymousGrove"), placeById[l.id], locale);
           return {
             id: l.id,
             lat: l.lat!,
             lon: l.lon!,
             label: place,
             score: l.qualityScore,
-            title: `${varietyLabel(l.variety)} · ${l.tons} t`,
+            title: `${varietyLabel(l.variety)} · ${formatTons(l.tons, locale)}`,
             subtitle: t("lotSub", {
               place,
-              harvest: harvestRangeLabel(l.harvestStart, l.harvestEnd),
+              harvest: harvestRangeLabel(l.harvestStart, l.harvestEnd, locale),
               use: l.useType === "table" ? t("filterTable") : t("filterOil"),
             }),
             priceLabel:
-              l.pricePerKg != null ? `${euroPrice(l.pricePerKg)} /kg · ${t("farmerPrice")}` : t("openToOffers"),
+              l.pricePerKg != null ? `${euroPrice(l.pricePerKg, locale)} /kg · ${t("farmerPrice")}` : t("openToOffers"),
             useLabel: l.useType === "table" ? t("filterTable") : t("filterOil"),
-            harvestLabel: harvestRangeLabel(l.harvestStart, l.harvestEnd),
+            harvestLabel: harvestRangeLabel(l.harvestStart, l.harvestEnd, locale),
           };
         }),
-    [shown, placeById, t, varietyLabel],
+    [shown, placeById, t, varietyLabel, locale],
   );
 
   useEffect(() => {
@@ -575,7 +576,7 @@ export function ProcessorLotsScreen() {
         open={offerLot != null}
         onClose={() => setOfferLot(null)}
         title={t("makeOffer")}
-        subtitle={offerLot ? `${varietyLabel(offerLot.variety)} · ${offerLot.tons} t` : undefined}
+        subtitle={offerLot ? `${varietyLabel(offerLot.variety)} · ${formatTons(offerLot.tons, locale)}` : undefined}
         actionLabel={t("sendOffer")}
         onAction={() => void submitOffer()}
       >

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { nextDeliveryStatus } from "@/features/marketplace/delivery-state";
+import { formatDateRange, formatDateShort } from "@/features/marketplace/pricing";
+import { regionLabel } from "@/features/marketplace/regions";
 import {
   DEFAULT_DELIVERY_IN_DAYS,
   addDaysIso,
@@ -339,14 +341,16 @@ export function useProcessorMarket() {
   return { ...state, reload };
 }
 
-export async function createBuyRequest(input: {
+export type BuyRequestInput = {
   variety: string;
   tons: number;
   minScore: number;
   region: string | null;
   windowLabel: string;
   noBanned: boolean;
-}): Promise<{ ok: boolean; error?: string }> {
+};
+
+export async function createBuyRequest(input: BuyRequestInput): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
   const {
@@ -366,6 +370,54 @@ export async function createBuyRequest(input: {
     active: true,
   });
   return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+export async function updateBuyRequest(
+  id: string,
+  input: BuyRequestInput,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "needLogin" };
+
+  const { error } = await supabase
+    .from("buy_requests")
+    .update({
+      variety: input.variety,
+      tons: input.tons,
+      min_score: input.minScore,
+      region: input.region,
+      window_label: input.windowLabel,
+      no_banned: input.noBanned,
+    })
+    .eq("id", id)
+    .eq("processor_id", user.id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+export async function withdrawOffer(offerId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "needLogin" };
+
+  const { data, error } = await supabase
+    .from("offers")
+    .update({ status: "withdrawn" })
+    .eq("id", offerId)
+    .eq("status", "pending")
+    .eq("initiated_by", "processor")
+    .eq("processor_id", user.id)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "notFound" };
+  return { ok: true };
 }
 
 export async function placeLotOffer(input: {
@@ -557,21 +609,17 @@ export function lotPlaceLabel(
   lot: Pick<ProcessorLot, "town" | "region" | "farmerDisplayName">,
   anonymous: string,
   geocoded?: string | null,
+  locale = "el",
 ) {
   if (lot.farmerDisplayName) return lot.farmerDisplayName;
   if (geocoded?.trim()) return geocoded.trim();
-  if (lot.town) return `${lot.town}, ${lot.region}`;
-  return lot.region || anonymous;
+  const region = regionLabel(lot.region, locale);
+  if (lot.town) return `${lot.town}, ${region}`;
+  return region !== "—" ? region : anonymous;
 }
 
 export function harvestRangeLabel(start: string | null, end: string | null, locale = "el") {
   if (!start && !end) return "—";
-  const tag = locale.startsWith("el") ? "el-GR" : locale.startsWith("tr") ? "tr-TR" : "en-GB";
-  const fmt = (d: string) => {
-    const dt = new Date(`${d}T12:00:00`);
-    if (Number.isNaN(dt.getTime())) return d;
-    return dt.toLocaleDateString(tag, { day: "numeric", month: "short" });
-  };
-  if (start && end) return `${fmt(start)}–${fmt(end)}`;
-  return fmt(start ?? end!);
+  if (start && end) return formatDateRange(start, end, locale);
+  return formatDateShort(start ?? end!, locale);
 }

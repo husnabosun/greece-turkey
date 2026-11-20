@@ -14,6 +14,28 @@ function localeTag(locale?: string) {
   return "en-GB";
 }
 
+function asDate(d: string | Date): Date {
+  if (d instanceof Date) return d;
+  const iso = /^\d{4}-\d{2}-\d{2}/.test(d) ? `${d.slice(0, 10)}T12:00:00` : d;
+  return new Date(iso);
+}
+
+/** "1,55 €" / "30.000 €" — 2 fraction digits under €10, none at/above. */
+export function formatEuro(n: number, locale: string) {
+  const digits = n < 10 ? 2 : 0;
+  return new Intl.NumberFormat(localeTag(locale), {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(n);
+}
+
+/** "1,55 €/kg" */
+export function formatEuroPerKg(n: number, locale: string) {
+  return `${formatEuro(n, locale)}/kg`;
+}
+
 /** "1,55 €" / "€1.55" depending on locale. */
 export function euroPrice(n: number, locale?: string) {
   return new Intl.NumberFormat(localeTag(locale), {
@@ -33,12 +55,37 @@ export function euroTotal(n: number, locale?: string) {
   }).format(n);
 }
 
-/** "4,5 t" */
+/** "2,5 t" / "33 t" — always a space before the unit. */
 export function formatTons(n: number, locale?: string) {
   const body = new Intl.NumberFormat(localeTag(locale), {
     maximumFractionDigits: n % 1 ? 1 : 0,
   }).format(n);
   return `${body} t`;
+}
+
+/** "27 Νοε" */
+export function formatDateShort(d: string | Date, locale: string) {
+  const dt = asDate(d);
+  if (Number.isNaN(dt.getTime())) return typeof d === "string" ? d : "—";
+  return dt.toLocaleDateString(localeTag(locale), { day: "numeric", month: "short" });
+}
+
+/**
+ * "27 Νοε–4 Δεκ", or "3–10 Νοε" when both dates share the same month/year.
+ */
+export function formatDateRange(a: string | Date, b: string | Date, locale: string) {
+  const start = asDate(a);
+  const end = asDate(b);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return `${formatDateShort(a, locale)}–${formatDateShort(b, locale)}`;
+  }
+  const tag = localeTag(locale);
+  const sameMonth = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
+  if (sameMonth) {
+    const month = end.toLocaleDateString(tag, { month: "short" });
+    return `${start.getDate()}–${end.getDate()} ${month}`;
+  }
+  return `${formatDateShort(start, locale)}–${formatDateShort(end, locale)}`;
 }
 
 /** "Banned in the last 12 months" window, in days. */

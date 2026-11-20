@@ -394,7 +394,7 @@ export function DayChipPicker({
   return (
     <div className="flex flex-col gap-1.5">
       <p className="text-[11px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{label}</p>
-      <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
+      <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
         {days.map((iso, i) => {
           const on = iso === value;
           return (
@@ -403,7 +403,7 @@ export function DayChipPicker({
               type="button"
               onClick={() => onChange(iso)}
               className={cn(
-                "flex flex-col items-center rounded-xl border px-1.5 py-2",
+                "flex min-h-11 w-full flex-col items-center justify-center rounded-xl border px-1 py-1.5",
                 on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink hover:bg-soft",
               )}
             >
@@ -590,13 +590,16 @@ export function BottomSheet({
   children,
   actionLabel,
   onAction,
+  footer,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
-  actionLabel: string;
-  onAction: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
+  /** Sticky footer slot; falls back to actionLabel button when omitted. */
+  footer?: ReactNode;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -608,6 +611,13 @@ export function BottomSheet({
   }, [open, onClose]);
 
   if (!open) return null;
+
+  const footerContent =
+    footer ??
+    (actionLabel && onAction ? (
+      <ApButton label={actionLabel} variant="dark" onClick={onAction} className="w-full" />
+    ) : null);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-ink/40 min-[900px]:items-center min-[900px]:justify-center min-[900px]:p-4" onClick={onClose} role="presentation">
       <div
@@ -615,20 +625,60 @@ export function BottomSheet({
         aria-modal="true"
         aria-label={title}
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[85vh] w-full overflow-y-auto rounded-t-[22px] border border-line bg-card p-5 shadow-[0_-12px_40px_rgba(0,0,0,0.18)] min-[900px]:max-w-[420px] min-[900px]:rounded-[22px]"
+        className="flex max-h-[85vh] w-full flex-col rounded-t-[22px] border border-line bg-card shadow-[0_-12px_40px_rgba(0,0,0,0.18)] min-[900px]:max-w-[420px] min-[900px]:rounded-[22px]"
       >
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex shrink-0 items-center justify-between gap-3 px-5 pt-5 pb-3">
           <h2 className="text-[20px] font-extrabold text-ink">{title}</h2>
           <button type="button" onClick={onClose} className="flex size-9 items-center justify-center rounded-full border border-line" aria-label="Close">
             <X className="size-4" />
           </button>
         </div>
-        <div className="flex flex-col gap-4">{children}</div>
-        <div className="sticky bottom-0 mt-5 bg-card pt-2">
-          <ApButton label={actionLabel} variant="dark" onClick={onAction} className="w-full" />
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-3">
+          <div className="flex flex-col gap-4">{children}</div>
         </div>
+        {footerContent ? (
+          <div className="sticky bottom-0 shrink-0 border-t border-line bg-card px-5 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+            {footerContent}
+          </div>
+        ) : null}
       </div>
     </div>
+  );
+}
+
+/** Accessible toggle — 44px touch target, green when on. */
+export function Switch({
+  checked,
+  onCheckedChange,
+  label,
+  id,
+}: {
+  checked: boolean;
+  onCheckedChange: (next: boolean) => void;
+  label: string;
+  id?: string;
+}) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onCheckedChange(!checked)}
+      className={cn(
+        "relative inline-flex h-11 w-14 shrink-0 items-center rounded-full border transition-colors",
+        checked ? "border-good bg-good" : "border-line bg-soft",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute size-9 rounded-full bg-card shadow-sm transition-transform",
+          checked ? "translate-x-[1.35rem]" : "translate-x-1",
+        )}
+      />
+    </button>
   );
 }
 
@@ -735,6 +785,8 @@ export function LotBadges({ badges, max }: { badges: LotBadge[]; max?: number })
     </div>
   );
 }
+
+export { StatusSteps } from "@/shared/components/brand/status-steps";
 
 export function LotRow({
   href,

@@ -39,6 +39,10 @@ type Props = {
   className?: string;
   /** Hover/select preview card. Off on detail pages (avoids duplicating facts). */
   preview?: boolean;
+  /** When false: markers only — no preview card / open-lot link. Default true. */
+  popup?: boolean;
+  /** Fixed map height in px. When omitted, uses the responsive shell height. */
+  height?: number;
 };
 
 const GREECE_CENTER: [number, number] = [22.5, 38.2];
@@ -57,6 +61,8 @@ export function LotsMap({
   labels,
   className,
   preview: previewEnabled = true,
+  popup = true,
+  height,
 }: Props) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -68,8 +74,13 @@ export function LotsMap({
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
 
+  const showPopup = popup && previewEnabled;
   const preview =
-    previewEnabled && selectedId ? (points.find((p) => p.id === selectedId) ?? null) : null;
+    showPopup && selectedId ? (points.find((p) => p.id === selectedId) ?? null) : null;
+  const shellStyle = height != null ? { height, minHeight: height } : undefined;
+  const shellClass = height != null
+    ? cn("relative w-full overflow-hidden rounded-[18px] border border-line bg-ink", className)
+    : cn(MAP_SHELL, className);
 
   useEffect(() => {
     if (!token || !containerRef.current || mapRef.current) return;
@@ -193,8 +204,11 @@ export function LotsMap({
   if (!token) {
     return (
       <div
+        style={shellStyle}
         className={cn(
-          MAP_SHELL.replace("bg-ink", "bg-soft"),
+          height != null
+            ? "relative w-full overflow-hidden rounded-[18px] border border-line bg-soft"
+            : MAP_SHELL.replace("bg-ink", "bg-soft"),
           "flex items-center justify-center px-4 text-center text-[13px] font-semibold text-muted-foreground",
           className,
         )}
@@ -205,7 +219,7 @@ export function LotsMap({
   }
 
   return (
-    <div ref={shellRef} className={cn(MAP_SHELL, className)}>
+    <div ref={shellRef} style={shellStyle} className={shellClass}>
       <div ref={containerRef} className="absolute inset-0" />
       {failed ? (
         <div className="absolute inset-0 flex items-center justify-center bg-ink/70 px-4 text-center text-[13px] font-semibold text-white">
