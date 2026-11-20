@@ -36,11 +36,12 @@ type FilterKey = "fits" | "near" | "variety" | "region";
 
 const TABS: Tab[] = ["overview", "requests", "offers", "sales"];
 
+/** StatusSteps `current`: ticks for completed steps, circle on the next action. */
 const DELIVERY_STEP: Record<string, number> = {
-  scheduled: 0,
-  weighed: 1,
-  lab_checked: 2,
-  paid: 3,
+  scheduled: 1,
+  weighed: 2,
+  lab_checked: 3,
+  paid: 4,
 };
 
 function isTab(value: string | undefined): value is Tab {
