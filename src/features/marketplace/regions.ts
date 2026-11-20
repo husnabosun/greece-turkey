@@ -24,7 +24,7 @@ const LABELS: Record<MarketRegion, { en: string; el: string; tr: string }> = {
   Phocis: { en: "Phocis", el: "Φωκίδα", tr: "Fokida" },
   "West Greece": { en: "West Greece", el: "Δυτική Ελλάδα", tr: "Batı Yunanistan" },
   Aydın: { en: "Aydın", el: "Αϊδίνιο", tr: "Aydın" },
-  Balıkesir: { en: "Balıkesir", el: "Μπαλικεσίρ", tr: "Balıkesir" },
+  Balıkesir: { en: "Balıkesir", el: "Μπαλίκεσιρ", tr: "Balıkesir" },
   İzmir: { en: "İzmir", el: "Σμύρνη", tr: "İzmir" },
 };
 

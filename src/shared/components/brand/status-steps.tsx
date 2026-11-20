@@ -8,12 +8,12 @@ export function StatusSteps({ steps, current }: { steps: string[]; current: numb
         const done = i < current;
         const active = i === current;
         return (
-          <div key={label} className="flex flex-1 flex-col items-center">
+          <div key={label} className="flex min-w-0 flex-1 flex-col items-center">
             <div className="flex h-6 w-full items-center justify-center">
               <div className={cn("h-0.5 flex-1", i === 0 ? "bg-transparent" : i <= current ? "bg-good" : "bg-line")} />
               <div
                 className={cn(
-                  "flex size-6 items-center justify-center rounded-full",
+                  "flex size-6 shrink-0 items-center justify-center rounded-full",
                   done ? "bg-good" : active ? "border-2 border-good bg-card" : "bg-soft",
                 )}
               >
@@ -28,7 +28,8 @@ export function StatusSteps({ steps, current }: { steps: string[]; current: numb
             </div>
             <p
               className={cn(
-                "mt-1 text-ap-small",
+                "mt-1 max-w-full px-0.5 text-center leading-tight",
+                "text-[11px] max-[399px]:line-clamp-2 min-[400px]:text-ap-small min-[400px]:leading-normal",
                 active ? "font-semibold text-ink" : done ? "font-semibold text-good" : "font-normal text-muted-foreground",
               )}
             >

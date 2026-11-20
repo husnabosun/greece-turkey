@@ -306,7 +306,7 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
   }
 
   const badges = lotBadgesFor(lot, t);
-  const resolvedPlace = lotPlaceLabel(lot, t("anonymousGrove"), place);
+  const resolvedPlace = lotPlaceLabel(lot, t("anonymousGrove"), place, locale);
   const region = regionLabel(lot.region, locale);
   const variety = varietyLabelFromStored(lot.variety, locale);
   const harvest = harvestRangeLabel(lot.harvestStart, lot.harvestEnd, locale);

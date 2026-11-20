@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ClipboardList,
   Gauge,
@@ -22,7 +22,6 @@ import { Link, useRouter } from "@/shared/i18n/navigation";
 import { euroPrice, euroTotal, formatTons, saleTotal } from "@/features/marketplace/pricing";
 import { trustBadges } from "@/features/marketplace/badges";
 import { canAdvanceDelivery } from "@/features/marketplace/delivery-state";
-import { reverseGeocodePlace } from "@/features/fields/reverse-geocode";
 import {
   Amount,
   DayChipPicker,
@@ -81,48 +80,6 @@ function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"p
     out.unshift({ id: "banned", label: t("noBannedProducts") });
   }
   return out;
-}
-
-function useLotPlaceLabels(lots: ProcessorLot[]) {
-  const locale = useLocale();
-  const [labels, setLabels] = useState<Record<string, string>>({});
-  const lotsRef = useRef(lots);
-  lotsRef.current = lots;
-
-  // Stable string key — do not depend on array identity (e.g. `lot ? [lot] : []`).
-  const key = lots
-    .filter((l) => l.lat != null && l.lon != null)
-    .map((l) => `${l.id}:${l.lat},${l.lon}:${l.town ?? ""}:${l.region}`)
-    .sort()
-    .join("|");
-
-  useEffect(() => {
-    if (!key) {
-      setLabels((prev) => (Object.keys(prev).length === 0 ? prev : {}));
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const next: Record<string, string> = {};
-      await Promise.all(
-        lotsRef.current.map(async (lot) => {
-          if (lot.lat == null || lot.lon == null) return;
-          if (lot.town) {
-            next[lot.id] = `${lot.town}${lot.region ? `, ${lot.region}` : ""}`;
-            return;
-          }
-          const place = await reverseGeocodePlace(lot.lat, lot.lon, locale);
-          if (place) next[lot.id] = place;
-        }),
-      );
-      if (!cancelled) setLabels(next);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [key, locale]);
-
-  return labels;
 }
 
 function overviewGreeting(locale: string, company: string) {
@@ -525,7 +482,7 @@ export function ProcessorOverviewScreen() {
           <div className="mb-4 space-y-2 rounded-xl bg-soft p-3">
             <p className="text-[15px] font-extrabold text-ink">
               {acceptOffer.lot
-                ? lotPlaceLabel(acceptOffer.lot, t("anonymousGrove"))
+                ? lotPlaceLabel(acceptOffer.lot, t("anonymousGrove"), undefined, locale)
                 : t("anonymousGrove")}
             </p>
             <p className="text-[13px] font-medium text-muted-foreground">
@@ -533,7 +490,7 @@ export function ProcessorOverviewScreen() {
                 ? t("incomingSub", {
                     variety: varietyLabel(acceptOffer.lot.variety),
                     tons: acceptOffer.tons,
-                    region: acceptOffer.lot.region,
+                    region: regionLabel(acceptOffer.lot.region, locale),
                   })
                 : `${acceptOffer.tons} t`}
             </p>
@@ -586,7 +543,7 @@ export function ProcessorOverviewScreen() {
             ) : (
               incoming.map((offer, i) => {
                 const lot = offer.lot;
-                const place = lot ? lotPlaceLabel(lot, t("anonymousGrove")) : t("anonymousGrove");
+                const place = lot ? lotPlaceLabel(lot, t("anonymousGrove"), undefined, locale) : t("anonymousGrove");
                 const badges = lot ? lotBadgesFor(lot, t) : [];
                 return (
                   <LotRow
@@ -604,7 +561,7 @@ export function ProcessorOverviewScreen() {
                         ? t("incomingSub", {
                             variety: varietyLabel(lot.variety),
                             tons: offer.tons,
-                            region: lot.region,
+                            region: regionLabel(lot.region, locale),
                           })
                         : `${offer.tons} t`
                     }
@@ -649,7 +606,7 @@ export function ProcessorOverviewScreen() {
             ) : (
               outgoing.map((offer) => {
                 const lot = offer.lot;
-                const place = lot ? lotPlaceLabel(lot, t("anonymousGrove")) : t("anonymousGrove");
+                const place = lot ? lotPlaceLabel(lot, t("anonymousGrove"), undefined, locale) : t("anonymousGrove");
                 return (
                   <div key={offer.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
                     <div>
