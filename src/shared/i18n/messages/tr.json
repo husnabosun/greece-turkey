@@ -861,8 +861,8 @@
     "offerDetailTitle": "Teklif detayı",
     "offerDetailHint": "Fiyat ve tonu gör, sonra Kabul / Red / Karşı teklif.",
     "deleteRequest": "Sil",
-    "deleteRequestConfirm": "Bu talep kapatılsın mı?",
-    "requestDeleted": "Talep silindi.",
+    "deleteRequestConfirm": "Talep kapanacak ve artık yeni teklif kabul etmeyecek.",
+    "requestDeleted": "Talep kapatıldı.",
     "offersOnRequest": "{count} üretici teklifi",
     "noOffersOnRequest": "Bu talebe henüz teklif yok.",
     "openOffer": "Aç",
@@ -898,7 +898,6 @@
     "status": "Durum",
     "counteredStatus": "Karşı teklif",
     "offerClosed": "Bu teklif artık açık değil.",
-    "variety": "Çeşit",
     "pickupMapTitle": "Alım konumu",
     "pickupMapHint": "Bahçenin yeri — zeytinleri buradan alırsın.",
     "mapNoCoords": "Bu teklif için konum yok.",
@@ -926,7 +925,18 @@
       "noBanned": "Yasaklı ürün yok",
       "noBannedWhy": "AB’de onaylı olmayan ürün kullanılmadı.",
       "labSuggested": "Lab testi önerilir"
-    }
+    },
+    "requestScoreMin": "Puan {score}+",
+    "lotScore": "Puan {score}",
+    "requestActions": "Talep işlemleri",
+    "editRequest": "Düzenle",
+    "closeRequest": "Talebi kapat",
+    "editRequestTitle": "Talebi düzenle",
+    "saveChanges": "Kaydet",
+    "editRequestSoon": "Değişiklikleri kaydetme yakında geliyor.",
+    "noBannedOnly": "Yalnızca yasaklı ürün içermeyenler",
+    "regionMapLabel": "Bölge haritası — bölge seçmek için bir noktaya dokun",
+    "regionMapUnavailable": "Harita kullanılamıyor. Yukarıdan bir bölge seç."
   },
   "riskThreats": {
     "peacockSpot": "Halkalı leke",

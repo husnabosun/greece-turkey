@@ -861,8 +861,8 @@
     "offerDetailTitle": "Offer details",
     "offerDetailHint": "See price and tons, then Accept, Reject, or Counter.",
     "deleteRequest": "Delete",
-    "deleteRequestConfirm": "Deactivate this buy request?",
-    "requestDeleted": "Request deleted.",
+    "deleteRequestConfirm": "The request will close and will no longer accept new offers.",
+    "requestDeleted": "Request closed.",
     "offersOnRequest": "{count} farmer offers",
     "noOffersOnRequest": "No offers on this request yet.",
     "openOffer": "Open",
@@ -898,7 +898,6 @@
     "status": "Status",
     "counteredStatus": "Countered",
     "offerClosed": "This offer is no longer open.",
-    "variety": "Variety",
     "pickupMapTitle": "Pickup location",
     "pickupMapHint": "Where the grove is — pick up the olives from here.",
     "mapNoCoords": "No coordinates for this offer.",
@@ -926,7 +925,18 @@
       "noBanned": "No banned products",
       "noBannedWhy": "No product that is not approved in the EU.",
       "labSuggested": "Lab test suggested"
-    }
+    },
+    "requestScoreMin": "Score {score}+",
+    "lotScore": "Score {score}",
+    "requestActions": "Request actions",
+    "editRequest": "Edit",
+    "closeRequest": "Close request",
+    "editRequestTitle": "Edit request",
+    "saveChanges": "Save",
+    "editRequestSoon": "Saving changes is coming soon.",
+    "noBannedOnly": "Only without banned products",
+    "regionMapLabel": "Region map — tap a dot to choose a region",
+    "regionMapUnavailable": "Map unavailable. Choose a region above."
   },
   "riskThreats": {
     "peacockSpot": "Peacock spot",
