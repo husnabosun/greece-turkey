@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { saveFarmerScan } from "@/features/diagnostics/save-scan";
+import { localizedScanTitle } from "@/features/diagnostics/scan-title";
 import type { ActionKind, CaptureMode, PillKey, Presented, SavedScan } from "@/features/diagnostics/scan-types";
 import { scanNeedsRecheck, useFarmerScans } from "@/features/diagnostics/use-farmer-scans";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
@@ -681,7 +682,9 @@ export function ScanScreen() {
                   </span>
                 )}
                 <span className="mr-2 ml-2.5 min-w-0 flex-1">
-                  <span className="block truncate text-ap-body font-extrabold text-ink">{scan.presented.title}</span>
+                  <span className="block truncate text-ap-body font-extrabold text-ink">
+                    {localizedScanTitle(scan.presented, t)}
+                  </span>
                   <span className="block text-ap-small text-muted-foreground">
                     {scan.presented.confidence != null
                       ? t("listMeta", {
@@ -726,7 +729,8 @@ function ResultView({
   const tTasks = useTranslations("farmerTasks");
   const router = useRouter();
   const { presented } = scan;
-  const parts = splitSummary(presented.summary.trim() || presented.title);
+  const displayTitle = localizedScanTitle(presented, t);
+  const parts = splitSummary(presented.summary.trim() || displayTitle);
   const actions = actionSet(presented.actionKind, t);
   const photoLabel = presented.mode === "fruit" ? t("fruitPhoto") : presented.mode === "trap" ? t("trapPhoto") : t("leafPhoto");
   const meta = [scan.fieldName, formatWhen(scan.at, locale, (time) => t("todayAt", { time }))].filter(Boolean).join(" · ");
@@ -772,7 +776,7 @@ function ResultView({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={scan.preview}
-            alt={presented.title}
+            alt={displayTitle}
             className="mx-auto max-h-[55vh] min-h-[280px] w-full object-contain sm:min-h-[340px]"
           />
         ) : (
@@ -789,7 +793,7 @@ function ResultView({
       <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1 pr-2">
-            <p className="text-ap-card text-ink">{presented.title}</p>
+            <p className="text-ap-card text-ink">{displayTitle}</p>
             {presented.latin ? <p className="text-ap-body text-muted-foreground italic">{presented.latin}</p> : null}
           </div>
           <Pill tone={presented.tone}>{t(presented.pillKey)}</Pill>
@@ -873,7 +877,7 @@ function ResultView({
           variant="outline"
           label={t("addTaskFromScan")}
           icon={<ClipboardList className="size-4" aria-hidden />}
-          onClick={() => void createFollowUpTask(presented.title)}
+          onClick={() => void createFollowUpTask(displayTitle)}
         />
       </div>
     </div>
@@ -970,6 +974,7 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
       return {
         mode: "leaf",
         title,
+        titleKey: "uncertain",
         latin: undefined,
         summary: summaryParts.join(" "),
         tone,
@@ -983,17 +988,21 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
       };
     }
 
+    let titleKey: Presented["titleKey"];
     if (label === "Healthy") {
       title = t("healthyLeaf");
+      titleKey = "healthyLeaf";
       tone = "good";
       pillKey = "healthy";
     } else if (label === "Olive Peacock Spot") {
       title = t("peacock");
+      titleKey = "peacock";
       latin = LATIN.peacock;
       tone = "risk";
       pillKey = "highRisk";
     } else if (label === "Aculus Olearius") {
       title = t("budMite");
+      titleKey = "budMite";
       latin = LATIN.mite;
     }
     const toneGood = tone === "good";
@@ -1013,6 +1022,7 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
     return {
       mode: "leaf",
       title,
+      titleKey,
       latin,
       summary: `${strings(result.symptoms).join(" ")}${altHint}`.trim(),
       tone,
@@ -1029,27 +1039,33 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
   if (data.mode === "fruit" && typeof result.diagnosis === "string") {
     const dx = result.diagnosis;
     let title = dx;
+    let titleKey: Presented["titleKey"];
     let latin: string | undefined;
     let tone: PillTone = "warn";
     let pillKey: PillKey = "watch";
     if (dx === "healthy") {
       title = t("healthyFruit");
+      titleKey = "healthyFruit";
       tone = "good";
       pillKey = "healthy";
     } else if (dx === "olive fly sting") {
       title = t("oliveFly");
+      titleKey = "oliveFly";
       latin = LATIN.fly;
       tone = "risk";
       pillKey = "highRisk";
     } else if (dx === "other damage") {
       title = t("otherDamage");
+      titleKey = "otherDamage";
     } else if (dx === "unclear") {
       title = t("notClear");
+      titleKey = "notClear";
     }
     const toneGood = tone === "good";
     return {
       mode: "fruit",
       title,
+      titleKey,
       latin,
       summary: strings(result.symptoms).join(" "),
       tone,
@@ -1069,6 +1085,7 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
     return {
       mode: "trap",
       title: t("trapTitle", { n }),
+      titleKey: "trapTitle",
       summary: typeof result.notes === "string" ? result.notes : "",
       tone,
       pillKey,

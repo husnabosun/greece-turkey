@@ -9,3 +9,4 @@ export {
   predictLeafModel,
 } from "./leaf-space";
 export { gateOliveLeaf } from "./leaf-gate";
+export { inferScanTitleKey, localizedScanTitle } from "./scan-title";
