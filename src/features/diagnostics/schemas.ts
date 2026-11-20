@@ -105,6 +105,14 @@ export const labelResult = z.object({
   confidence,
 });
 
+/** Quick gate: is this an olive leaf photo? */
+export const leafGateResult = z.object({
+  isOliveLeaf: z.boolean(),
+  confidence,
+  reason: z.string().max(160).optional(),
+});
+export type LeafGateResult = z.infer<typeof leafGateResult>;
+
 export const FRUIT_DIAGNOSES = ["olive fly sting", "other damage", "healthy", "unclear"] as const;
 export const LEAF_LABELS = ["Healthy", "Olive Peacock Spot", "Aculus Olearius"] as const;
 

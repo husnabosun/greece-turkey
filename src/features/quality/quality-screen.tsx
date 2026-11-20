@@ -227,15 +227,28 @@ export function QualityScreen() {
                     { text: t("planDefault2"), points: 4 },
                     { text: t("planDefault3"), points: 3 },
                   ]
-              ).map((item, i) => (
+              ).map((item, i) => {
+                const planKeys = new Set([
+                  "planBanned",
+                  "planRecords",
+                  "planRisk",
+                  "planTrees",
+                  "planKeep",
+                  "planDefault1",
+                  "planDefault2",
+                  "planDefault3",
+                ]);
+                const label = planKeys.has(item.text) ? t(item.text as "planBanned") : item.text;
+                return (
                 <li key={`${item.text}-${i}`} className="flex items-start gap-2 text-ap-body text-ink">
                   <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border border-line bg-card text-[11px] font-bold">
                     {i + 1}
                   </span>
-                  <span className="flex-1">{item.text}</span>
+                  <span className="flex-1">{label}</span>
                   <span className="font-extrabold text-good">+{item.points}</span>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </AIBox>
         </>

@@ -137,7 +137,7 @@ export function DashboardScreen() {
       if (!user) return;
       const { data: profile } = await supabase
         .from("profiles")
-        .select("display_name, place")
+        .select("display_name, place, country")
         .eq("id", user.id)
         .maybeSingle();
       const meta = user.user_metadata as { display_name?: string } | undefined;
@@ -148,8 +148,23 @@ export function DashboardScreen() {
         "";
       setDisplayName(name);
       setProfilePlace((typeof profile?.place === "string" ? profile.place : "").trim());
+
+      let onboardingDone = false;
+      try {
+        const raw = localStorage.getItem("ap_notify_prefs");
+        if (raw) {
+          const parsed = JSON.parse(raw) as { onboardingDone?: boolean };
+          onboardingDone = Boolean(parsed.onboardingDone);
+        }
+      } catch {
+        /* ignore */
+      }
+      const hasCountry = profile?.country === "GR" || profile?.country === "TR";
+      if (!hasCountry && !onboardingDone) {
+        router.replace("/farmer/welcome");
+      }
     })();
-  }, []);
+  }, [router]);
 
   /** Greeting location uses the first field with coords (not chip selection). */
   const greetingField = useMemo(
@@ -403,7 +418,38 @@ export function DashboardScreen() {
   }));
 
   const location =
-    fieldPlace || profilePlace || (fields.length === 0 ? t("noPlace") : "");
+    profilePlace || fieldPlace || (fields.length === 0 ? t("noPlace") : "");
+
+  const priorityAction =
+    offerCount > 0
+      ? {
+          href: "/farmer/market?tab=offers" as const,
+          title: t("priorityOffer", { n: offerCount }),
+          cta: t("priorityOfferCta"),
+          tone: "good" as const,
+        }
+      : elevated && elevated.level === "High"
+        ? {
+            href: (SCAN_MODE[elevated.threat]
+              ? scanCameraHref({
+                  fieldId: primary?.id,
+                  mode: SCAN_MODE[elevated.threat],
+                })
+              : "/farmer/alerts") as string,
+            title: t("priorityRisk", {
+              threat: threatLabel(elevated.threat, tThreats),
+            }),
+            cta: t("priorityRiskCta"),
+            tone: "risk" as const,
+          }
+        : recheckCount > 0
+          ? {
+              href: "/farmer/scan" as const,
+              title: t("priorityRecheck", { n: recheckCount }),
+              cta: t("priorityRecheckCta"),
+              tone: "warn" as const,
+            }
+          : null;
 
   return (
     <div className="w-full flex-1">
@@ -430,12 +476,14 @@ export function DashboardScreen() {
             <Settings className="size-[18px]" aria-hidden />
           </button>
           <Link
-            href="/farmer/tasks"
+            href="/farmer/notifications"
             className="relative flex size-10 items-center justify-center rounded-full border border-line bg-card"
-            aria-label={t("tasks")}
+            aria-label={t("alerts")}
           >
             <Bell className="size-[18px] text-good" aria-hidden />
-            <i className="absolute top-2.5 right-2.5 size-2 rounded-full bg-[#E5473A]" />
+            {offerCount > 0 ? (
+              <i className="absolute top-2.5 right-2.5 size-2 rounded-full bg-[#E5473A]" />
+            ) : null}
           </Link>
           {menu ? (
             <div className="absolute top-12 right-0 z-20 w-[230px] rounded-2xl border border-line bg-card p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
@@ -446,6 +494,14 @@ export function DashboardScreen() {
               >
                 <Plus className="size-[18px]" aria-hidden />
                 {t("addField")}
+              </Link>
+              <Link
+                href="/farmer/welcome"
+                onClick={() => setMenu(false)}
+                className="flex h-11 items-center gap-2.5 rounded-xl px-2.5 text-ap-body font-semibold text-ink"
+              >
+                <MapPin className="size-[18px]" aria-hidden />
+                {t("profileSettings")}
               </Link>
               <div className="px-2.5 pt-1 pb-1.5">
                 <p className="mb-1.5 flex items-center gap-2 text-ap-body font-semibold text-ink">
@@ -478,6 +534,30 @@ export function DashboardScreen() {
           ) : null}
         </div>
       </div>
+
+      {priorityAction ? (
+        <Link
+          href={priorityAction.href}
+          className={cn(
+            "mt-4 flex min-h-14 items-center gap-3 rounded-[18px] px-4 py-3",
+            priorityAction.tone === "good"
+              ? "bg-good-soft"
+              : priorityAction.tone === "risk"
+                ? "bg-risk-soft"
+                : "bg-warn-soft",
+          )}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-ap-small font-bold tracking-[0.4px] text-muted-foreground uppercase">
+              {t("doToday")}
+            </p>
+            <p className="text-ap-body font-extrabold text-ink">{priorityAction.title}</p>
+          </div>
+          <span className="shrink-0 rounded-full bg-ink px-3 py-2 text-ap-pill font-bold text-white">
+            {priorityAction.cta}
+          </span>
+        </Link>
+      ) : null}
 
       {fieldsLoading ? (
         <div className="mt-4">
@@ -661,7 +741,7 @@ export function DashboardScreen() {
                           <p className="text-ap-small text-muted-foreground">
                             {f.tree_count != null ? `${f.tree_count}` : "—"}
                             {f.area_ha != null
-                              ? ` · ${tFields("haCount", { n: formatStremmata(Number(f.area_ha)) })}`
+                              ? ` · ${tFields("haCount", { n: formatStremmata(Number(f.area_ha), 1, locale) })}`
                               : ""}
                           </p>
                         </div>

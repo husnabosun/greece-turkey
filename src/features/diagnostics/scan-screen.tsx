@@ -100,16 +100,26 @@ export function ScanScreen() {
     if (filter !== "all" && !viewFields.some((f) => f.id === filter)) setFilter("all");
   }, [filter, viewFields]);
 
-  /** Deep-link from a task: open camera with that field / mode / taskId. */
+  const syncingUrl = useRef(false);
+
+  /** Deep-link from a task / shareable scan URLs (?view=&id=). */
   useEffect(() => {
     if (bootstrappedParams.current) return;
+    if (fieldsLoading) return;
+
     const wantsCamera = searchParams.get("camera") === "1";
+    const qView = searchParams.get("view");
+    const qId = searchParams.get("id");
     const qField = searchParams.get("fieldId");
     const qMode = searchParams.get("mode");
     const qTask = searchParams.get("taskId");
     const qTree = searchParams.get("treeId");
-    if (!wantsCamera && !qField && !qMode && !qTask && !qTree) return;
-    if (fieldsLoading) return;
+
+    const hasDeepLink = wantsCamera || qView || qId || qField || qMode || qTask || qTree;
+    if (!hasDeepLink) {
+      bootstrappedParams.current = true;
+      return;
+    }
 
     bootstrappedParams.current = true;
     if (qField && viewFields.some((f) => f.id === qField)) {
@@ -119,14 +129,42 @@ export function ScanScreen() {
     if (qMode === "leaf" || qMode === "fruit" || qMode === "trap") setMode(qMode);
     if (qTask) setTaskId(qTask);
     if (qTree) setTreeId(qTree);
-    if (wantsCamera) {
+
+    if (qView === "result" && qId) {
+      setActiveId(qId);
+      setView("result");
+      return;
+    }
+    if (wantsCamera || qView === "camera") {
       setPhotos([]);
       setAnalysing(false);
       setPicking(false);
       setView("camera");
+      return;
     }
-    router.replace(pathname);
-  }, [searchParams, fieldsLoading, viewFields, router, pathname]);
+    if (qView === "list") setView("list");
+  }, [searchParams, fieldsLoading, viewFields]);
+
+  /** Keep URL in sync so refresh / back / share work (Σ5). */
+  useEffect(() => {
+    if (!bootstrappedParams.current) return;
+    if (syncingUrl.current) return;
+    const params = new URLSearchParams();
+    if (view === "camera") {
+      params.set("view", "camera");
+    } else if (view === "result" && activeId) {
+      params.set("view", "result");
+      params.set("id", activeId);
+    }
+    const next = params.toString() ? `${pathname}?${params}` : pathname;
+    const current = searchParams.toString() ? `${pathname}?${searchParams}` : pathname;
+    if (next === current) return;
+    syncingUrl.current = true;
+    router.replace(next);
+    queueMicrotask(() => {
+      syncingUrl.current = false;
+    });
+  }, [view, activeId, pathname, router, searchParams]);
 
   const activeField = viewFields.find((f) => f.id === fieldId) ?? null;
   const active =
@@ -240,6 +278,11 @@ export function ScanScreen() {
         throw new Error(message);
       }
       const payload = json.data;
+      if (isRecord(payload) && payload.rejected === "not_leaf") {
+        toast.error(t("notLeaf"));
+        return;
+      }
+
       const presented = buildPresented(payload, t);
       if (!presented) throw new Error(t("failed"));
 
@@ -760,9 +803,31 @@ function ResultView({
             {presented.source ? <AiTag source={presented.source} /> : null}
             {presented.confidence != null ? (
               <span className="text-ap-small font-bold text-ink">
-                {t("confidence", { n: Math.round(presented.confidence * 100) })}
+                {t(
+                  presented.confidence >= 0.85
+                    ? "confidenceSure"
+                    : presented.confidence >= 0.7
+                      ? "confidenceLikely"
+                      : "confidenceUnsure",
+                  { n: Math.round(presented.confidence * 100) },
+                )}
               </span>
             ) : null}
+          </div>
+        ) : null}
+        {presented.confidence != null ? (
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-soft">
+            <div
+              className={cn(
+                "h-full rounded-full",
+                presented.confidence >= 0.85
+                  ? "bg-good"
+                  : presented.confidence >= 0.7
+                    ? "bg-warn"
+                    : "bg-risk",
+              )}
+              style={{ width: `${Math.round(presented.confidence * 100)}%` }}
+            />
           </div>
         ) : null}
         {presented.source === "demo" ? (

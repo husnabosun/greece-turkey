@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
@@ -17,7 +17,6 @@ import {
 import { hasSupabaseConfig } from "@/core/config/env";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import {
-  estimateTrustScore,
   isPublishStage,
   PROOFS_BY_STAGE,
   STAGE_TITLE_KEY,
@@ -25,7 +24,9 @@ import {
   type RecordType,
   type SpraysLastSeason,
 } from "@/features/fields/field-score";
+import { isPhotoProof, uploadFieldProof } from "@/features/fields/upload-proof";
 import { resolveOliveCountry, type OliveCountry } from "@/features/fields/olive-varieties";
+import { refreshFieldQuality } from "@/features/quality/refresh-field-quality";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import type { ProofLevel } from "@/shared/types/database";
 import { useRouter } from "@/shared/i18n/navigation";
@@ -40,7 +41,7 @@ const STAGES: { key: CropStage; icon: LucideIcon }[] = [
 
 type Props = { fieldId: string };
 
-/** Field certification / trust score — separate from field creation. */
+/** Field certification — real proof uploads + single quality_scores value (Χ6). */
 export function FieldScoreScreen({ fieldId }: Props) {
   const t = useTranslations("farmerFields");
   const locale = useLocale();
@@ -52,8 +53,13 @@ export function FieldScoreScreen({ fieldId }: Props) {
   const [stage, setStage] = useState<CropStage>("growing");
   const [sprays, setSprays] = useState<SpraysLastSeason>("1-2");
   const [records, setRecords] = useState<RecordType>("brecete");
-  const [proofs, setProofs] = useState<string[]>(["field-photo"]);
+  const [proofs, setProofs] = useState<string[]>([]);
+  const [proofFiles, setProofFiles] = useState<Record<string, string>>({});
+  const [proofPreviews, setProofPreviews] = useState<Record<string, string>>({});
+  const [qualityScore, setQualityScore] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const country = useMemo(
     () =>
@@ -91,24 +97,82 @@ export function FieldScoreScreen({ fieldId }: Props) {
         sprays_last_season?: SpraysLastSeason;
         records?: RecordType;
         proofs?: string[];
+        proof_files?: Record<string, string>;
       };
       if (parsed.crop_stage) setStage(parsed.crop_stage);
       if (parsed.sprays_last_season) setSprays(parsed.sprays_last_season);
       if (parsed.records) setRecords(parsed.records);
       if (parsed.proofs?.length) setProofs(parsed.proofs);
+      if (parsed.proof_files) setProofFiles(parsed.proof_files);
     } catch {
       /* ignore legacy notes */
     }
   }, [field?.id, field?.notes]);
 
+  useEffect(() => {
+    const supabase = tryCreateBrowserClient();
+    if (!supabase || !fieldId) return;
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase
+        .from("quality_scores")
+        .select("score")
+        .eq("field_id", fieldId)
+        .order("computed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!cancelled && data?.score != null) setQualityScore(Number(data.score));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fieldId]);
+
   const proofsForStage = PROOFS_BY_STAGE[stage];
-  const added = proofs.filter((id) => proofsForStage.some((p) => p.id === id));
-  const score = estimateTrustScore(stage, sprays, records, proofs);
+  const added = proofs.filter((id) => {
+    if (!proofsForStage.some((p) => p.id === id)) return false;
+    if (isPhotoProof(id)) return Boolean(proofFiles[id]);
+    return true;
+  });
   const level: ProofLevel = added.length >= 2 ? "evidence_based" : "self_reported";
   const publish = isPublishStage(stage);
+  const displayScore = qualityScore;
 
-  function toggleProof(id: string) {
-    setProofs((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
+  function toggleNonPhoto(id: string) {
+    if (isPhotoProof(id)) return;
+    setProofs((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  async function onProofFile(id: string, file: File | null) {
+    if (!file) return;
+    setUploadingId(id);
+    try {
+      const result = await uploadFieldProof(file, id);
+      if (!result.ok) {
+        toast.error(t(result.error === "needLogin" || result.error === "needSupabase" ? result.error : "uploadFailed"));
+        return;
+      }
+      setProofFiles((prev) => ({ ...prev, [id]: result.path }));
+      setProofPreviews((prev) => ({ ...prev, [id]: result.preview }));
+      setProofs((prev) => (prev.includes(id) ? prev : [...prev, id]));
+      toast.success(t("proofUploaded"));
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
+  function clearProof(id: string) {
+    setProofs((prev) => prev.filter((x) => x !== id));
+    setProofFiles((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setProofPreviews((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }
 
   async function submit() {
@@ -141,13 +205,16 @@ export function FieldScoreScreen({ fieldId }: Props) {
           baseNotes = {};
         }
       }
+      const filesForStage = Object.fromEntries(
+        Object.entries(proofFiles).filter(([id]) => proofsForStage.some((p) => p.id === id)),
+      );
       const notes = JSON.stringify({
         ...baseNotes,
         crop_stage: stage,
         sprays_last_season: sprays,
         records,
         proofs: added,
-        starting_score: score,
+        proof_files: filesForStage,
         scored_at: new Date().toISOString(),
       });
 
@@ -159,6 +226,16 @@ export function FieldScoreScreen({ fieldId }: Props) {
       if (error) {
         toast.error(error.message);
         return;
+      }
+
+      const refreshed = await refreshFieldQuality({
+        fieldId: field.id,
+        proofLevel: level,
+        peakRiskScore: 40,
+        stage,
+      });
+      if (refreshed.ok) {
+        setQualityScore(refreshed.data.score);
       }
 
       toast.success(t(publish ? "publishOk" : "scoreSaved"));
@@ -284,52 +361,91 @@ export function FieldScoreScreen({ fieldId }: Props) {
         <div className="grid grid-cols-2 gap-2">
           {proofsForStage.map((p) => {
             const on = added.includes(p.id);
+            const photo = isPhotoProof(p.id);
+            const preview = proofPreviews[p.id];
             return (
-              <button
-                key={p.id}
-                type="button"
-                role="checkbox"
-                aria-checked={on}
-                onClick={() => toggleProof(p.id)}
-                className={cn(
-                  "flex h-[52px] items-center gap-2 rounded-xl px-3 text-left",
-                  on ? "border border-[#A9BE9C] bg-[#F2F8EE]" : "border border-dashed border-[#C9C6BE] bg-card",
-                )}
-              >
-                {on ? (
-                  <Check className="size-[18px] shrink-0 text-good" strokeWidth={2.6} aria-hidden />
-                ) : (
-                  <FileText className="size-[18px] shrink-0 text-muted-foreground" aria-hidden />
-                )}
-                <span className="min-w-0">
-                  <span className={cn("block truncate text-ap-body font-bold", on ? "text-good" : "text-[#555]")}>
-                    {t(p.labelKey)}
+              <div key={p.id} className="relative">
+                {photo ? (
+                  <input
+                    ref={(el) => {
+                      fileRefs.current[p.id] = el;
+                    }}
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      e.target.value = "";
+                      void onProofFile(p.id, f);
+                    }}
+                  />
+                ) : null}
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={on}
+                  disabled={uploadingId === p.id}
+                  onClick={() => {
+                    if (photo) {
+                      if (on) clearProof(p.id);
+                      else fileRefs.current[p.id]?.click();
+                    } else {
+                      toggleNonPhoto(p.id);
+                    }
+                  }}
+                  className={cn(
+                    "flex h-[52px] w-full items-center gap-2 rounded-xl px-3 text-left disabled:opacity-60",
+                    on ? "border border-[#A9BE9C] bg-[#F2F8EE]" : "border border-dashed border-[#C9C6BE] bg-card",
+                  )}
+                >
+                  {on ? (
+                    <Check className="size-[18px] shrink-0 text-good" strokeWidth={2.6} aria-hidden />
+                  ) : (
+                    <FileText className="size-[18px] shrink-0 text-muted-foreground" aria-hidden />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className={cn("block truncate text-ap-body font-bold", on ? "text-good" : "text-[#555]")}>
+                      {t(p.labelKey)}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[10px] font-bold tracking-[0.5px]",
+                        on ? "text-good" : p.note === "REQUIRED" ? "text-risk" : "text-muted-foreground",
+                      )}
+                    >
+                      {uploadingId === p.id
+                        ? t("uploading")
+                        : on
+                          ? t("added")
+                          : photo
+                            ? t("tapToUpload")
+                            : p.note === "REQUIRED"
+                              ? t("required")
+                              : t("optional")}
+                    </span>
                   </span>
-                  <span
-                    className={cn(
-                      "text-[10px] font-bold tracking-[0.5px]",
-                      on ? "text-good" : p.note === "REQUIRED" ? "text-risk" : "text-muted-foreground",
-                    )}
-                  >
-                    {on ? t("added") : p.note === "REQUIRED" ? t("required") : t("optional")}
-                  </span>
-                </span>
-              </button>
+                  {preview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={preview} alt="" className="size-9 shrink-0 rounded-md object-cover" />
+                  ) : null}
+                </button>
+              </div>
             );
           })}
         </div>
 
         <div className="mt-3 rounded-[18px] bg-good-soft p-3">
           <div className="flex items-center">
-            <p className="text-[34px] leading-[38px] font-extrabold text-good">{score}</p>
+            <p className="text-[34px] leading-[38px] font-extrabold text-good">
+              {displayScore != null ? displayScore : "—"}
+            </p>
             <div className="ml-3 min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-ap-card text-ink">{t("startingScore")}</p>
-                <span className="inline-flex h-5 items-center rounded-md bg-warn-soft px-1.5 text-[10px] font-bold text-warn-text">
-                  {t("estimated")}
-                </span>
+                <p className="text-ap-card text-ink">{t("qualityScore")}</p>
               </div>
-              <p className="text-ap-small font-medium text-muted-foreground">{t("scoreFrom")}</p>
+              <p className="text-ap-small font-medium text-muted-foreground">
+                {displayScore != null ? t("scoreFromQuality") : t("scoreAfterSave")}
+              </p>
             </div>
           </div>
           <div className="mt-2 flex gap-1.5">
@@ -363,7 +479,7 @@ export function FieldScoreScreen({ fieldId }: Props) {
 
         <button
           type="button"
-          disabled={saving}
+          disabled={saving || uploadingId != null}
           onClick={() => void submit()}
           className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white disabled:opacity-50"
         >

@@ -10,6 +10,7 @@ import {
   TRAP_PROMPT,
   trapResult,
 } from "@/features/diagnostics";
+import { gateOliveLeaf } from "@/features/diagnostics/leaf-gate";
 import { predictLeafModel } from "@/features/diagnostics/leaf-space";
 import { aiRateLimiter } from "@/shared/lib/api/rate-limit";
 import { fromZodError, jsonError, jsonOk } from "@/shared/lib/api/http";
@@ -18,7 +19,7 @@ import { requireApiUser } from "@/shared/lib/api/require-user";
 export const runtime = "nodejs";
 
 /**
- * Leaf → own TFLite model on Hugging Face Space (no Gemini).
+ * Leaf → olive-leaf gate (Gemini) then TFLite model on Hugging Face Space.
  * Fruit / trap → Gemini with demo fallback (credits permitting).
  */
 export async function POST(request: Request) {
@@ -36,6 +37,16 @@ export async function POST(request: Request) {
       : [body.imageBase64];
 
     if (body.mode === "leaf") {
+      const gate = await gateOliveLeaf(images[0]);
+      if (gate.ok && !gate.pass) {
+        return jsonOk({
+          mode: "leaf" as const,
+          rejected: "not_leaf" as const,
+          gate: gate.data,
+          source: "gate" as const,
+        });
+      }
+
       const model = await predictLeafModel(images[0]);
       if (model.ok) {
         return jsonOk({

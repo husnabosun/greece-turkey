@@ -70,7 +70,7 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
       .select("place, country")
       .eq("id", user.id)
       .maybeSingle();
-    region = region || profile?.place?.trim() || "Peloponnese";
+    region = region || profile?.place?.trim() || null;
     if (!country && (profile?.country === "GR" || profile?.country === "TR")) {
       country = profile.country;
     }
@@ -96,12 +96,22 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
   const lat = field?.lat ?? null;
   const lon = field?.lon ?? null;
 
+  const { data: localeProfile } = await supabase
+    .from("profiles")
+    .select("locale")
+    .eq("id", user.id)
+    .maybeSingle();
+  const geoLocale =
+    localeProfile?.locale === "tr" || localeProfile?.locale === "en" || localeProfile?.locale === "el"
+      ? localeProfile.locale
+      : "el";
+
   // Prefer a Mapbox place label when coords exist (same source as the farmer home line).
   let town: string | null = null;
   if (lat != null && lon != null) {
     try {
       const { reverseGeocodePlace } = await import("@/features/fields/reverse-geocode");
-      const place = await reverseGeocodePlace(lat, lon, "en");
+      const place = await reverseGeocodePlace(lat, lon, geoLocale);
       if (place) {
         const [t, ...rest] = place.split(",").map((s) => s.trim());
         town = t || null;
@@ -110,6 +120,10 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
     } catch {
       /* keep region fallback */
     }
+  }
+
+  if (!region) {
+    region = country === "TR" ? "İzmir" : country === "GR" ? "Βόρειο Αιγαίο" : "—";
   }
 
   const targetedOffer = Boolean(input.processorId);

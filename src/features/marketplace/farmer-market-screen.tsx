@@ -56,6 +56,49 @@ function formatDeliveryDay(iso: string | null, locale: string) {
   return d.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
 }
 
+function groupOffersByLot(
+  offers: MarketOffer[],
+  fieldCards: Record<string, FieldMarketCard>,
+) {
+  const map = new Map<
+    string,
+    {
+      lotId: string;
+      fieldName: string | null;
+      lotVariety: string | null;
+      tons: number;
+      askPrice: number | null;
+      offers: MarketOffer[];
+      bestId: string;
+    }
+  >();
+  for (const offer of offers) {
+    const cur = map.get(offer.lotId);
+    if (!cur) {
+      const ask =
+        offer.fieldId != null ? (fieldCards[offer.fieldId]?.listedPrice ?? null) : null;
+      map.set(offer.lotId, {
+        lotId: offer.lotId,
+        fieldName: offer.fieldName,
+        lotVariety: offer.lotVariety,
+        tons: offer.tons,
+        askPrice: ask,
+        offers: [offer],
+        bestId: offer.id,
+      });
+      continue;
+    }
+    cur.offers.push(offer);
+    const best = cur.offers.reduce((a, b) => (b.pricePerKg > a.pricePerKg ? b : a));
+    cur.bestId = best.id;
+    cur.tons = Math.max(cur.tons, offer.tons);
+  }
+  return [...map.values()].map((g) => ({
+    ...g,
+    offers: [...g.offers].sort((a, b) => b.pricePerKg - a.pricePerKg),
+  }));
+}
+
 function nextStepHint(
   delivery: MarketDelivery,
   t: ReturnType<typeof useTranslations<"farmerMarket">>,
@@ -646,21 +689,57 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               <p className="mt-1 text-ap-small text-muted-foreground">{t("noIncomingOffers")}</p>
             </div>
           ) : (
-            incomingBids.map((offer) => (
-              <OfferCard
-                key={offer.id}
-                offer={offer}
-                busy={busyOfferId === offer.id}
-                locale={locale}
-                counter={t("counter")}
-                accept={t("accept")}
-                reject={t("reject")}
-                perKg={t("perKg")}
-                acceptClass="bg-good"
-                onAccept={() => setAcceptTarget(offer)}
-                onCounter={() => openCounter(offer)}
-                onReject={() => void onRejectBid(offer)}
-              />
+            groupOffersByLot(incomingBids, fieldCards).map((group) => (
+              <div key={group.lotId} className="mt-2 rounded-[18px] border border-line bg-card p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-ap-card text-ink">
+                      {group.fieldName ?? group.lotVariety ?? "—"}
+                    </p>
+                    <p className="text-ap-small text-muted-foreground">
+                      {formatTons(group.tons, locale)}
+                      {group.askPrice != null
+                        ? ` · ${t("asking", { price: formatEuroPerKg(group.askPrice, locale) })}`
+                        : null}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-soft px-2.5 py-1 text-ap-small font-bold text-ink">
+                    {t("bidsCount", { n: group.offers.length })}
+                  </span>
+                </div>
+                {group.offers.map((offer) => {
+                  const isBest = offer.id === group.bestId;
+                  const delta =
+                    group.askPrice != null ? offer.pricePerKg - group.askPrice : null;
+                  return (
+                    <OfferCard
+                      key={offer.id}
+                      offer={offer}
+                      busy={busyOfferId === offer.id}
+                      locale={locale}
+                      counter={t("counter")}
+                      accept={t("accept")}
+                      reject={t("reject")}
+                      perKg={t("perKg")}
+                      acceptClass="bg-good"
+                      bestLabel={isBest ? t("bestBid") : null}
+                      deltaLabel={
+                        delta == null
+                          ? null
+                          : delta === 0
+                            ? t("deltaZero")
+                            : t(delta > 0 ? "deltaUp" : "deltaDown", {
+                                price: formatEuroPerKg(Math.abs(delta), locale),
+                              })
+                      }
+                      nested
+                      onAccept={() => setAcceptTarget(offer)}
+                      onCounter={() => openCounter(offer)}
+                      onReject={() => void onRejectBid(offer)}
+                    />
+                  );
+                })}
+              </div>
             ))
           )}
 
@@ -1026,6 +1105,9 @@ function OfferCard({
   reject,
   perKg,
   acceptClass,
+  bestLabel,
+  deltaLabel,
+  nested,
   onAccept,
   onCounter,
   onReject,
@@ -1038,18 +1120,34 @@ function OfferCard({
   reject: string;
   perKg: string;
   acceptClass: string;
+  bestLabel?: string | null;
+  deltaLabel?: string | null;
+  nested?: boolean;
   onAccept: () => void;
   onCounter: () => void;
   onReject: () => void;
 }) {
   return (
-    <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
+    <div
+      className={cn(
+        nested
+          ? "mt-2 rounded-2xl border border-line/80 bg-soft/40 p-3"
+          : "mt-2 rounded-[18px] border border-line bg-card p-3",
+      )}
+    >
       <div className="flex items-center gap-2.5">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-soft text-ap-body font-extrabold text-ink">
           {offer.processorName.slice(0, 2).toUpperCase()}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-ap-card text-ink">{offer.processorName}</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="truncate text-ap-card text-ink">{offer.processorName}</p>
+            {bestLabel ? (
+              <span className="rounded-md bg-good-soft px-1.5 py-0.5 text-[11px] font-bold text-good">
+                {bestLabel}
+              </span>
+            ) : null}
+          </div>
           <p className="text-ap-small text-muted-foreground">
             {offer.fieldName ?? offer.lotVariety ?? "—"} · {formatTons(offer.tons, locale)}
           </p>
@@ -1059,9 +1157,10 @@ function OfferCard({
           <span className="text-ap-small font-medium text-muted-foreground"> {perKg}</span>
         </p>
       </div>
-      <p className="mt-1 text-right text-ap-small text-muted-foreground">
-        ≈ {formatEuro(offer.tons * 1000 * offer.pricePerKg, locale)}
-      </p>
+      <div className="mt-1 flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-ap-small text-muted-foreground">
+        {deltaLabel ? <span>{deltaLabel}</span> : null}
+        <span>≈ {formatEuro(offer.tons * 1000 * offer.pricePerKg, locale)}</span>
+      </div>
       {busy ? (
         <p className="mt-2 text-ap-small font-semibold text-muted-foreground">…</p>
       ) : null}

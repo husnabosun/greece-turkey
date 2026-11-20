@@ -8,3 +8,4 @@ export {
   LEAF_MODEL_VERSION,
   predictLeafModel,
 } from "./leaf-space";
+export { gateOliveLeaf } from "./leaf-gate";

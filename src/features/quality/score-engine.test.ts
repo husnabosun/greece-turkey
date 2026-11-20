@@ -31,6 +31,6 @@ describe("computeQualityScore", () => {
     const clean = computeQualityScore({ ...base, hasBannedSpray: false });
     const banned = computeQualityScore({ ...base, hasBannedSpray: true });
     expect(banned.score).toBeLessThan(clean.score);
-    expect(banned.plan.some((p) => /EU-not-approved/i.test(p.text))).toBe(true);
+    expect(banned.plan.some((p) => p.text === "planBanned")).toBe(true);
   });
 });

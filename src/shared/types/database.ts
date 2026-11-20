@@ -322,6 +322,14 @@ export type Database = {
       current_user_role: { Args: Record<string, never>; Returns: UserRole };
       is_farmer: { Args: Record<string, never>; Returns: boolean };
       is_processor: { Args: Record<string, never>; Returns: boolean };
+      accept_offer: {
+        Args: {
+          p_offer_id: string;
+          p_scheduled_for?: string | null;
+          p_delivery_in_days?: number | null;
+        };
+        Returns: string;
+      };
       create_field_from_geojson: {
         Args: {
           p_name: string;

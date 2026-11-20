@@ -34,17 +34,6 @@ import { FIELD_DOTS, colors } from "@/shared/theme/tokens";
 import { threatLabel } from "@/features/weather-risk/threat-labels";
 import { cn } from "@/shared/lib/utils";
 
-function scoreFromNotes(notes: string | null | undefined): number | null {
-  if (!notes) return null;
-  try {
-    const parsed = JSON.parse(notes) as { starting_score?: unknown };
-    const n = Number(parsed.starting_score);
-    return Number.isFinite(n) ? n : null;
-  } catch {
-    return null;
-  }
-}
-
 export function FieldsScreen() {
   const t = useTranslations("farmerFields");
   const tThreats = useTranslations("riskThreats");
@@ -63,6 +52,7 @@ export function FieldsScreen() {
   const [editVariety, setEditVariety] = useState("koroneiki");
   const [editIrrigated, setEditIrrigated] = useState(false);
   const [profileCountry, setProfileCountry] = useState<"GR" | "TR" | null>(null);
+  const [fieldScores, setFieldScores] = useState<Record<string, number>>({});
   const token = publicEnv.NEXT_PUBLIC_MAPBOX_TOKEN || undefined;
 
   useEffect(() => {
@@ -78,6 +68,32 @@ export function FieldsScreen() {
     })();
   }, []);
 
+  useEffect(() => {
+    const supabase = tryCreateBrowserClient();
+    if (!supabase || fields.length === 0) {
+      setFieldScores({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const ids = fields.map((f) => f.id);
+      const { data } = await supabase
+        .from("quality_scores")
+        .select("field_id, score, computed_at")
+        .in("field_id", ids)
+        .order("computed_at", { ascending: false });
+      if (cancelled) return;
+      const scores: Record<string, number> = {};
+      for (const row of data ?? []) {
+        if (scores[row.field_id] == null) scores[row.field_id] = Number(row.score);
+      }
+      setFieldScores(scores);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fields]);
+
   const viewFields = useMemo(
     () =>
       fields.map((f, i) => ({
@@ -89,9 +105,9 @@ export function FieldsScreen() {
         lat: f.lat,
         lon: f.lon,
         geom: f.geom,
-        score: scoreFromNotes(f.notes),
+        score: fieldScores[f.id] ?? null,
       })),
-    [fields],
+    [fields, fieldScores],
   );
 
   useEffect(() => {
@@ -259,7 +275,7 @@ export function FieldsScreen() {
             <div className="h-7 w-px bg-line" />
             <div className="flex-1 text-center">
               <p className="text-ap-body font-extrabold text-ink">
-                {displayHa != null ? t("haCount", { n: formatStremmata(displayHa) }) : "—"}
+                {displayHa != null ? t("haCount", { n: formatStremmata(displayHa, 1, locale) }) : "—"}
               </p>
               <p className="text-[10px] font-medium text-muted-foreground">
                 {showAll ? t("areaTotal") : t("fieldSize")}
