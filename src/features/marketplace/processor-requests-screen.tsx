@@ -31,7 +31,7 @@ import {
   Panel,
   Switch,
 } from "./processor-kit";
-import { MARKET_REGIONS, marketRegionOptions, regionLabel, resolveMarketRegion, type MarketRegion } from "./regions";
+import { MARKET_REGIONS, REGION_CENTERS, marketRegionOptions, regionLabel, resolveMarketRegion } from "./regions";
 import {
   DEFAULT_DELIVERY_IN_DAYS,
   addDaysIso,
@@ -157,27 +157,40 @@ function FieldLabel({ children }: { children: ReactNode }) {
   return <span className="text-[13px] leading-[18px] font-semibold text-muted-foreground">{children}</span>;
 }
 
+function toggleValue(list: string[], value: string): string[] {
+  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}
+
+function splitStoredList(raw: string | null | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+function joinStoredList(values: string[]): string {
+  return values.join(", ");
+}
+
 function FormChips({
   label,
   ariaLabel,
   options,
-  value,
+  values,
   onChange,
 }: {
   label?: string;
   ariaLabel?: string;
   options: { value: string; label: string }[];
-  value: string;
-  onChange: (v: string) => void;
+  values: string[];
+  onChange: (next: string[]) => void;
 }) {
   return (
-    <div className="flex flex-col gap-1.5" role="radiogroup" aria-label={label ?? ariaLabel}>
+    <div className="flex flex-col gap-1.5" role="group" aria-label={label ?? ariaLabel}>
       {label ? <FieldLabel>{label}</FieldLabel> : null}
       <div className="flex flex-wrap gap-2">
         {options.map((o) => {
-          const on = o.value === value;
+          const on = values.includes(o.value);
           return (
-            <Chip key={o.value} tone="black" on={on} onClick={() => onChange(o.value)}>
+            <Chip key={o.value} tone="black" on={on} onClick={() => onChange(toggleValue(values, o.value))}>
               <span className={cn("text-[12px] leading-4 font-bold", on ? "text-white" : "text-ink")}>{o.label}</span>
             </Chip>
           );
@@ -198,32 +211,15 @@ function FormSwitch({ label, checked, onChange }: { label: string; checked: bool
 
 /* ---------- region map (new-request form) ---------- */
 
-/**
- * Approximate olive-growing centre of each market region [lon, lat].
- * Local to the requests screen for now; can move to regions.ts later.
- */
-const REGION_CENTERS: Record<MarketRegion, [number, number]> = {
-  Crete: [24.9, 35.24],
-  Messinia: [21.95, 37.05],
-  Peloponnese: [22.4, 37.55],
-  Laconia: [22.65, 36.85],
-  Lesvos: [26.3, 39.2],
-  Phocis: [22.25, 38.5],
-  "West Greece": [21.75, 38.25],
-  Aydın: [27.85, 37.85],
-  Balıkesir: [26.95, 39.5],
-  İzmir: [27.14, 38.42],
-};
-
 function RegionMap({
-  value,
+  values,
   onChange,
   locale,
   label,
   needTokenLabel,
 }: {
-  value: string;
-  onChange: (region: string) => void;
+  values: string[];
+  onChange: (regions: string[]) => void;
   locale: string;
   label: string;
   needTokenLabel: string;
@@ -234,6 +230,8 @@ function RegionMap({
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const valuesRef = useRef(values);
+  valuesRef.current = values;
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -284,10 +282,12 @@ function RegionMap({
     if (!map || !ready) return;
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
-    const selected = resolveMarketRegion(value);
+    const selected = new Set(
+      values.map((v) => resolveMarketRegion(v)).filter((r): r is NonNullable<typeof r> => r != null),
+    );
 
     for (const region of MARKET_REGIONS) {
-      const active = region === selected;
+      const active = selected.has(region);
       const name = regionLabel(region, locale);
       const el = document.createElement("button");
       el.type = "button";
@@ -302,38 +302,58 @@ function RegionMap({
         "border:0",
         "background:transparent",
         "cursor:pointer",
+        "position:relative",
         active ? "z-index:2" : "z-index:1",
       ].join(";");
+      const pin = document.createElement("span");
+      pin.style.cssText = "position:relative;display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;flex-shrink:0;";
+      if (active) {
+        const shade = document.createElement("span");
+        shade.setAttribute("aria-hidden", "true");
+        shade.style.cssText = [
+          "position:absolute",
+          "inset:0",
+          "border-radius:999px",
+          `background:${colors.good}`,
+          "opacity:0.3",
+          "box-shadow:0 0 0 12px rgba(63,107,47,0.18), 0 10px 28px rgba(0,0,0,0.4)",
+          "pointer-events:none",
+        ].join(";");
+        pin.appendChild(shade);
+      }
       const dot = document.createElement("span");
       dot.style.cssText = [
+        "position:relative",
         `width:${active ? 18 : 14}px`,
         `height:${active ? 18 : 14}px`,
         "border-radius:999px",
         `background:${active ? colors.ink : colors.good}`,
         "border:3px solid #fff",
-        "box-shadow:0 2px 8px rgba(0,0,0,.45)",
-        "flex-shrink:0",
+        active
+          ? "box-shadow:0 4px 14px rgba(0,0,0,.55), 0 0 0 4px rgba(63,107,47,0.4)"
+          : "box-shadow:0 2px 8px rgba(0,0,0,.45)",
       ].join(";");
-      el.appendChild(dot);
+      pin.appendChild(dot);
+      el.appendChild(pin);
       if (active) {
         const tag = document.createElement("span");
         tag.textContent = name;
         tag.style.cssText =
-          "padding:3px 8px;border-radius:999px;background:#fff;color:" +
+          "position:relative;padding:3px 8px;border-radius:999px;background:#fff;color:" +
           colors.ink +
-          ";font:800 12px/16px Inter,system-ui,sans-serif;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.3)";
+          ";font:800 12px/16px Inter,system-ui,sans-serif;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.35)";
         el.appendChild(tag);
       }
       el.addEventListener("click", (e) => {
         e.stopPropagation();
-        onChangeRef.current(region);
+        onChangeRef.current(toggleValue(valuesRef.current, region));
       });
-      const marker = new mapboxgl.Marker({ element: el, anchor: "left", offset: [active ? -9 : -7, 0] })
+      const marker = new mapboxgl.Marker({ element: el, anchor: "center" })
         .setLngLat(REGION_CENTERS[region])
         .addTo(map);
       markersRef.current.push(marker);
     }
-  }, [ready, value, locale]);
+  }, [ready, values, locale]);
 
   if (!token || failed) {
     return (
@@ -816,14 +836,16 @@ export function ProcessorRequestsScreen() {
   const varietyOptions = useMemo(() => marketplaceVarietyOptions(locale), [locale]);
   const { requests, offers, loading, error, reload } = useProcessorMarket();
   const [open, setOpen] = useState(false);
-  const [variety, setVariety] = useState(() => defaultVarietySlug(resolveOliveCountry({ locale }).country));
+  const [varieties, setVarieties] = useState<string[]>(() => [
+    defaultVarietySlug(resolveOliveCountry({ locale }).country),
+  ]);
   const [tons, setTons] = useState("10");
   const [minScore, setMinScore] = useState(75);
   const todayIso = useMemo(() => todayIsoDate(), []);
   const [rangeStart, setRangeStart] = useState<string | null>(() => todayIso);
   const [rangeEnd, setRangeEnd] = useState<string | null>(() => addDaysIso(todayIso, 9));
   const [calendarKey, setCalendarKey] = useState(0);
-  const [province, setProvince] = useState("Peloponnese");
+  const [provinces, setProvinces] = useState<string[]>(["Peloponnese"]);
   const [noBanned, setNoBanned] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -843,13 +865,13 @@ export function ProcessorRequestsScreen() {
     );
 
   const resetForm = () => {
-    setVariety(defaultVarietySlug(resolveOliveCountry({ locale }).country));
+    setVarieties([defaultVarietySlug(resolveOliveCountry({ locale }).country)]);
     setTons("10");
     setMinScore(75);
     setRangeStart(todayIso);
     setRangeEnd(addDaysIso(todayIso, 9));
     setCalendarKey((k) => k + 1);
-    setProvince("Peloponnese");
+    setProvinces(["Peloponnese"]);
     setNoBanned(true);
   };
 
@@ -861,14 +883,24 @@ export function ProcessorRequestsScreen() {
 
   const openEdit = (req: ProcessorRequest) => {
     setEditingId(req.id);
-    setVariety(resolveOliveVariety(req.variety)?.slug ?? req.variety);
+    const parsedVarieties = splitStoredList(req.variety).map(
+      (v) => resolveOliveVariety(v)?.slug ?? v,
+    );
+    setVarieties(
+      parsedVarieties.length > 0
+        ? parsedVarieties
+        : [resolveOliveVariety(req.variety)?.slug ?? req.variety],
+    );
     setTons(String(req.tons));
     setMinScore(Math.min(SCORE_MAX, Math.max(SCORE_MIN, Math.round(req.minScore || 75))));
     const parsed = parseWindowLabel(req.windowLabel);
     setRangeStart(parsed ? isoOf(parsed.start) : todayIso);
     setRangeEnd(parsed ? isoOf(parsed.end) : addDaysIso(todayIso, 9));
     setCalendarKey((k) => k + 1);
-    setProvince(resolveMarketRegion(req.region) ?? "Peloponnese");
+    const parsedRegions = splitStoredList(req.region)
+      .map((r) => resolveMarketRegion(r))
+      .filter((r): r is NonNullable<typeof r> => r != null);
+    setProvinces(parsedRegions.length > 0 ? parsedRegions : ["Peloponnese"]);
     setNoBanned(req.noBanned);
     setOpen(true);
   };
@@ -889,13 +921,17 @@ export function ProcessorRequestsScreen() {
       toast.error(t("deliveryPickEnd"));
       return;
     }
+    if (varieties.length === 0 || provinces.length === 0) {
+      toast.error(t("saveFailed"));
+      return;
+    }
     setSaving(true);
     const windowLabel = formatWindowLabel(rangeStart, rangeEnd, locale);
     const input = {
-      variety,
+      variety: joinStoredList(varieties),
       tons: tonsN,
       minScore,
-      region: province,
+      region: joinStoredList(provinces),
       windowLabel,
       noBanned,
     };
@@ -1065,10 +1101,18 @@ export function ProcessorRequestsScreen() {
                   />
                 </div>
                 <div className="flex flex-wrap items-center gap-4 pr-10">
-                  <Initials text={varietyMonogram(req.variety, varietyLabel(req.variety))} size={44} />
+                  <Initials
+                    text={varietyMonogram(
+                      splitStoredList(req.variety)[0] ?? req.variety,
+                      varietyLabel(splitStoredList(req.variety)[0] ?? req.variety),
+                    )}
+                    size={44}
+                  />
                   <div className="min-w-[200px] flex-1">
                     <p className="text-[16px] font-extrabold text-ink">
-                      {varietyLabel(req.variety)} · {formatTons(req.tons, locale)}
+                      {(splitStoredList(req.variety).map((v) => varietyLabel(v)).join(" · ") ||
+                        varietyLabel(req.variety))}{" "}
+                      · {formatTons(req.tons, locale)}
                     </p>
                     <p className="text-[13px] font-medium text-muted-foreground">
                       {[
@@ -1140,7 +1184,13 @@ export function ProcessorRequestsScreen() {
       {(() => {
         const title = editingId ? t("editRequestTitle") : t("newRequest");
         const actionLabel = saving ? t("loading") : editingId ? t("saveChanges") : t("createRequest");
-        const canSubmit = !saving && rangeStart != null && rangeEnd != null && Number(tons.replace(",", ".")) > 0;
+        const canSubmit =
+          !saving &&
+          rangeStart != null &&
+          rangeEnd != null &&
+          Number(tons.replace(",", ".")) > 0 &&
+          varieties.length > 0 &&
+          provinces.length > 0;
         const rangeText =
           rangeStart && rangeEnd
             ? formatDateRange(isoToDate(rangeStart), isoToDate(rangeEnd), locale)
@@ -1151,6 +1201,9 @@ export function ProcessorRequestsScreen() {
         const tonsN = Number(tons.replace(",", "."));
         const presets = [7, 14, 30];
         const band = scoreBand(minScore);
+        const varietiesText = varieties.map((v) => varietyLabel(v)).join(" · ") || "—";
+        const provincesText = provinces.map((p) => regionLabel(p, locale)).join(" · ") || "—";
+        const primaryVariety = varieties[0] ?? defaultVarietySlug(resolveOliveCountry({ locale }).country);
 
         const submitButton = (full: boolean) => (
           <ApButton
@@ -1179,7 +1232,7 @@ export function ProcessorRequestsScreen() {
               <div className="flex items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[14px] font-extrabold text-ink">
-                    {varietyLabel(variety)} · {Number.isFinite(tonsN) && tonsN > 0 ? formatTons(tonsN, locale) : "—"}
+                    {varietiesText} · {Number.isFinite(tonsN) && tonsN > 0 ? formatTons(tonsN, locale) : "—"}
                   </p>
                   <p className="truncate text-[12px] font-semibold text-muted-foreground">
                     {rangeText} · {t("requestScoreMin", { score: String(minScore) })}
@@ -1194,8 +1247,8 @@ export function ProcessorRequestsScreen() {
                 <SectionCard step={1} title={t("requestFormProduct")}>
                   <FormChips
                     label={t("variety")}
-                    value={variety}
-                    onChange={setVariety}
+                    values={varieties}
+                    onChange={setVarieties}
                     options={varietyOptions.map((v) => ({ value: v.value, label: v.label }))}
                   />
                   <TonsStepper
@@ -1272,11 +1325,16 @@ export function ProcessorRequestsScreen() {
                 </SectionCard>
 
                 <SectionCard step={4} title={t("province")}>
-                  <FormChips ariaLabel={t("province")} value={province} onChange={setProvince} options={regionOptions} />
+                  <FormChips
+                    ariaLabel={t("province")}
+                    values={provinces}
+                    onChange={setProvinces}
+                    options={regionOptions}
+                  />
                   {open ? (
                     <RegionMap
-                      value={province}
-                      onChange={setProvince}
+                      values={provinces}
+                      onChange={setProvinces}
                       locale={locale}
                       label={t("regionMapLabel")}
                       needTokenLabel={t("regionMapUnavailable")}
@@ -1289,9 +1347,12 @@ export function ProcessorRequestsScreen() {
                 <div className="rounded-[18px] border border-line bg-card p-6">
                   <p className="mb-4 text-[16px] font-extrabold text-ink">{t("requestSummary")}</p>
                   <div className="mb-5 flex items-center gap-3">
-                    <Initials text={varietyMonogram(variety, varietyLabel(variety))} size={44} />
+                    <Initials
+                      text={varietyMonogram(primaryVariety, varietyLabel(primaryVariety))}
+                      size={44}
+                    />
                     <div className="min-w-0">
-                      <p className="truncate text-[16px] font-extrabold text-ink">{varietyLabel(variety)}</p>
+                      <p className="truncate text-[16px] font-extrabold text-ink">{varietiesText}</p>
                       <p className="text-[13px] font-semibold text-muted-foreground">
                         {Number.isFinite(tonsN) && tonsN > 0 ? formatTons(tonsN, locale) : "—"}
                       </p>
@@ -1303,7 +1364,7 @@ export function ProcessorRequestsScreen() {
                     value={rangeDays != null ? `${rangeText} · ${t("daysCount", { count: rangeDays })}` : rangeText}
                     muted={rangeDays == null}
                   />
-                  <SummaryRow label={t("province")} value={regionLabel(province, locale)} />
+                  <SummaryRow label={t("province")} value={provincesText} muted={provinces.length === 0} />
                   {noBanned ? <SummaryRow label={t("noBannedProducts")} value="✓" /> : null}
                   <div className="mt-5 flex flex-col gap-2">
                     {submitButton(true)}

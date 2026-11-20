@@ -722,7 +722,7 @@ export function BottomSheet({
   );
 }
 
-/** Accessible toggle — 44px touch target, green when on. */
+/** Accessible toggle — 44px hit area, compact track (28×48) with 20px thumb. */
 export function Switch({
   checked,
   onCheckedChange,
@@ -742,18 +742,22 @@ export function Switch({
       aria-checked={checked}
       aria-label={label}
       onClick={() => onCheckedChange(!checked)}
-      className={cn(
-        "relative inline-flex h-11 w-14 shrink-0 items-center rounded-full border transition-colors",
-        checked ? "border-good bg-good" : "border-line bg-soft",
-      )}
+      className="inline-flex h-11 min-w-12 shrink-0 items-center justify-center"
     >
       <span
         aria-hidden
         className={cn(
-          "pointer-events-none absolute size-9 rounded-full bg-card shadow-sm transition-transform",
-          checked ? "translate-x-[1.35rem]" : "translate-x-1",
+          "relative inline-flex h-7 w-12 items-center rounded-full border transition-colors",
+          checked ? "border-good bg-good" : "border-line bg-soft",
         )}
-      />
+      >
+        <span
+          className={cn(
+            "pointer-events-none absolute size-5 rounded-full bg-card shadow-sm transition-transform",
+            checked ? "translate-x-[1.625rem]" : "translate-x-0.5",
+          )}
+        />
+      </span>
     </button>
   );
 }
