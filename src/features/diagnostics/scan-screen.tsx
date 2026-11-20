@@ -18,7 +18,6 @@ import {
   ListFilter,
   RefreshCw,
   Scissors,
-  User,
   X,
   type LucideIcon,
 } from "lucide-react";

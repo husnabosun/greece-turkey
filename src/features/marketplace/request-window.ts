@@ -81,7 +81,7 @@ export function requestWindowEnd(label: string | null | undefined, now = new Dat
   const month = monthIndex(m[2] ?? "");
   if (!Number.isFinite(day) || month == null) return null;
 
-  let year = now.getFullYear();
+  const year = now.getFullYear();
   // If end month is far behind current month, assume next year window already passed → keep year.
   const candidate = new Date(year, month, day, 23, 59, 59);
   if (month < now.getMonth() - 1 && candidate.getTime() < now.getTime() - 40 * 86_400_000) {
