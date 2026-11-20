@@ -933,10 +933,10 @@
     "closeRequest": "Close request",
     "editRequestTitle": "Edit request",
     "saveChanges": "Save",
-    "editRequestSoon": "Saving changes is coming soon.",
     "noBannedOnly": "Only without banned products",
     "regionMapLabel": "Region map — tap a dot to choose a region",
-    "regionMapUnavailable": "Map unavailable. Choose a region above."
+    "regionMapUnavailable": "Map unavailable. Choose a region above.",
+    "requestUpdated": "Request updated"
   },
   "riskThreats": {
     "peacockSpot": "Peacock spot",

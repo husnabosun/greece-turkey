@@ -47,6 +47,7 @@ import {
   createBuyRequest,
   deactivateBuyRequest,
   rejectOffer,
+  updateBuyRequest,
   useProcessorMarket,
   type ProcessorOffer,
   type ProcessorRequest,
@@ -552,11 +553,6 @@ export function ProcessorRequestsScreen() {
 
   const onSubmit = async () => {
     if (saving) return;
-    if (editingId) {
-      // TODO: wire updateBuyRequest (use-processor-market.ts, Γιώργος) when it lands.
-      toast.info(t("editRequestSoon"));
-      return;
-    }
     const tonsN = Number(tons.replace(",", "."));
     if (!(tonsN > 0)) {
       toast.error(t("saveFailed"));
@@ -566,21 +562,23 @@ export function ProcessorRequestsScreen() {
     const windowLabel = selectedWindow
       ? formatWindowLabel(selectedWindow.start, selectedWindow.end, locale)
       : formatWindowLabel(todayIsoDate(), addDaysIso(todayIsoDate(), 9), locale);
-    const res = await createBuyRequest({
+    const input = {
       variety,
       tons: tonsN,
       minScore: Number(minScore) || 0,
       region: province,
       windowLabel,
       noBanned,
-    });
+    };
+    const wasEditing = editingId != null;
+    const res = editingId ? await updateBuyRequest(editingId, input) : await createBuyRequest(input);
     setSaving(false);
     if (!res.ok) {
       toast.error(res.error ?? t("saveFailed"));
       return;
     }
     closeForm();
-    toast.success(t("requestCreated"));
+    toast.success(wasEditing ? t("requestUpdated") : t("requestCreated"));
     await reload();
   };
 

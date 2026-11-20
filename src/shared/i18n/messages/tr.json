@@ -933,10 +933,10 @@
     "closeRequest": "Talebi kapat",
     "editRequestTitle": "Talebi düzenle",
     "saveChanges": "Kaydet",
-    "editRequestSoon": "Değişiklikleri kaydetme yakında geliyor.",
     "noBannedOnly": "Yalnızca yasaklı ürün içermeyenler",
     "regionMapLabel": "Bölge haritası — bölge seçmek için bir noktaya dokun",
-    "regionMapUnavailable": "Harita kullanılamıyor. Yukarıdan bir bölge seç."
+    "regionMapUnavailable": "Harita kullanılamıyor. Yukarıdan bir bölge seç.",
+    "requestUpdated": "Talep güncellendi"
   },
   "riskThreats": {
     "peacockSpot": "Halkalı leke",
