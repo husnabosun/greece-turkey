@@ -27,6 +27,8 @@ type Props = {
   points: LotMapPoint[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** Opens lot detail when the preview card is clicked. */
+  onOpenLot?: (id: string) => void;
   labels: {
     locate: string;
     zoomIn: string;
@@ -58,6 +60,7 @@ export function LotsMap({
   points,
   selectedId,
   onSelect,
+  onOpenLot,
   labels,
   className,
   preview: previewEnabled = true,
@@ -73,6 +76,8 @@ export function LotsMap({
   const [failed, setFailed] = useState(false);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onOpenLotRef = useRef(onOpenLot);
+  onOpenLotRef.current = onOpenLot;
 
   const showPopup = popup && previewEnabled;
   const preview =
@@ -252,7 +257,14 @@ export function LotsMap({
           </div>
           <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-line pt-2.5">
             <p className="text-[14px] font-extrabold text-ink">{preview.priceLabel}</p>
-            <span className="text-[11px] font-bold tracking-wide text-muted-foreground uppercase">{labels.openLot}</span>
+            <button
+              type="button"
+              onClick={() => onOpenLotRef.current?.(preview.id)}
+              className="pointer-events-auto inline-flex min-h-9 items-center rounded-full px-2.5 text-[11px] font-bold tracking-wide text-muted-foreground uppercase transition-colors hover:bg-ink hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+              aria-label={`${labels.openLot}: ${preview.title}`}
+            >
+              {labels.openLot}
+            </button>
           </div>
         </div>
       ) : null}

@@ -88,11 +88,12 @@ export function StatCard({
   iconTone?: keyof typeof ICON_TONES;
 }) {
   const body = (
-    <div className={cn("flex items-start gap-3", compact ? "gap-2.5" : "gap-3.5")}>
+    <div className={cn("relative flex items-start", compact ? "gap-2.5" : "gap-3.5")}>
       <span
         className={cn(
-          "relative flex shrink-0 items-center justify-center rounded-full",
-          compact ? "size-10" : "size-12",
+          "absolute top-3 right-3 flex size-8 shrink-0 items-center justify-center rounded-full",
+          "min-[900px]:static",
+          compact ? "min-[900px]:size-10" : "min-[900px]:size-12",
           ICON_TONES[iconTone],
         )}
       >
@@ -101,9 +102,14 @@ export function StatCard({
           <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-good ring-2 ring-card" aria-hidden />
         ) : null}
       </span>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 pr-10 min-[900px]:pr-0">
         <p className="text-[12px] leading-4 font-semibold text-muted-foreground">{label}</p>
-        <p className={cn("font-extrabold tracking-tight text-ink", compact ? "mt-0.5 text-[24px] leading-7" : "mt-1 text-[34px] leading-10")}>
+        <p
+          className={cn(
+            "font-extrabold tracking-tight text-ink",
+            compact ? "mt-0.5 text-[24px] leading-7" : "mt-1 text-[28px] leading-8 min-[900px]:text-[34px] min-[900px]:leading-10",
+          )}
+        >
           {value}
         </p>
         {hint ? <p className="mt-0.5 text-[11px] leading-[14px] font-medium text-muted-foreground">{hint}</p> : null}
@@ -112,8 +118,8 @@ export function StatCard({
   );
 
   const className = cn(
-    "min-w-[160px] flex-1 rounded-[18px] border bg-card transition-colors",
-    compact ? "p-3.5" : "p-5",
+    "flex min-h-[112px] min-w-[140px] flex-1 flex-col rounded-[18px] border bg-card transition-colors",
+    compact ? "p-3.5" : "relative p-4 min-[900px]:p-5",
     attention ? "border-good shadow-[0_0_0_1px_rgba(63,107,47,0.12)]" : "border-line",
     href && "hover:border-ink/30 hover:bg-soft/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30",
   );
@@ -427,6 +433,7 @@ export type WeekDayCell = {
   tons: number;
   chips: { id: string; label: string }[];
   overloaded: boolean;
+  deliveryCount?: number;
 };
 
 export function WeekStrip({
@@ -436,6 +443,9 @@ export function WeekStrip({
   selectedIso,
   onSelect,
   emptyHint,
+  legendScheduled,
+  legendOverloaded,
+  deliveriesLabel,
 }: {
   title: string;
   subtitle: string;
@@ -443,9 +453,12 @@ export function WeekStrip({
   selectedIso: string | null;
   onSelect: (iso: string) => void;
   emptyHint: string;
+  legendScheduled?: string;
+  legendOverloaded?: string;
+  deliveriesLabel?: (count: number) => string;
 }) {
   const maxTons = Math.max(1, ...days.map((d) => d.tons));
-  const hasAny = days.some((d) => d.tons > 0 || d.chips.length > 0);
+  const hasAny = days.some((d) => d.tons > 0 || (d.deliveryCount ?? d.chips.length) > 0);
 
   return (
     <ApCard className="overflow-hidden">
@@ -456,9 +469,50 @@ export function WeekStrip({
         </div>
         {!hasAny ? <p className="text-[12px] font-semibold text-muted-foreground">{emptyHint}</p> : null}
       </div>
-      <div className="flex gap-2 overflow-x-auto px-4 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[900px]:grid min-[900px]:grid-cols-7 min-[900px]:overflow-visible">
+
+      {/* Mobile: compact 7-col grid, no scroll */}
+      <div className="grid grid-cols-7 gap-1 px-3 pb-3 sm:hidden">
         {days.map((day) => {
           const selected = selectedIso === day.iso;
+          const count = day.deliveryCount ?? day.chips.length;
+          return (
+            <button
+              key={day.iso}
+              type="button"
+              onClick={() => onSelect(day.iso)}
+              className={cn(
+                "flex flex-col items-center rounded-xl border px-0.5 py-1.5",
+                day.isToday && !selected && "border-good bg-good-soft/40",
+                selected && "border-ink bg-ink text-white",
+                !day.isToday && !selected && "border-line bg-card",
+              )}
+            >
+              <span
+                className={cn(
+                  "text-[10px] font-bold",
+                  selected ? "text-white/75" : day.isToday ? "text-good" : "text-muted-foreground",
+                )}
+              >
+                {day.weekday.slice(0, 1)}
+              </span>
+              <span className={cn("text-[13px] font-extrabold", selected ? "text-white" : "text-ink")}>{day.dayNum}</span>
+              {day.tons > 0 ? (
+                <span className={cn("mt-0.5 text-[9px] font-bold", selected ? "text-white" : day.overloaded ? "text-warn-text" : "text-good")}>
+                  {day.tons % 1 ? day.tons.toFixed(1) : day.tons}
+                </span>
+              ) : (
+                <span className={cn("mt-1 size-1.5 rounded-full", selected ? "bg-white/40" : count > 0 ? "bg-good" : "bg-line")} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tablet/desktop: full day cards */}
+      <div className="hidden gap-2 px-4 pb-3 sm:grid sm:grid-cols-7">
+        {days.map((day) => {
+          const selected = selectedIso === day.iso;
+          const count = day.deliveryCount ?? day.chips.length;
           const barH = day.tons > 0 ? Math.max(8, Math.round((day.tons / maxTons) * 40)) : 0;
           return (
             <button
@@ -466,8 +520,8 @@ export function WeekStrip({
               type="button"
               onClick={() => onSelect(day.iso)}
               className={cn(
-                "flex w-[104px] shrink-0 flex-col rounded-[16px] border px-2.5 py-2.5 text-left transition-colors min-[900px]:w-auto",
-                day.isToday && !selected && "border-good bg-good-soft/40",
+                "flex w-full flex-col rounded-[16px] border px-2 py-2.5 text-left transition-colors",
+                day.isToday && !selected && "border-good bg-good-soft/30",
                 selected && "border-ink bg-ink text-white",
                 !day.isToday && !selected && "border-line bg-card hover:bg-soft",
               )}
@@ -479,48 +533,49 @@ export function WeekStrip({
                     selected ? "text-white/75" : day.isToday ? "text-good" : "text-muted-foreground",
                   )}
                 >
-                  {day.isToday ? day.weekday : day.weekday}
+                  {day.weekday}
                 </span>
                 <span className={cn("text-[15px] font-extrabold", selected ? "text-white" : "text-ink")}>{day.dayNum}</span>
               </div>
-              <div className={cn("mt-2 flex h-10 items-end rounded-md px-1 pb-1", selected ? "bg-white/15" : "bg-soft")}>
-                {barH > 0 ? (
+              {barH > 0 ? (
+                <div className={cn("mt-2 flex h-10 items-end rounded-md px-1 pb-1", selected ? "bg-white/15" : "bg-soft")}>
                   <div
-                    className={cn(
-                      "w-full rounded-sm",
-                      selected ? "bg-white" : day.overloaded ? "bg-warn-text" : "bg-ink/80",
-                    )}
+                    className={cn("w-full rounded-sm", selected ? "bg-white" : day.overloaded ? "bg-warn" : "bg-good")}
                     style={{ height: barH }}
                   />
-                ) : (
-                  <div className={cn("h-1 w-full rounded-sm", selected ? "bg-white/25" : "bg-line")} />
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="mt-2 flex h-10 items-center justify-center">
+                  <span className={cn("text-[16px] font-extrabold", selected ? "text-white/50" : "text-muted-foreground")}>–</span>
+                </div>
+              )}
               <p className={cn("mt-1.5 text-[12px] font-extrabold", selected ? "text-white" : "text-ink")}>
                 {day.tons > 0 ? `${day.tons % 1 ? day.tons.toFixed(1) : day.tons} t` : "–"}
               </p>
-              <div className="mt-1 flex min-h-[22px] flex-wrap gap-1">
-                {day.chips.slice(0, 2).map((c) => (
-                  <span
-                    key={c.id}
-                    className={cn(
-                      "truncate rounded-full px-1.5 py-0.5 text-[9px] font-bold",
-                      selected ? "bg-white/20 text-white" : "bg-soft text-ink",
-                    )}
-                  >
-                    {c.label}
-                  </span>
-                ))}
-                {day.chips.length > 2 ? (
-                  <span className={cn("text-[9px] font-bold", selected ? "text-white/70" : "text-muted-foreground")}>
-                    +{day.chips.length - 2}
-                  </span>
-                ) : null}
-              </div>
+              {count > 0 ? (
+                <p className={cn("mt-0.5 text-[10px] font-semibold", selected ? "text-white/70" : "text-muted-foreground")}>
+                  {deliveriesLabel ? deliveriesLabel(count) : `${count}`}
+                </p>
+              ) : (
+                <p className="mt-0.5 text-[10px] font-semibold opacity-0">–</p>
+              )}
             </button>
           );
         })}
       </div>
+
+      {legendScheduled && legendOverloaded ? (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-line px-4 py-2.5 text-[12px] font-medium text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2.5 rounded-[2px] bg-good" aria-hidden />
+            {legendScheduled}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2.5 rounded-[2px] bg-warn" aria-hidden />
+            {legendOverloaded}
+          </span>
+        </div>
+      ) : null}
     </ApCard>
   );
 }
@@ -764,11 +819,11 @@ const BADGE_TONE: Record<LotBadgeId, { bg: string; text: string }> = {
 
 export function LotBadges({ badges, max }: { badges: LotBadge[]; max?: number }) {
   const wide = useWide();
-  const limit = max === undefined ? badges.length : wide ? max : Math.min(max, 1);
+  const limit = max === undefined ? badges.length : wide ? max : Math.min(max, 2);
   const { shown, more } = rowBadges(badges, limit);
   if (shown.length === 0) return null;
   return (
-    <div className={cn("flex gap-1", max === undefined ? "flex-wrap" : "overflow-hidden")}>
+    <div className="flex flex-wrap gap-1">
       {shown.map((b) => {
         const Icon = BADGE_ICON[b.id];
         const tone = BADGE_TONE[b.id];
@@ -830,26 +885,29 @@ export function LotRow({
           clickable && "pointer-events-none",
         )}
       >
-        <div className="flex w-full min-w-0 items-center gap-3 min-[900px]:w-auto min-[900px]:flex-1">
+        <div className="flex w-full min-w-0 items-start gap-3 min-[900px]:w-auto min-[900px]:flex-1 min-[900px]:items-center">
           {lead}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[16px] leading-5 font-extrabold text-ink">{title}</p>
+            <div className="flex items-start justify-between gap-3">
+              <p className="min-w-0 truncate text-[16px] leading-5 font-extrabold text-ink">{title}</p>
+              <div className="shrink-0 text-right min-[900px]:hidden">{value}</div>
+            </div>
             <p className="truncate text-[13px] leading-[18px] font-medium text-muted-foreground">{sub}</p>
-            <div className="mt-0.5 h-6">{badges}</div>
+            <div className="mt-0.5">{badges}</div>
           </div>
         </div>
-        <div className="flex w-[84px] shrink-0 justify-center">{score}</div>
-        <div className="flex w-[124px] shrink-0 flex-col items-end">{value}</div>
+        <div className="hidden w-[84px] shrink-0 justify-center min-[900px]:flex">{score}</div>
+        <div className="hidden w-[160px] shrink-0 flex-col items-end min-[900px]:flex">{value}</div>
         <div
           className={cn(
-            "relative z-10 justify-end gap-2 min-[900px]:flex min-[900px]:w-[220px]",
+            "relative z-10 justify-end gap-2 min-[900px]:w-[220px]",
             actions ? "pointer-events-auto flex" : "pointer-events-none hidden",
           )}
         >
           {actions}
         </div>
         {clickable ? (
-          <ChevronRight className="hidden size-4 shrink-0 text-muted-foreground min-[900px]:block" aria-hidden />
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         ) : null}
       </div>
     </div>

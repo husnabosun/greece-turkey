@@ -10,7 +10,7 @@ import { reverseGeocodePlace } from "@/features/fields/reverse-geocode";
 import { ApButton } from "@/shared/components/brand/ap-button";
 import { ApCard } from "@/shared/components/brand/ap-card";
 import { Chip } from "@/shared/components/brand/chip";
-import { Link } from "@/shared/i18n/navigation";
+import { Link, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 import { trustBadges } from "@/features/marketplace/badges";
 import { euroPrice, formatTons } from "@/features/marketplace/pricing";
@@ -119,6 +119,7 @@ function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"p
 export function ProcessorLotsScreen() {
   const t = useTranslations("processor");
   const locale = useLocale();
+  const router = useRouter();
   const varietyLabel = useVarietyLabel();
   const varietyOptions = useMemo(() => marketplaceVarietyOptions(locale), [locale]);
   const { lots, loading, error, reload } = useProcessorMarket();
@@ -476,6 +477,7 @@ export function ProcessorLotsScreen() {
         points={mapPoints}
         selectedId={selectedMapId}
         onSelect={setSelectedMapId}
+        onOpenLot={(id) => router.push(`/processor/lots/${id}`)}
         labels={{
           locate: t("mapLocate"),
           zoomIn: t("mapZoomIn"),
