@@ -1,139 +1,161 @@
 "use client";
 
-import {
-  ClipboardList,
-  Inbox,
-  MapPin,
-  Search,
-} from "lucide-react";
-import { useTranslations } from "next-intl";
-import { ApButton } from "@/shared/components/brand/ap-button";
+import { useState } from "react";
+import { ChevronRight, Inbox, Send, History } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { ApCard } from "@/shared/components/brand/ap-card";
 import { Pill } from "@/shared/components/brand/pill";
 import { Link } from "@/shared/i18n/navigation";
-import { euroPrice } from "@/features/marketplace/pricing";
-import {
-  Amount,
-  EmptyBlock,
-  LotRow,
-  PageHeader,
-  Panel,
-  ScoreBox,
-} from "./processor-kit";
-import {
-  lotPlaceLabel,
-  useProcessorMarket,
-} from "./use-processor-market";
+import { euroPrice, formatTons } from "@/features/marketplace/pricing";
+import { regionLabel } from "@/features/marketplace/regions";
+import { EmptyBlock, PageHeader, Panel, Segmented } from "./processor-kit";
+import { useProcessorMarket, type ProcessorOffer } from "./use-processor-market";
 import { useVarietyLabel } from "./processor-shared";
 
-/** Dedicated inbox: Flow B farmer offers in, Flow A mill bids out. */
+function formatShortDate(iso: string | null | undefined, locale: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso.includes("T") ? iso : `${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  const tag = locale.startsWith("el") ? "el-GR" : locale.startsWith("tr") ? "tr-TR" : "en-GB";
+  return d.toLocaleDateString(tag, { day: "numeric", month: "short" });
+}
+
+function historyPill(
+  status: string,
+  t: (key: string) => string,
+): { label: string; tone: "good" | "risk" | "warn" | "neutral" } {
+  if (status === "accepted") return { label: t("acceptedStatus"), tone: "good" };
+  if (status === "rejected") return { label: t("rejectedStatus"), tone: "risk" };
+  if (status === "withdrawn") return { label: t("withdrawnStatus"), tone: "risk" };
+  if (status === "countered") return { label: t("counteredStatus"), tone: "warn" };
+  return { label: status, tone: "neutral" };
+}
+
 export function ProcessorOffersScreen() {
   const t = useTranslations("processor");
-  const tNav = useTranslations("processorNav");
+  const locale = useLocale();
   const varietyLabel = useVarietyLabel();
   const { offers, loading, error } = useProcessorMarket();
+  const [tab, setTab] = useState<"incoming" | "outgoing" | "history">("incoming");
 
   const incoming = offers.filter(
-    (o) => o.initiatedBy === "farmer" && (o.status === "pending" || o.status === "countered"),
+    (o) => o.initiatedBy === "farmer" && o.status === "pending",
   );
   const outgoing = offers.filter(
-    (o) => o.initiatedBy === "processor" && (o.status === "pending" || o.status === "countered"),
+    (o) => o.initiatedBy === "processor" && o.status === "pending",
+  );
+  const history = offers.filter(
+    (o) =>
+      o.status === "accepted" ||
+      o.status === "rejected" ||
+      o.status === "countered" ||
+      o.status === "withdrawn",
   );
 
+  const visible: ProcessorOffer[] =
+    tab === "incoming" ? incoming : tab === "outgoing" ? outgoing : history;
+
+  const emptyConfig =
+    tab === "incoming"
+      ? {
+          icon: <Inbox className="size-5" />,
+          title: t("emptyIncomingTab"),
+          body: t("noOpenOffersHint"),
+        }
+      : tab === "outgoing"
+        ? {
+            icon: <Send className="size-5" />,
+            title: t("emptyOutgoingTab"),
+            body: t("noOutgoingOffers"),
+          }
+        : {
+            icon: <History className="size-5" />,
+            title: t("emptyHistoryTab"),
+            body: t("emptyHistoryHint"),
+          };
+
   return (
-    <div className="mx-auto w-full max-w-[1100px] space-y-6 px-4 py-6 sm:px-6">
-      <PageHeader title={t("offersTitle")} subtitle={t("offersSubtitle")} />
-      {error ? <p className="text-ap-small text-risk">{error}</p> : null}
-      {loading ? <p className="text-ap-small text-muted-foreground">{t("loading")}</p> : null}
+    <div className="mx-auto w-full max-w-[1100px] space-y-5 px-4 py-6 sm:px-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <PageHeader title={t("offersTitle")} subtitle={t("offersSubtitle")} />
+        <Segmented
+          value={tab}
+          onChange={setTab}
+          options={[
+            {
+              value: "incoming",
+              label: t("tabIncoming"),
+              badge: incoming.length || undefined,
+            },
+            {
+              value: "outgoing",
+              label: t("tabOutgoing"),
+            },
+            {
+              value: "history",
+              label: t("tabHistory"),
+            },
+          ]}
+        />
+      </div>
 
-      <Panel title={t("incomingOffers")} subtitle={t("incomingHint")}>
-        {incoming.length === 0 ? (
+      {error === "needSupabase" || error === "needLogin" ? (
+        <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">
+          {t(error)}
+        </ApCard>
+      ) : error ? (
+        <p className="text-ap-small text-risk">{error}</p>
+      ) : null}
+
+      {loading && offers.length === 0 ? (
+        <p className="text-ap-small text-muted-foreground">{t("loading")}</p>
+      ) : null}
+
+      <Panel>
+        {visible.length === 0 ? (
           <EmptyBlock
-            icon={<Inbox className="size-5" />}
-            title={t("noOpenOffersTitle")}
-            body={t("noOpenOffersHint")}
-            action={
-              <Link href="/processor/requests">
-                <ApButton label={tNav("requests")} variant="dark" icon={<ClipboardList className="size-4" />} />
-              </Link>
-            }
+            icon={emptyConfig.icon}
+            title={emptyConfig.title}
+            body={emptyConfig.body}
           />
         ) : (
-          incoming.map((offer, i) => {
+          visible.map((offer, i) => {
             const lot = offer.lot;
-            const place = lot ? lotPlaceLabel(lot, t("anonymousGrove")) : t("anonymousGrove");
-            return (
-              <LotRow
-                key={offer.id}
-                first={i === 0}
-                href={`/processor/offers/${offer.id}`}
-                lead={
-                  <span className="flex size-11 items-center justify-center rounded-xl bg-soft">
-                    <MapPin className="size-5 text-ink" />
-                  </span>
-                }
-                title={place}
-                sub={
-                  lot
-                    ? t("incomingSub", {
-                        variety: varietyLabel(lot.variety),
-                        tons: offer.tons,
-                        region: lot.region,
-                      })
-                    : `${offer.tons} t`
-                }
-                badges={<span />}
-                score={lot?.qualityScore != null ? <ScoreBox score={lot.qualityScore} /> : <span />}
-                value={
-                  <>
-                    <Amount value={euroPrice(offer.pricePerKg)} unit="/kg" />
-                    <span className="text-[11px] font-semibold text-ink">
-                      {t("asksPrice", { price: euroPrice(offer.pricePerKg) })}
-                    </span>
-                  </>
-                }
-                actions={
-                  <Link href={`/processor/offers/${offer.id}`}>
-                    <ApButton label={t("openOffer")} variant="dark" />
-                  </Link>
-                }
-              />
-            );
-          })
-        )}
-      </Panel>
+            const variety = lot ? varietyLabel(lot.variety) : t("oliveDefault");
+            const title = `${variety} · ${formatTons(offer.tons, locale)}`;
+            const region = lot?.region ? regionLabel(lot.region, locale) : null;
+            const dateStr = formatShortDate(lot?.listedAt ?? lot?.harvestStart, locale);
+            const sub = [region, dateStr].filter(Boolean).join(" · ");
+            const badge = tab === "history" ? historyPill(offer.status, t) : null;
 
-      <Panel title={t("outgoingOffers")} subtitle={t("outgoingHint")}>
-        {outgoing.length === 0 ? (
-          <EmptyBlock
-            icon={<Search className="size-5" />}
-            title={t("noOutgoingTitle")}
-            body={t("noOutgoingOffers")}
-            action={
-              <Link href="/processor/lots">
-                <ApButton label={tNav("findOlives")} variant="outline" icon={<Search className="size-4" />} />
-              </Link>
-            }
-          />
-        ) : (
-          outgoing.map((offer) => {
-            const lot = offer.lot;
-            const place = lot ? lotPlaceLabel(lot, t("anonymousGrove")) : t("anonymousGrove");
             return (
               <Link
                 key={offer.id}
                 href={`/processor/offers/${offer.id}`}
-                className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3 hover:bg-background"
+                className={`flex items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-background ${
+                  i > 0 ? "border-t border-line" : ""
+                }`}
               >
-                <div>
-                  <p className="text-[15px] font-extrabold text-ink">{place}</p>
-                  <p className="text-[12px] font-medium text-muted-foreground">
-                    {t("waitingFarmerAnswer", {
-                      price: euroPrice(offer.pricePerKg),
-                      tons: offer.tons,
-                    })}
-                  </p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-[16px] leading-5 font-extrabold text-ink">
+                      {title}
+                    </p>
+                    {badge ? <Pill tone={badge.tone}>{badge.label}</Pill> : null}
+                  </div>
+                  {sub ? (
+                    <p className="mt-0.5 truncate text-[13px] leading-[18px] font-medium text-muted-foreground">
+                      {sub}
+                    </p>
+                  ) : null}
                 </div>
-                <Pill tone="warn">{t("pendingStatus")}</Pill>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-[16px] font-extrabold text-ink">
+                    {euroPrice(offer.pricePerKg, locale)}/kg
+                  </span>
+                  <ChevronRight className="size-4 text-muted-foreground" aria-hidden />
+                </div>
               </Link>
             );
           })

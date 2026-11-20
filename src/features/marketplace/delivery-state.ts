@@ -17,9 +17,13 @@ export function nextDeliveryStatus(status: DeliveryStatus): PipelineStatus | nul
   return DELIVERY_PIPELINE[i + 1];
 }
 
+/**
+ * Index for StatusSteps `current`: completed statuses are ticks,
+ * the next action is the active circle. E.g. status `weighed` → lab is active.
+ */
 export function deliveryStepIndex(status: DeliveryStatus): number {
   if (!isPipelineStatus(status)) return -1;
-  return DELIVERY_PIPELINE.indexOf(status);
+  return DELIVERY_PIPELINE.indexOf(status) + 1;
 }
 
 /**
