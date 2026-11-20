@@ -226,13 +226,42 @@ function scoreTone(score: number) {
   return { bg: "bg-risk-soft", text: "text-risk" };
 }
 
-export function ScoreBox({ score, large = false }: { score: number; large?: boolean }) {
+export function ScoreBox({
+  score,
+  large = false,
+  hideLabel = false,
+  hero = false,
+}: {
+  score: number;
+  large?: boolean;
+  hideLabel?: boolean;
+  /** Big score for sticky summary cards. */
+  hero?: boolean;
+}) {
   const t = useTranslations("processor");
   const tone = scoreTone(score);
   return (
-    <div className={cn("flex flex-col items-center", large ? "rounded-xl px-3 py-2" : "rounded-lg px-2 py-1", tone.bg)}>
-      <span className={cn("text-[10px] leading-3 font-semibold", tone.text)}>{t("qualityScore")}</span>
-      <span className={cn("font-extrabold", large ? "text-[24px] leading-7" : "text-[16px] leading-5", tone.text)}>{score}</span>
+    <div
+      className={cn(
+        "flex flex-col items-center",
+        hero ? "rounded-2xl px-4 py-3" : large ? "rounded-xl px-3 py-2" : "rounded-lg px-2 py-1",
+        tone.bg,
+      )}
+    >
+      {!hideLabel ? (
+        <span className={cn("font-semibold", hero ? "text-[12px]" : "text-[10px] leading-3", tone.text)}>
+          {t("qualityScore")}
+        </span>
+      ) : null}
+      <span
+        className={cn(
+          "font-extrabold",
+          hero ? "text-[40px] leading-none tracking-tight" : large ? "text-[24px] leading-7" : "text-[16px] leading-5",
+          tone.text,
+        )}
+      >
+        {score}
+      </span>
     </div>
   );
 }
@@ -365,7 +394,7 @@ export function DayChipPicker({
   return (
     <div className="flex flex-col gap-1.5">
       <p className="text-[11px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{label}</p>
-      <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
         {days.map((iso, i) => {
           const on = iso === value;
           return (
@@ -374,7 +403,7 @@ export function DayChipPicker({
               type="button"
               onClick={() => onChange(iso)}
               className={cn(
-                "flex min-w-[64px] shrink-0 flex-col items-center rounded-xl border px-2 py-2",
+                "flex flex-col items-center rounded-xl border px-1.5 py-2",
                 on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink hover:bg-soft",
               )}
             >

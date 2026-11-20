@@ -37,6 +37,8 @@ type Props = {
     openLot: string;
   };
   className?: string;
+  /** Hover/select preview card. Off on detail pages (avoids duplicating facts). */
+  preview?: boolean;
 };
 
 const GREECE_CENTER: [number, number] = [22.5, 38.2];
@@ -47,7 +49,15 @@ const MAP_SHELL =
   "h-[min(58vh,560px)] min-h-[340px] " +
   "min-[900px]:h-[min(68vh,720px)] min-[900px]:min-h-[480px]";
 
-export function LotsMap({ token, points, selectedId, onSelect, labels, className }: Props) {
+export function LotsMap({
+  token,
+  points,
+  selectedId,
+  onSelect,
+  labels,
+  className,
+  preview: previewEnabled = true,
+}: Props) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -58,7 +68,8 @@ export function LotsMap({ token, points, selectedId, onSelect, labels, className
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
 
-  const preview = selectedId ? (points.find((p) => p.id === selectedId) ?? null) : null;
+  const preview =
+    previewEnabled && selectedId ? (points.find((p) => p.id === selectedId) ?? null) : null;
 
   useEffect(() => {
     if (!token || !containerRef.current || mapRef.current) return;
