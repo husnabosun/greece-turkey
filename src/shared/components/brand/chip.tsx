@@ -21,7 +21,7 @@ export function Chip({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex h-[30px] flex-row items-center gap-1.5 rounded-full border px-3 whitespace-nowrap",
+        "inline-flex min-h-11 flex-row items-center gap-1.5 rounded-full border px-3 whitespace-nowrap",
         on
           ? tone === "black"
             ? "border-ink bg-ink text-white"

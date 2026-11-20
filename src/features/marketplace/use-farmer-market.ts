@@ -52,6 +52,8 @@ export type FieldMarketCard = {
   fieldId: string;
   qualityScore: number | null;
   listedPrice: number | null;
+  listedTons: number | null;
+  listedLotId: string | null;
   offerCount: number;
   /** Best active lot status for this field: listed | reserved | sold | null */
   lotStatus: "listed" | "reserved" | "sold" | null;
@@ -132,7 +134,7 @@ export function useFarmerMarket(fieldIds: string[]) {
           .order("created_at", { ascending: false }),
         supabase
           .from("lots")
-          .select("id, field_id, price_per_kg, status")
+          .select("id, field_id, price_per_kg, tons, status")
           .eq("farmer_id", user.id)
           .in("status", ["listed", "reserved", "sold"]),
         ids.length
@@ -241,6 +243,8 @@ export function useFarmerMarket(fieldIds: string[]) {
       }
 
       const listedPriceByField = new Map<string, number>();
+      const listedTonsByField = new Map<string, number>();
+      const listedLotIdByField = new Map<string, string>();
       const lotStatusByField = new Map<string, "listed" | "reserved" | "sold">();
       const statusRank = { sold: 3, reserved: 2, listed: 1 } as const;
       for (const lot of lotsRes.data ?? []) {
@@ -250,10 +254,10 @@ export function useFarmerMarket(fieldIds: string[]) {
         if (!prev || statusRank[st] > statusRank[prev]) {
           lotStatusByField.set(lot.field_id, st);
         }
-        if (lot.status === "listed" && lot.price_per_kg != null) {
-          if (!listedPriceByField.has(lot.field_id)) {
-            listedPriceByField.set(lot.field_id, Number(lot.price_per_kg));
-          }
+        if (lot.status === "listed" && !listedLotIdByField.has(lot.field_id)) {
+          listedLotIdByField.set(lot.field_id, lot.id);
+          if (lot.price_per_kg != null) listedPriceByField.set(lot.field_id, Number(lot.price_per_kg));
+          if (lot.tons != null) listedTonsByField.set(lot.field_id, Number(lot.tons));
         }
       }
 
@@ -263,6 +267,8 @@ export function useFarmerMarket(fieldIds: string[]) {
           fieldId: id,
           qualityScore: latestQuality.get(id) ?? null,
           listedPrice: listedPriceByField.get(id) ?? null,
+          listedTons: listedTonsByField.get(id) ?? null,
+          listedLotId: listedLotIdByField.get(id) ?? null,
           offerCount: offerCountByField.get(id) ?? 0,
           lotStatus: lotStatusByField.get(id) ?? null,
         };
@@ -338,6 +344,44 @@ export async function rejectIncomingBid(offerId: string): Promise<{ ok: boolean;
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
   const { error } = await supabase.from("offers").update({ status: "rejected" }).eq("id", offerId);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+/** Withdraw a still-listed public lot (Flow A). */
+export async function withdrawListedLot(lotId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+
+  const { error } = await supabase
+    .from("lots")
+    .update({ status: "withdrawn" })
+    .eq("id", lotId)
+    .eq("status", "listed");
+  if (error) return { ok: false, error: error.message };
+
+  await supabase
+    .from("offers")
+    .update({ status: "withdrawn" })
+    .eq("lot_id", lotId)
+    .eq("status", "pending");
+
+  return { ok: true };
+}
+
+/** Update price/tons on a still-listed public lot. */
+export async function updateListedLot(
+  lotId: string,
+  opts: { pricePerKg: number; tons: number },
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  if (!(opts.pricePerKg > 0) || !(opts.tons > 0)) return { ok: false, error: "invalidTons" };
+
+  const { error } = await supabase
+    .from("lots")
+    .update({ price_per_kg: opts.pricePerKg, tons: opts.tons })
+    .eq("id", lotId)
+    .eq("status", "listed");
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 

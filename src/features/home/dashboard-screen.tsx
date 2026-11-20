@@ -471,13 +471,13 @@ export function DashboardScreen() {
             aria-label={t("settings")}
             aria-expanded={menu}
             onClick={() => setMenu((v) => !v)}
-            className="flex size-10 items-center justify-center rounded-full border border-line bg-card"
+            className="flex size-11 items-center justify-center rounded-full border border-line bg-card"
           >
             <Settings className="size-[18px]" aria-hidden />
           </button>
           <Link
             href="/farmer/notifications"
-            className="relative flex size-10 items-center justify-center rounded-full border border-line bg-card"
+            className="relative flex size-11 items-center justify-center rounded-full border border-line bg-card"
             aria-label={t("alerts")}
           >
             <Bell className="size-[18px] text-good" aria-hidden />
@@ -518,7 +518,7 @@ export function DashboardScreen() {
                         setMenu(false);
                       }}
                       className={cn(
-                        "h-9 flex-1 rounded-full border text-ap-pill font-bold uppercase",
+                        "min-h-11 flex-1 rounded-full border text-ap-pill font-bold uppercase",
                         locale === code ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
                       )}
                     >
@@ -582,8 +582,9 @@ export function DashboardScreen() {
           <Skeleton className="h-40 w-full rounded-[22px]" />
         </div>
       ) : (
-        <>
-          <div className="mt-3.5 flex h-11 items-center gap-2 rounded-2xl border border-line bg-card px-3 text-ap-body font-semibold">
+        <div className="mt-3.5 md:grid md:grid-cols-2 md:items-start md:gap-6">
+          <div className="min-w-0">
+          <div className="flex h-11 items-center gap-2 rounded-2xl border border-line bg-card px-3 text-ap-body font-semibold">
             <WeatherIcon className="size-[18px] shrink-0 text-warn" aria-hidden />
             <span>{weather ? `${Math.round(weather.current.temp)}°C` : "—"}</span>
             <span className="truncate font-medium text-muted-foreground">{weatherLabel}</span>
@@ -707,7 +708,9 @@ export function DashboardScreen() {
               ))}
             </div>
           )}
+          </div>
 
+          <div className="mt-4 min-w-0 md:mt-0">
           <SectionHeader
             title={t("yourFields")}
             action={
@@ -724,13 +727,13 @@ export function DashboardScreen() {
           ) : fields.length === 0 ? (
             <p className="mt-2 text-ap-body text-muted-foreground">{t("noFieldsBody")}</p>
           ) : (
-            <div className="mt-2.5 flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="mt-2.5 flex gap-2.5 overflow-x-auto pb-1 md:flex-col md:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {shown.map((f) => {
                 const live = elevated && primary?.id === f.id ? elevated : null;
                 const liveThreat = live ? THREAT_BY_ID[live.threat] : null;
                 const score = fieldScores[f.id];
                 return (
-                  <Link key={f.id} href="/farmer/fields" className="w-[236px] shrink-0">
+                  <Link key={f.id} href="/farmer/fields" className="w-[236px] shrink-0 md:w-full">
                     <ApCard className="p-3">
                       <div className="flex items-center gap-2.5">
                         <span className="flex size-11 shrink-0 items-center justify-center rounded-[10px] bg-good-soft">
@@ -769,7 +772,8 @@ export function DashboardScreen() {
               })}
             </div>
           )}
-        </>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -795,7 +799,7 @@ function QuickPill({
     <Link
       href={href}
       className={cn(
-        "flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border-[1.5px] bg-card text-ap-pill font-bold",
+        "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border-[1.5px] bg-card text-ap-pill font-bold",
         style,
       )}
     >

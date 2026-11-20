@@ -671,7 +671,7 @@ export function ScanScreen() {
                   setActiveId(scan.id);
                   setView("result");
                 }}
-                className="mt-2 flex w-full items-center rounded-[18px] border border-line bg-card p-2.5 text-left"
+                className="mt-2 flex min-h-14 w-full items-center rounded-[18px] border border-line bg-card p-2.5 text-left"
               >
                 {scan.preview ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -694,8 +694,10 @@ export function ScanScreen() {
                       : formatDay(scan.at, locale)}
                   </span>
                 </span>
-                <Pill tone={scan.presented.tone}>{t(scan.presented.pillKey)}</Pill>
-                <ChevronRight className="ml-1 size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="flex shrink-0 items-center self-center">
+                  <Pill tone={scan.presented.tone}>{t(scan.presented.pillKey)}</Pill>
+                </span>
+                <ChevronRight className="ml-1 size-4 shrink-0 self-center text-muted-foreground" aria-hidden />
               </button>
             ))}
           </section>
@@ -791,17 +793,38 @@ function ResultView({
       </div>
 
       <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1 pr-2">
-            <p className="text-ap-card text-ink">{displayTitle}</p>
-            {presented.latin ? <p className="text-ap-body text-muted-foreground italic">{presented.latin}</p> : null}
+        <div className="flex items-start gap-3">
+          <span
+            className={cn(
+              "flex size-12 shrink-0 items-center justify-center rounded-2xl",
+              presented.tone === "good"
+                ? "bg-good-soft text-good"
+                : presented.tone === "risk"
+                  ? "bg-risk-soft text-risk"
+                  : "bg-warn-soft text-warn",
+            )}
+          >
+            {presented.tone === "good" ? (
+              <Check className="size-6" aria-hidden />
+            ) : presented.tone === "risk" ? (
+              <Bug className="size-6" aria-hidden />
+            ) : (
+              <Leaf className="size-6" aria-hidden />
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[22px] leading-tight font-extrabold tracking-tight text-ink">{displayTitle}</p>
+            {presented.latin ? <p className="mt-0.5 text-ap-body text-muted-foreground italic">{presented.latin}</p> : null}
           </div>
-          <Pill tone={presented.tone}>{t(presented.pillKey)}</Pill>
         </div>
-        <div className={cn("mt-2 rounded-xl p-2.5", BOX[presented.tone])}>
-          <p className="text-ap-body font-bold text-ink">{parts.headline}</p>
-          {parts.detail ? <p className="text-ap-body text-muted-foreground">{parts.detail}</p> : null}
-        </div>
+        {parts.detail || (parts.headline && parts.headline !== displayTitle) ? (
+          <div className={cn("mt-2 rounded-xl p-2.5", BOX[presented.tone])}>
+            {parts.headline && parts.headline !== displayTitle ? (
+              <p className="text-ap-body font-bold text-ink">{parts.headline}</p>
+            ) : null}
+            {parts.detail ? <p className="text-ap-body text-muted-foreground">{parts.detail}</p> : null}
+          </div>
+        ) : null}
         {presented.source || presented.confidence != null ? (
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
             {presented.source ? <AiTag source={presented.source} /> : null}

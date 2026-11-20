@@ -309,11 +309,11 @@ export function AddFieldScreen() {
             </div>
             <div className="rounded-[18px] border border-line bg-card p-3">
               <p className="text-ap-small font-medium text-muted-foreground">{t("treeAgeExact")}</p>
-              <div className="mt-2 flex items-center justify-between gap-1">
+              <div className="mt-2 flex items-center justify-between gap-2">
                 <RoundBtn label={t("less")} onClick={() => setAgeYears((n) => Math.max(1, n - 1))}>
                   <Minus className="size-4" />
                 </RoundBtn>
-                <div className="flex min-w-0 flex-1 items-baseline justify-center gap-1">
+                <div className="flex min-w-0 flex-1 flex-col items-center justify-center">
                   <input
                     type="number"
                     inputMode="numeric"
@@ -325,7 +325,7 @@ export function AddFieldScreen() {
                       if (!Number.isFinite(n)) return;
                       setAgeYears(Math.max(1, Math.min(200, Math.round(n))));
                     }}
-                    className="w-12 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-16 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                   <span className="text-ap-small font-bold text-muted-foreground">{t("treeAgeYears")}</span>
                 </div>
@@ -424,7 +424,7 @@ function RoundBtn({ label, onClick, children }: { label: string; onClick: () => 
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="flex size-9 items-center justify-center rounded-full bg-soft"
+      className="flex size-11 shrink-0 items-center justify-center rounded-full bg-soft"
     >
       {children}
     </button>

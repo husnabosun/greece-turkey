@@ -230,7 +230,7 @@ export function FieldsScreen() {
                 type="button"
                 aria-label={t("fieldMenu")}
                 onClick={() => setMenuOpen(true)}
-                className="flex size-9 items-center justify-center rounded-full border border-line bg-card"
+                className="flex size-11 items-center justify-center rounded-full border border-line bg-card"
               >
                 <MoreHorizontal className="size-[18px]" aria-hidden />
               </button>
@@ -238,8 +238,12 @@ export function FieldsScreen() {
               <button
                 type="button"
                 aria-label={t("layers")}
-                onClick={() => toast(t("layersOn"))}
-                className="flex size-9 items-center justify-center rounded-full border border-line bg-card"
+                aria-pressed={showHealth}
+                onClick={() => {
+                  setShowHealth((v) => !v);
+                  toast(showHealth ? t("layersOff") : t("layersOn"));
+                }}
+                className="flex size-11 items-center justify-center rounded-full border border-line bg-card"
               >
                 <Layers className="size-[18px]" aria-hidden />
               </button>
@@ -247,7 +251,7 @@ export function FieldsScreen() {
           </div>
 
           {loading ? (
-            <div className="h-8 animate-pulse rounded-full bg-soft" />
+            <div className="h-11 animate-pulse rounded-full bg-soft" />
           ) : (
             <FieldChips
               showAll
@@ -263,12 +267,12 @@ export function FieldsScreen() {
             />
           )}
 
-          <div className="flex items-center rounded-2xl border border-line bg-card px-2.5 py-1.5">
+          <div className="flex min-h-11 items-center rounded-2xl border border-line bg-card px-2.5 py-1.5">
             <div className="flex-1 text-center">
               <p className="text-ap-body font-extrabold text-ink">
                 {displayTrees != null && displayTrees > 0 ? t("treesCount", { n: displayTrees }) : "—"}
               </p>
-              <p className="text-[10px] font-medium text-muted-foreground">
+              <p className="text-ap-small font-medium text-muted-foreground">
                 {showAll ? t("treesTotal") : t("treeCount")}
               </p>
             </div>
@@ -277,13 +281,13 @@ export function FieldsScreen() {
               <p className="text-ap-body font-extrabold text-ink">
                 {displayHa != null ? t("haCount", { n: formatStremmata(displayHa, 1, locale) }) : "—"}
               </p>
-              <p className="text-[10px] font-medium text-muted-foreground">
+              <p className="text-ap-small font-medium text-muted-foreground">
                 {showAll ? t("areaTotal") : t("fieldSize")}
               </p>
             </div>
             <Link
               href="/farmer/quality"
-              className="flex flex-[1.3] items-center justify-center gap-1.5 rounded-xl bg-soft py-1"
+              className="flex min-h-11 flex-[1.3] items-center justify-center gap-1.5 rounded-xl bg-soft px-1 py-1"
             >
               <Star
                 className="size-4"
@@ -292,12 +296,12 @@ export function FieldsScreen() {
                 aria-hidden
               />
               <span>
-                <span className="block text-[10px] font-semibold text-ink">
+                <span className="block text-ap-small font-semibold text-ink">
                   {showAll ? t("avgScore") : t("qualityScore")}
                 </span>
                 <span className="text-ap-body font-extrabold text-ink">
                   {displayScore != null ? displayScore : "—"}
-                  <span className="text-[10px] font-medium text-muted-foreground">{t("perHundred")}</span>
+                  <span className="text-ap-small font-medium text-muted-foreground">{t("perHundred")}</span>
                 </span>
               </span>
             </Link>
@@ -306,33 +310,39 @@ export function FieldsScreen() {
 
         <div className="relative h-[58dvh] max-h-[520px] min-h-[280px] w-full shrink-0 md:h-[62dvh] md:max-h-[640px] md:px-6">
           <div className="absolute inset-0 md:inset-x-6 md:inset-y-0">
-            <FieldHealthMap
-              className="h-full w-full rounded-none md:rounded-[18px]"
-              token={token}
-              lat={active?.lat}
-              lon={active?.lon}
-              geom={active?.geom}
-              outlines={mapOutlines}
-              trees={showAll ? [] : trees}
-              selectedId={selectedTreeId}
-              onSelect={setSelectedTreeId}
-              showHealth={showHealth}
-              onToggleHealth={setShowHealth}
-              onLocate={() => toast(t("located"))}
-              labels={{
-                aiLayer: t("aiLayer"),
-                healthy: t("healthy"),
-                suspicious: t("suspicious"),
-                diseased: t("diseased"),
-                locate: t("myLocation"),
-                zoomIn: t("zoomIn"),
-                zoomOut: t("zoomOut"),
-                tree: (id) => t("treeN", { id }),
-                needToken: t("mapFallback"),
-                loading: t("mapLoading"),
-                failed: t("mapFallback"),
-              }}
-            />
+            {loading ? (
+              <div className="flex h-full w-full items-center justify-center bg-[#1a1a1a] md:rounded-[18px]">
+                <p className="text-ap-body font-semibold text-white/70">{t("mapLoading")}</p>
+              </div>
+            ) : (
+              <FieldHealthMap
+                className="h-full w-full rounded-none md:rounded-[18px]"
+                token={token}
+                lat={active?.lat}
+                lon={active?.lon}
+                geom={active?.geom}
+                outlines={mapOutlines}
+                trees={showAll ? [] : trees}
+                selectedId={selectedTreeId}
+                onSelect={setSelectedTreeId}
+                showHealth={showHealth}
+                onToggleHealth={setShowHealth}
+                onLocate={() => toast(t("located"))}
+                labels={{
+                  aiLayer: t("aiLayer"),
+                  healthy: t("healthy"),
+                  suspicious: t("suspicious"),
+                  diseased: t("diseased"),
+                  locate: t("myLocation"),
+                  zoomIn: t("zoomIn"),
+                  zoomOut: t("zoomOut"),
+                  tree: (id) => t("treeN", { id }),
+                  needToken: t("mapFallback"),
+                  loading: t("mapLoading"),
+                  failed: t("mapFallback"),
+                }}
+              />
+            )}
           </div>
         </div>
 
@@ -340,25 +350,41 @@ export function FieldsScreen() {
           {active ? (
             <>
               {activeRaw ? (
-                <p className="rounded-xl bg-soft px-3 py-2 text-ap-small text-muted-foreground">
-                  {[
-                    activeRaw.variety_slug || activeRaw.variety
-                      ? varietyLabel(activeRaw.variety_slug ?? activeRaw.variety, locale)
-                      : null,
-                    activeRaw.irrigated ? t("irrigatedYes") : t("irrigatedNo"),
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
+                <div className="rounded-xl border border-line bg-card px-3 py-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-ap-body font-extrabold text-ink">{activeRaw.name}</p>
+                      <p className="mt-0.5 text-ap-small text-muted-foreground">
+                        {[
+                          activeRaw.variety_slug || activeRaw.variety
+                            ? varietyLabel(activeRaw.variety_slug ?? activeRaw.variety, locale)
+                            : null,
+                          activeRaw.irrigated ? t("irrigatedYes") : t("irrigatedNo"),
+                          activeRaw.tree_count != null ? t("treesCount", { n: activeRaw.tree_count }) : null,
+                          active.score != null ? `${active.score}${t("perHundred")}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={openEdit}
+                      className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-line px-3 text-ap-pill font-bold text-ink"
+                    >
+                      {t("editField")}
+                    </button>
+                  </div>
+                </div>
               ) : null}
               <Link
                 href={`/farmer/fields/${active.id}/score`}
-                className="flex h-10 w-full items-center gap-2 rounded-xl border border-line bg-card px-3 text-left"
+                className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-line bg-card px-3 text-left"
               >
                 <BadgeCheck className="size-4 shrink-0 text-good" aria-hidden />
                 <span className="min-w-0 flex-1">
                   <span className="block text-ap-small font-extrabold text-ink">{t("scoreCta")}</span>
-                  <span className="block text-[10px] font-medium text-muted-foreground">{t("scoreCtaHint")}</span>
+                  <span className="block text-ap-small font-medium text-muted-foreground">{t("scoreCtaHint")}</span>
                 </span>
                 <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
               </Link>
@@ -369,7 +395,7 @@ export function FieldsScreen() {
 
           <button
             type="button"
-            className="flex h-9 w-full items-center rounded-xl bg-risk-soft px-3 text-left"
+            className="flex min-h-11 w-full items-center rounded-xl bg-risk-soft px-3 text-left"
             onClick={() => {
               const next = trees.find((tr) => tr.status !== "healthy");
               if (next) setSelectedTreeId(next.id);
@@ -412,14 +438,14 @@ export function FieldsScreen() {
             <div className="mt-2 flex gap-2">
               <Link
                 href="/farmer/scan"
-                className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-full bg-primary text-ap-pill font-bold text-white"
+                className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-primary text-ap-pill font-bold text-white"
               >
                 <Camera className="size-4" />
                 {t("scanTree")}
               </Link>
               <button
                 type="button"
-                className="inline-flex h-10 flex-1 items-center justify-center rounded-full border border-line bg-card text-ap-pill font-bold text-ink"
+                className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border border-line bg-card text-ap-pill font-bold text-ink"
               >
                 {t("seeScans")}
               </button>

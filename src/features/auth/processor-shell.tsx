@@ -141,10 +141,11 @@ function UserMenu({
       return;
     }
     setSigningOut(true);
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
     setSigningOut(false);
     setOpen(false);
     router.replace("/login");
+    router.refresh();
   }
 
   return (
