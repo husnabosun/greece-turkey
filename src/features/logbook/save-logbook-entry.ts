@@ -9,11 +9,21 @@ type Draft = {
   dose: string | null;
   fieldId: string;
   fieldName: string;
+  /** ISO date YYYY-MM-DD; defaults to today. */
+  appliedOn?: string | null;
+  preHarvestDays?: number | null;
 };
 
 type SaveResult =
   | { ok: true; entry: LogbookEntryView }
   | { ok: false; error: "needSupabase" | "needLogin" | "insertFailed"; detail?: string };
+
+function appliedAtFromDate(isoDate: string | null | undefined): string {
+  if (isoDate && /^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+    return `${isoDate}T12:00:00.000Z`;
+  }
+  return new Date().toISOString();
+}
 
 /** Insert a spray row into `logbook_entries` with EU check flags. */
 export async function saveLogbookEntry(draft: Draft): Promise<SaveResult> {
@@ -26,7 +36,11 @@ export async function saveLogbookEntry(draft: Draft): Promise<SaveResult> {
   if (!user) return { ok: false, error: "needLogin" };
 
   const check = euCheck(draft.substances);
-  const appliedAt = new Date().toISOString();
+  const appliedAt = appliedAtFromDate(draft.appliedOn);
+  const phi =
+    draft.preHarvestDays != null && Number.isFinite(draft.preHarvestDays)
+      ? Math.max(0, Math.round(draft.preHarvestDays))
+      : null;
 
   const { data: row, error } = await supabase
     .from("logbook_entries")
@@ -41,6 +55,7 @@ export async function saveLogbookEntry(draft: Draft): Promise<SaveResult> {
       eu_banned: check.banned,
       eu_hits: check.hits,
       applied_at: appliedAt,
+      pre_harvest_days: phi,
       from_label_scan: false,
     })
     .select("id, applied_at, pre_harvest_days")
@@ -66,4 +81,11 @@ export async function saveLogbookEntry(draft: Draft): Promise<SaveResult> {
       preHarvestDays: row.pre_harvest_days,
     },
   };
+}
+
+export async function deleteLogbookEntry(entryId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  const { error } = await supabase.from("logbook_entries").delete().eq("id", entryId);
+  return error ? { ok: false, error: error.message } : { ok: true };
 }

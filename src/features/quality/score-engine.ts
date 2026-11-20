@@ -52,7 +52,8 @@ const clamp = (n: number, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, Math.ro
 
 function sprayScore(count: number, banned: boolean): number {
   if (banned) return 35;
-  if (count === 0) return 88;
+  // No recorded sprays → no evidence of safe practice (not a free 88).
+  if (count === 0) return 50;
   if (count <= 2) return 92;
   if (count <= 4) return 78;
   return 62;

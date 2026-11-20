@@ -167,22 +167,24 @@ export function ScanScreen() {
     setView("camera");
   }
 
-  function onFile(file: File | null) {
+  async function onFile(file: File | null) {
     if (!file || analysing) return;
     if (photos.length >= 4) {
       toast.error(t("maxPhotos"));
       return;
     }
-    if (file.size > 4_000_000) {
+    // Allow large phone photos — we compress before upload (Σ4).
+    if (file.size > 12_000_000) {
       toast.error(t("tooBig"));
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = String(reader.result);
+    try {
+      const { compressImageFile } = await import("@/shared/lib/compress-image");
+      const url = await compressImageFile(file);
       setPhotos((prev) => (prev.length >= 4 ? prev : [...prev, url]));
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      toast.error(t("failed"));
+    }
   }
 
   function removePhoto(index: number) {
@@ -226,6 +228,12 @@ export function ScanScreen() {
           context,
         }),
       });
+      if (res.status === 413) {
+        throw new Error(t("payloadTooLarge"));
+      }
+      if (res.status === 401) {
+        throw new Error(t("needLogin"));
+      }
       const json: unknown = await res.json();
       if (!isRecord(json) || json.ok !== true) {
         const message = isRecord(json) && typeof json.error === "string" ? json.error : t("failed");
@@ -242,15 +250,14 @@ export function ScanScreen() {
           ? payload.source
           : "demo";
 
-      // Low-confidence leaf results: ask for a better photo, do not save.
+      // Low-confidence leaf results: ask for a better photo, do not save (Σ1/Σ2).
       if (
         mode === "leaf" &&
         source !== "demo" &&
         presented.confidence != null &&
-        presented.confidence < 0.7
+        presented.confidence < 0.8
       ) {
         toast.message(t("lowConfidence"));
-        setAnalysing(false);
         return;
       }
 
@@ -498,7 +505,7 @@ export function ScanScreen() {
           accept="image/*"
           className="hidden"
           onChange={(e) => {
-            onFile(e.target.files?.[0] ?? null);
+            void onFile(e.target.files?.[0] ?? null);
             e.target.value = "";
           }}
         />
@@ -508,7 +515,7 @@ export function ScanScreen() {
           accept="image/*"
           className="hidden"
           onChange={(e) => {
-            onFile(e.target.files?.[0] ?? null);
+            void onFile(e.target.files?.[0] ?? null);
             e.target.value = "";
           }}
         />
@@ -519,7 +526,7 @@ export function ScanScreen() {
           capture="environment"
           className="hidden"
           onChange={(e) => {
-            onFile(e.target.files?.[0] ?? null);
+            void onFile(e.target.files?.[0] ?? null);
             e.target.value = "";
           }}
         />
@@ -673,11 +680,32 @@ function ResultView({
   onRecheck: () => void;
 }) {
   const t = useTranslations("farmerScan");
+  const tTasks = useTranslations("farmerTasks");
+  const router = useRouter();
   const { presented } = scan;
   const parts = splitSummary(presented.summary.trim() || presented.title);
   const actions = actionSet(presented.actionKind, t);
   const photoLabel = presented.mode === "fruit" ? t("fruitPhoto") : presented.mode === "trap" ? t("trapPhoto") : t("leafPhoto");
   const meta = [scan.fieldName, formatWhen(scan.at, locale, (time) => t("todayAt", { time }))].filter(Boolean).join(" · ");
+
+  async function createFollowUpTask(title: string) {
+    if (!scan.fieldId) {
+      toast.message(t("needField"));
+      return;
+    }
+    const { createFarmerTask } = await import("@/features/tasks/use-farmer-tasks");
+    const result = await createFarmerTask({
+      fieldId: scan.fieldId,
+      title,
+      kind: "recheck",
+    });
+    if (!result.ok) {
+      toast.error(result.error ?? tTasks("actionFailed"));
+      return;
+    }
+    toast.success(t("taskCreated"));
+    router.push("/farmer/tasks");
+  }
 
   return (
     <div className="w-full flex-1">
@@ -753,7 +781,7 @@ function ResultView({
           <button
             key={action.title}
             type="button"
-            onClick={() => toast(action.title)}
+            onClick={() => void createFollowUpTask(action.title)}
             className="flex-1 rounded-[18px] border border-line bg-card p-2.5"
           >
             <span className="mx-auto flex size-9 items-center justify-center rounded-full bg-good-soft">
@@ -778,9 +806,9 @@ function ResultView({
           compact
           className="min-w-0 flex-1 px-3"
           variant="outline"
-          label={t("askAgronomist")}
-          icon={<User className="size-4" aria-hidden />}
-          onClick={() => toast(t("askSent"))}
+          label={t("addTaskFromScan")}
+          icon={<ClipboardList className="size-4" aria-hidden />}
+          onClick={() => void createFollowUpTask(presented.title)}
         />
       </div>
     </div>
@@ -852,6 +880,44 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
     let latin: string | undefined;
     let tone: PillTone = "warn";
     let pillKey: PillKey = "watch";
+    const top3 = Array.isArray(result.top3) ? result.top3 : [];
+    const second = top3
+      .map((row) => (isRecord(row) ? row : null))
+      .find((row) => row && typeof row.label === "string" && row.label !== label);
+    const secondLabel = second && typeof second.label === "string" ? second.label : null;
+
+    // Never call a leaf "Healthy" below 0.7 — show Uncertain and surface 2nd guess (Σ2).
+    if (label === "Healthy" && confidence != null && confidence < 0.7) {
+      title = t("uncertain");
+      tone = "warn";
+      pillKey = "watch";
+      const alt =
+        secondLabel === "Olive Peacock Spot"
+          ? t("peacock")
+          : secondLabel === "Aculus Olearius"
+            ? t("budMite")
+            : secondLabel;
+      const summaryParts = [
+        t("uncertainHint"),
+        alt ? t("alsoPossible", { label: alt }) : null,
+        ...strings(result.symptoms),
+      ].filter(Boolean);
+      return {
+        mode: "leaf",
+        title,
+        latin: undefined,
+        summary: summaryParts.join(" "),
+        tone,
+        pillKey,
+        confidence,
+        source,
+        modelVersion,
+        demoReason,
+        actionKind: "care",
+        showNoChemicals: true,
+      };
+    }
+
     if (label === "Healthy") {
       title = t("healthyLeaf");
       tone = "good";
@@ -866,11 +932,24 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
       latin = LATIN.mite;
     }
     const toneGood = tone === "good";
+    const altHint =
+      secondLabel && !toneGood
+        ? ` ${t("alsoPossible", {
+            label:
+              secondLabel === "Healthy"
+                ? t("healthyLeaf")
+                : secondLabel === "Olive Peacock Spot"
+                  ? t("peacock")
+                  : secondLabel === "Aculus Olearius"
+                    ? t("budMite")
+                    : secondLabel,
+          })}`
+        : "";
     return {
       mode: "leaf",
       title,
       latin,
-      summary: strings(result.symptoms).join(" "),
+      summary: `${strings(result.symptoms).join(" ")}${altHint}`.trim(),
       tone,
       pillKey,
       confidence,

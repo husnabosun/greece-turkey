@@ -61,8 +61,6 @@ export function QualityScreen() {
   const { fields, loading: fieldsLoading } = useFarmerFields();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [bootstrapped, setBootstrapped] = useState<Record<string, boolean>>({});
-
   useEffect(() => {
     if (!fields.length) {
       setSelectedId(null);
@@ -122,14 +120,7 @@ export function QualityScreen() {
     }
   }
 
-  // Auto-compute once when field has no score yet.
-  useEffect(() => {
-    if (fieldsLoading || scoreLoading || !field || current || refreshing) return;
-    if (bootstrapped[field.id]) return;
-    setBootstrapped((prev) => ({ ...prev, [field.id]: true }));
-    void onRefresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot bootstrap per field
-  }, [field?.id, scoreLoading, current?.id, bootstrapped, fieldsLoading, refreshing]);
+  // No auto-insert on visit (Π4) — user refreshes explicitly via the button.
 
   return (
     <div className="w-full flex-1 space-y-4">

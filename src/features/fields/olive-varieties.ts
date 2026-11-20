@@ -370,13 +370,24 @@ export function isVarietyAllowed(slug: string, country: OliveCountry): boolean {
   return v.origin_country === country || v.origin_country === "BOTH";
 }
 
-/** Single country group + optional «Other» — never shows the other country's list. */
+/** Single country group + optional «Other» — never shows the other country's list unless `showAll`. */
 export function varietiesGrouped(
   locale: string,
   lon?: number | null,
   profileCountry?: OliveCountry | null,
+  showAll = false,
 ): { origin: OliveOriginCountry; labelKey: "groupGreece" | "groupTurkey" | "groupOther"; items: OliveVariety[] }[] {
   const { country } = resolveOliveCountry({ locale, lon, profileCountry });
+  if (showAll) {
+    const gr = OLIVE_VARIETIES.filter((v) => v.origin_country === "GR");
+    const tr = OLIVE_VARIETIES.filter((v) => v.origin_country === "TR");
+    const both = OLIVE_VARIETIES.filter((v) => v.origin_country === "BOTH");
+    return [
+      { origin: "GR", labelKey: "groupGreece", items: gr },
+      { origin: "TR", labelKey: "groupTurkey", items: tr },
+      { origin: "BOTH", labelKey: "groupOther", items: both },
+    ];
+  }
   const local = OLIVE_VARIETIES.filter((v) => v.origin_country === country);
   const both = OLIVE_VARIETIES.filter((v) => v.origin_country === "BOTH");
   return [

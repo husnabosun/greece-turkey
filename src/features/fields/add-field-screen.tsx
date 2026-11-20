@@ -51,8 +51,10 @@ export function AddFieldScreen() {
     return last.center[0] ?? null;
   });
   const [profileCountry, setProfileCountry] = useState<OliveCountry | null>(null);
-  const [trees, setTrees] = useState(80);
+  const [treesText, setTreesText] = useState("80");
   const [ageYears, setAgeYears] = useState(35);
+  const [showAllVarieties, setShowAllVarieties] = useState(false);
+  const [treesTouched, setTreesTouched] = useState(false);
   const oliveCountry = useMemo(
     () => resolveOliveCountry({ locale, lon: mapLon, profileCountry }).country,
     [locale, mapLon, profileCountry],
@@ -63,9 +65,16 @@ export function AddFieldScreen() {
   const saveLock = useRef(false);
 
   const varietyGroups = useMemo(
-    () => varietiesGrouped(locale, mapLon, profileCountry),
-    [locale, mapLon, profileCountry],
+    () => varietiesGrouped(locale, mapLon, profileCountry, showAllVarieties),
+    [locale, mapLon, profileCountry, showAllVarieties],
   );
+
+  function parseTrees(): number | null {
+    const n = Number(treesText.replace(/\s/g, "").replace(",", "."));
+    if (!Number.isFinite(n) || n < 1) return null;
+    if (n > 5000) return null;
+    return Math.round(n);
+  }
 
   useEffect(() => {
     const supabase = tryCreateBrowserClient();
@@ -87,10 +96,11 @@ export function AddFieldScreen() {
   }, []);
 
   useEffect(() => {
+    if (showAllVarieties) return;
     if (!isVarietyAllowed(varietySlug, oliveCountry)) {
       setVarietySlug(defaultVarietySlug(oliveCountry));
     }
-  }, [oliveCountry, varietySlug]);
+  }, [oliveCountry, varietySlug, showAllVarieties]);
 
   const satelliteTrees = useMemo(() => {
     if (areaHa == null || areaHa <= 0) return null;
@@ -105,9 +115,10 @@ export function AddFieldScreen() {
       const lon = ring.reduce((s, p) => s + p[0], 0) / ring.length;
       setMapLon(lon);
     }
-    if (ha != null && ha > 0) {
+    // Do not overwrite a number the user already typed — offer estimate separately.
+    if (ha != null && ha > 0 && !treesTouched) {
       const estimate = Math.max(10, Math.round(ha * TREES_PER_HA));
-      setTrees(estimate);
+      setTreesText(String(estimate));
     }
   }
 
@@ -119,6 +130,11 @@ export function AddFieldScreen() {
     }
     if (!polygon) {
       toast.error(t("needPolygon"));
+      return;
+    }
+    const trees = parseTrees();
+    if (trees == null) {
+      toast.error(t("invalidTrees"));
       return;
     }
     if (!hasSupabaseConfig()) {
@@ -239,26 +255,57 @@ export function AddFieldScreen() {
             <div className="rounded-[18px] border border-line bg-card p-3">
               <p className="text-ap-small font-medium text-muted-foreground">{t("numberOfTrees")}</p>
               <div className="mt-2 flex items-center justify-between gap-1">
-                <RoundBtn label={t("less")} onClick={() => setTrees((n) => Math.max(1, n - 1))}>
+                <RoundBtn
+                  label={t("less")}
+                  onClick={() => {
+                    setTreesTouched(true);
+                    const n = parseTrees() ?? 1;
+                    setTreesText(String(Math.max(1, n - 1)));
+                  }}
+                >
                   <Minus className="size-4" />
                 </RoundBtn>
                 <input
-                  type="number"
+                  type="text"
                   inputMode="numeric"
-                  min={1}
-                  max={5000}
-                  value={trees}
+                  value={treesText}
                   onChange={(e) => {
-                    const n = Number(e.target.value);
-                    if (!Number.isFinite(n)) return;
-                    setTrees(Math.max(1, Math.min(5000, Math.round(n))));
+                    setTreesTouched(true);
+                    setTreesText(e.target.value.replace(/[^\d]/g, ""));
                   }}
-                  className="w-14 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  onBlur={() => {
+                    const n = parseTrees();
+                    if (n == null) {
+                      toast.message(t("invalidTrees"));
+                      return;
+                    }
+                    setTreesText(String(n));
+                  }}
+                  className="w-14 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none"
                 />
-                <RoundBtn label={t("more")} onClick={() => setTrees((n) => Math.min(5000, n + 1))}>
+                <RoundBtn
+                  label={t("more")}
+                  onClick={() => {
+                    setTreesTouched(true);
+                    const n = parseTrees() ?? 0;
+                    setTreesText(String(Math.min(5000, n + 1)));
+                  }}
+                >
                   <Plus className="size-4" />
                 </RoundBtn>
               </div>
+              {satelliteTrees != null && treesTouched ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTreesText(String(satelliteTrees));
+                    setTreesTouched(false);
+                  }}
+                  className="mt-2 text-left text-ap-small font-bold text-ap-accent"
+                >
+                  {t("useEstimate", { n: satelliteTrees })}
+                </button>
+              ) : null}
             </div>
             <div className="rounded-[18px] border border-line bg-card p-3">
               <p className="text-ap-small font-medium text-muted-foreground">{t("treeAgeExact")}</p>
@@ -297,7 +344,16 @@ export function AddFieldScreen() {
           </div>
 
           <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
-            <p className="text-ap-small font-medium text-muted-foreground">{t("oliveVariety")}</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-ap-small font-medium text-muted-foreground">{t("oliveVariety")}</p>
+              <button
+                type="button"
+                onClick={() => setShowAllVarieties((v) => !v)}
+                className="text-ap-small font-bold text-ap-accent"
+              >
+                {showAllVarieties ? t("showLocalVarieties") : t("showAllVarieties")}
+              </button>
+            </div>
             <div className="mt-2 space-y-2.5">
               {varietyGroups.map((group) => (
                 <div key={group.origin}>

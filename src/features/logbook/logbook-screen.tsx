@@ -6,7 +6,7 @@ import { Camera, ListFilter, Share2, TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { euCheck } from "@/features/logbook/eu-check";
-import { saveLogbookEntry } from "@/features/logbook/save-logbook-entry";
+import { deleteLogbookEntry, saveLogbookEntry } from "@/features/logbook/save-logbook-entry";
 import { safeHarvestDays, useFarmerLogbook, type LogbookEntryView } from "@/features/logbook/use-farmer-logbook";
 import { AiTag, FieldChips, Pill, PrivacyLine } from "@/shared/components/brand";
 import { Input } from "@/shared/components/ui/input";
@@ -164,7 +164,22 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
                 />
               </div>
               <div className="min-w-0 flex-1 pb-1.5">
-                <SprayCard entry={entry} locale={locale} />
+                <SprayCard
+                  entry={entry}
+                  locale={locale}
+                  onDelete={() => {
+                    if (!window.confirm(t("deleteConfirm"))) return;
+                    void (async () => {
+                      const res = await deleteLogbookEntry(entry.id);
+                      if (!res.ok) {
+                        toast.error(res.error ?? t("saveFailed"));
+                        return;
+                      }
+                      setEntries((prev) => prev.filter((e) => e.id !== entry.id));
+                      toast.success(t("deleted"));
+                    })();
+                  }}
+                />
               </div>
             </div>
           ))}
@@ -198,6 +213,8 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
                   substances: draft.substances,
                   licence: draft.licence,
                   dose: draft.dose,
+                  appliedOn: draft.appliedOn,
+                  preHarvestDays: draft.preHarvestDays,
                   fieldId: selected.id,
                   fieldName: selected.name,
                 });
@@ -225,12 +242,21 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
   );
 }
 
-function SprayCard({ entry, locale }: { entry: Entry; locale: string }) {
+function SprayCard({
+  entry,
+  locale,
+  onDelete,
+}: {
+  entry: Entry;
+  locale: string;
+  onDelete: () => void;
+}) {
   const t = useTranslations("farmerLogbook");
   const meta = [
     formatDay(entry.at, locale),
     entry.fieldName,
     entry.banned ? null : entry.dose || (entry.substances.length ? entry.substances.join(", ") : null),
+    entry.preHarvestDays != null ? t("phiDays", { n: entry.preHarvestDays }) : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -243,9 +269,18 @@ function SprayCard({ entry, locale }: { entry: Entry; locale: string }) {
           <p className="text-ap-card text-ink">{entry.banned ? t("bannedUsed") : entry.product}</p>
           <p className="text-ap-body text-muted-foreground">{meta}</p>
         </div>
-        <Pill tone={entry.banned ? "risk" : "warn"}>
-          {entry.banned ? t("notAllowed") : entry.substances.length ? t("allowed") : t("allowed")}
-        </Pill>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Pill tone={entry.banned ? "risk" : "warn"}>
+            {entry.banned ? t("notAllowed") : entry.substances.length ? t("allowed") : t("allowed")}
+          </Pill>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="text-ap-small font-bold text-muted-foreground underline"
+          >
+            {t("delete")}
+          </button>
+        </div>
       </div>
       {entry.banned ? (
         <div className="mt-2 rounded-lg bg-[#F8D3C8] p-2">
@@ -261,6 +296,11 @@ function SprayCard({ entry, locale }: { entry: Entry; locale: string }) {
   );
 }
 
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function AddSpraySheet({
   fieldName,
   saving = false,
@@ -270,13 +310,22 @@ function AddSpraySheet({
   fieldName: string | null;
   saving?: boolean;
   onClose: () => void;
-  onSave: (draft: { product: string; substances: string[]; licence: string | null; dose: string | null }) => void;
+  onSave: (draft: {
+    product: string;
+    substances: string[];
+    licence: string | null;
+    dose: string | null;
+    appliedOn: string;
+    preHarvestDays: number | null;
+  }) => void;
 }) {
   const t = useTranslations("farmerLogbook");
   const [product, setProduct] = useState("");
   const [substances, setSubstances] = useState("");
   const [licence, setLicence] = useState<string | null>(null);
-  const [dose, setDose] = useState<string | null>(null);
+  const [dose, setDose] = useState("");
+  const [appliedOn, setAppliedOn] = useState(todayIso);
+  const [phiText, setPhiText] = useState("");
   const [fromLabel, setFromLabel] = useState(false);
   const [labelSource, setLabelSource] = useState<"gemini" | "demo" | null>(null);
   const [labelLoading, setLabelLoading] = useState(false);
@@ -294,11 +343,19 @@ function AddSpraySheet({
       toast.error(t("needProduct"));
       return;
     }
+    const phiRaw = phiText.trim();
+    const phi = phiRaw === "" ? null : Number(phiRaw.replace(",", "."));
+    if (phiRaw !== "" && (!Number.isFinite(phi) || (phi as number) < 0)) {
+      toast.error(t("invalidPhi"));
+      return;
+    }
     onSave({
       product: name,
       substances: list,
       licence: fromLabel ? licence : null,
-      dose: fromLabel ? dose : null,
+      dose: dose.trim() || null,
+      appliedOn,
+      preHarvestDays: phi == null ? null : Math.round(phi),
     });
   }
 
@@ -326,10 +383,17 @@ function AddSpraySheet({
       setProduct(label.productName);
       setSubstances(substancesFound.join(", "));
       setLicence(typeof label.licenceNumber === "string" ? label.licenceNumber : null);
-      setDose(typeof label.maxDosePerHa === "string" ? label.maxDosePerHa : null);
+      setDose(typeof label.maxDosePerHa === "string" ? label.maxDosePerHa : "");
+      if (typeof label.preHarvestDays === "number") {
+        setPhiText(String(label.preHarvestDays));
+      }
       setFromLabel(true);
       setLabelSource(json.data.source === "demo" ? "demo" : "gemini");
       const source = typeof json.data.source === "string" ? json.data.source : "gemini";
+      if (source === "demo") {
+        toast.message(t("labelDemoSkip"));
+        return;
+      }
       toast.success(t("labelOk", { source }));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("labelFail"));
@@ -407,6 +471,41 @@ function AddSpraySheet({
               setSubstances(e.target.value);
               setFromLabel(false);
             }}
+            className="rounded-xl"
+          />
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="spray-date">{t("appliedOn")}</Label>
+            <Input
+              id="spray-date"
+              type="date"
+              value={appliedOn}
+              onChange={(e) => setAppliedOn(e.target.value)}
+              className="rounded-xl"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="spray-phi">{t("phiLabel")}</Label>
+            <Input
+              id="spray-phi"
+              inputMode="numeric"
+              value={phiText}
+              onChange={(e) => setPhiText(e.target.value)}
+              placeholder="14"
+              className="rounded-xl"
+            />
+          </div>
+        </div>
+
+        <div className="mt-3 space-y-1.5">
+          <Label htmlFor="spray-dose">{t("dose")}</Label>
+          <Input
+            id="spray-dose"
+            value={dose}
+            onChange={(e) => setDose(e.target.value)}
+            placeholder="1,5 L/ha"
             className="rounded-xl"
           />
         </div>

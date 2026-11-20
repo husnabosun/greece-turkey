@@ -33,7 +33,7 @@ import { useFieldWeather } from "@/features/weather-risk/use-field-weather";
 import { LOCALES, type Locale } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { SignOutButton } from "@/features/auth/sign-out-button";
-import { AiTag, ApButton, ApCard, FieldChips, Pill, SectionHeader } from "@/shared/components/brand";
+import { ApButton, ApCard, FieldChips, Pill, SectionHeader } from "@/shared/components/brand";
 import { colors } from "@/shared/theme/tokens";
 import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
 import { Skeleton } from "@/shared/components/ui/skeleton";
@@ -117,6 +117,7 @@ export function DashboardScreen() {
   const [fieldPlace, setFieldPlace] = useState<string | null>(null);
   const [recheckCount, setRecheckCount] = useState(0);
   const [offerCount, setOfferCount] = useState(0);
+  const [fieldScores, setFieldScores] = useState<Record<string, number>>({});
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
   const [greeting, setGreeting] = useState<"greetingMorning" | "greetingAfternoon" | "greetingEvening">(
@@ -200,12 +201,12 @@ export function DashboardScreen() {
       if (!user || cancelled) return;
 
       const fieldIds = fields.map((f) => f.id);
-      const [offersRes, treesRes] = await Promise.all([
+      const [offersRes, treesRes, scansRes, scoresRes] = await Promise.all([
         supabase
           .from("offers")
           .select("id, status")
           .eq("farmer_id", user.id)
-          .in("status", ["pending", "countered"]),
+          .eq("status", "pending"),
         fieldIds.length
           ? supabase
               .from("field_trees")
@@ -213,13 +214,49 @@ export function DashboardScreen() {
               .in("field_id", fieldIds)
               .in("status", ["diseased", "suspicious"])
           : Promise.resolve({ data: [] as { id: string }[] }),
+        fieldIds.length
+          ? supabase
+              .from("scans")
+              .select("id, diagnosis, confidence, title")
+              .eq("farmer_id", user.id)
+              .in("field_id", fieldIds)
+              .order("captured_at", { ascending: false })
+              .limit(40)
+          : Promise.resolve({
+              data: [] as { id: string; diagnosis?: string | null; confidence?: number | null; title?: string | null }[],
+            }),
+        fieldIds.length
+          ? supabase
+              .from("quality_scores")
+              .select("field_id, score, computed_at")
+              .in("field_id", fieldIds)
+              .order("computed_at", { ascending: false })
+          : Promise.resolve({ data: [] as { field_id: string; score: number }[] }),
       ]);
       if (cancelled) return;
 
       const taskRechecks = tasks.filter((row) => row.kind === "recheck" && !row.done).length;
       const treeRechecks = treesRes.data?.length ?? 0;
-      setRecheckCount(taskRechecks > 0 ? taskRechecks : treeRechecks);
+      const scanRechecks = (scansRes.data ?? []).filter((s) => {
+        const dx = `${s.diagnosis ?? ""} ${s.title ?? ""}`.toLowerCase();
+        const risky =
+          dx.includes("high") ||
+          dx.includes("risk") ||
+          dx.includes("peacock") ||
+          dx.includes("fly") ||
+          dx.includes("κυκλοκ") ||
+          dx.includes("δάκ");
+        const lowConf = s.confidence != null && s.confidence < 0.7;
+        return risky || lowConf;
+      }).length;
+      setRecheckCount(Math.max(taskRechecks, treeRechecks, scanRechecks));
       setOfferCount(offersRes.data?.length ?? 0);
+
+      const scores: Record<string, number> = {};
+      for (const row of scoresRes.data ?? []) {
+        if (scores[row.field_id] == null) scores[row.field_id] = row.score;
+      }
+      setFieldScores(scores);
     })();
     return () => {
       cancelled = true;
@@ -301,12 +338,12 @@ export function DashboardScreen() {
   const tone = TONE[level];
   const threat = elevated ? THREAT_BY_ID[elevated.threat] : null;
   const scanMode = elevated ? SCAN_MODE[elevated.threat] : undefined;
-  /** Distinct High threats in the next 3 days (demo `countRisks`). */
+  /** Distinct Medium+High threats in the next 3 days (Π3). */
   const riskCount = useMemo(() => {
     if (!risk) return 0;
     let n = 0;
     for (const days of Object.values(risk)) {
-      if (days.slice(0, 3).some((a) => LEVEL_RANK[a.level] >= LEVEL_RANK.High)) n += 1;
+      if (days.slice(0, 3).some((a) => LEVEL_RANK[a.level] >= LEVEL_RANK.Medium)) n += 1;
     }
     return n;
   }, [risk]);
@@ -496,7 +533,6 @@ export function DashboardScreen() {
                   : t("noWeatherYet")}
             </h2>
             <p className="mt-1.5 max-w-[260px] text-ap-body text-[#5a5a5a]">{tipText}</p>
-            <AiTag source="demo" className="mt-1.5" />
             <div
               className={cn(
                 "absolute top-14 right-4 flex size-12 items-center justify-center rounded-full",
@@ -600,13 +636,19 @@ export function DashboardScreen() {
               </Link>
             }
           />
-          {fields.length === 0 ? (
+          {fieldsLoading ? (
+            <div className="mt-2.5 flex gap-2.5">
+              <Skeleton className="h-24 w-[236px] shrink-0 rounded-[18px]" />
+              <Skeleton className="h-24 w-[236px] shrink-0 rounded-[18px]" />
+            </div>
+          ) : fields.length === 0 ? (
             <p className="mt-2 text-ap-body text-muted-foreground">{t("noFieldsBody")}</p>
           ) : (
             <div className="mt-2.5 flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {shown.map((f) => {
                 const live = elevated && primary?.id === f.id ? elevated : null;
                 const liveThreat = live ? THREAT_BY_ID[live.threat] : null;
+                const score = fieldScores[f.id];
                 return (
                   <Link key={f.id} href="/farmer/fields" className="w-[236px] shrink-0">
                     <ApCard className="p-3">
@@ -624,7 +666,7 @@ export function DashboardScreen() {
                           </p>
                         </div>
                         <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-soft text-ap-body font-extrabold text-muted-foreground">
-                          —
+                          {score != null ? score : "—"}
                         </span>
                       </div>
                       {live && liveThreat ? (

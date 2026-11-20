@@ -13,12 +13,9 @@ import {
 import { predictLeafModel } from "@/features/diagnostics/leaf-space";
 import { aiRateLimiter } from "@/shared/lib/api/rate-limit";
 import { fromZodError, jsonError, jsonOk } from "@/shared/lib/api/http";
+import { requireApiUser } from "@/shared/lib/api/require-user";
 
 export const runtime = "nodejs";
-
-function clientKey(request: Request): string {
-  return request.headers.get("x-device-id") ?? request.headers.get("x-forwarded-for") ?? "anon";
-}
 
 /**
  * Leaf → own TFLite model on Hugging Face Space (no Gemini).
@@ -26,7 +23,10 @@ function clientKey(request: Request): string {
  */
 export async function POST(request: Request) {
   try {
-    if (!aiRateLimiter.allow(`diagnose:${clientKey(request)}`)) {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
+    if (!aiRateLimiter.allow(`diagnose:${auth.userId}`)) {
       return jsonError("Rate limit exceeded", 429);
     }
 

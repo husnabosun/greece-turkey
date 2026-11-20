@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
   BadgeCheck,
@@ -9,18 +9,30 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers,
+  MoreHorizontal,
   RefreshCw,
   Star,
 } from "lucide-react";
 import { formatStremmata } from "@/features/fields/area";
+import { deleteFarmerField, updateFarmerField } from "@/features/fields/field-mutations";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { FieldHealthMap } from "@/features/fields/field-health-map";
 import { useFieldTrees } from "@/features/fields/use-field-trees";
+import {
+  defaultVarietySlug,
+  resolveOliveCountry,
+  varietiesGrouped,
+  varietyLabel,
+} from "@/features/fields/olive-varieties";
+import { BottomSheet } from "@/features/marketplace/processor-kit";
 import { publicEnv } from "@/core/config/env";
+import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { Chip, FieldChips, Pill } from "@/shared/components/brand";
 import { Link, useRouter } from "@/shared/i18n/navigation";
+import type { Field } from "@/shared/types/database";
 import { FIELD_DOTS, colors } from "@/shared/theme/tokens";
 import { threatLabel } from "@/features/weather-risk/threat-labels";
+import { cn } from "@/shared/lib/utils";
 
 function scoreFromNotes(notes: string | null | undefined): number | null {
   if (!notes) return null;
@@ -36,12 +48,35 @@ function scoreFromNotes(notes: string | null | undefined): number | null {
 export function FieldsScreen() {
   const t = useTranslations("farmerFields");
   const tThreats = useTranslations("riskThreats");
+  const locale = useLocale();
   const router = useRouter();
-  const { fields, loading } = useFarmerFields();
+  const { fields, loading, reload } = useFarmerFields();
   const [showHealth, setShowHealth] = useState(true);
   const [selectedId, setSelectedId] = useState<string | "all">("all");
   const [selectedTreeId, setSelectedTreeId] = useState<number | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editTrees, setEditTrees] = useState("");
+  const [editVariety, setEditVariety] = useState("koroneiki");
+  const [editIrrigated, setEditIrrigated] = useState(false);
+  const [profileCountry, setProfileCountry] = useState<"GR" | "TR" | null>(null);
   const token = publicEnv.NEXT_PUBLIC_MAPBOX_TOKEN || undefined;
+
+  useEffect(() => {
+    const supabase = tryCreateBrowserClient();
+    if (!supabase) return;
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("profiles").select("country").eq("id", user.id).maybeSingle();
+      if (data?.country === "GR" || data?.country === "TR") setProfileCountry(data.country);
+    })();
+  }, []);
 
   const viewFields = useMemo(
     () =>
@@ -68,7 +103,69 @@ export function FieldsScreen() {
 
   const showAll = selectedId === "all";
   const active = showAll ? null : (viewFields.find((f) => f.id === selectedId) ?? viewFields[0] ?? null);
+  const activeRaw: Field | null = active ? (fields.find((f) => f.id === active.id) ?? null) : null;
   const { trees, defaultSelectedId } = useFieldTrees(active?.id);
+
+  const varietyGroups = useMemo(() => {
+    const lon = activeRaw?.lon ?? null;
+    return varietiesGrouped(locale, lon, profileCountry, true);
+  }, [locale, activeRaw?.lon, profileCountry]);
+
+  function openEdit() {
+    if (!activeRaw) return;
+    setEditName(activeRaw.name);
+    setEditTrees(activeRaw.tree_count != null ? String(activeRaw.tree_count) : "");
+    setEditVariety(activeRaw.variety_slug ?? activeRaw.variety ?? defaultVarietySlug(resolveOliveCountry({ locale, lon: activeRaw.lon, profileCountry }).country));
+    setEditIrrigated(activeRaw.irrigated);
+    setMenuOpen(false);
+    setEditOpen(true);
+  }
+
+  async function saveEdit() {
+    if (!activeRaw) return;
+    const trees = editTrees.trim() === "" ? null : Number(editTrees.replace(",", "."));
+    if (trees != null && (!Number.isFinite(trees) || trees < 1 || trees > 5000)) {
+      toast.error(t("invalidTrees"));
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await updateFarmerField({
+        fieldId: activeRaw.id,
+        name: editName,
+        treeCount: trees == null ? null : Math.round(trees),
+        varietySlug: editVariety,
+        irrigated: editIrrigated,
+      });
+      if (!res.ok) {
+        toast.error(res.error === "needName" ? t("needName") : res.error ?? t("saveFailed"));
+        return;
+      }
+      toast.success(t("updatedOk"));
+      setEditOpen(false);
+      await reload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!activeRaw) return;
+    setBusy(true);
+    try {
+      const res = await deleteFarmerField(activeRaw.id);
+      if (!res.ok) {
+        toast.error(res.error ?? t("saveFailed"));
+        return;
+      }
+      toast.success(t("deletedOk"));
+      setDeleteOpen(false);
+      setSelectedId("all");
+      await reload();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     setSelectedTreeId(defaultSelectedId);
@@ -112,14 +209,25 @@ export function FieldsScreen() {
             <h1 className="flex-1 text-[20px] font-extrabold tracking-tight text-ink">
               {showAll ? t("allFieldsTitle") : t("myField")}
             </h1>
-            <button
-              type="button"
-              aria-label={t("layers")}
-              onClick={() => toast(t("layersOn"))}
-              className="flex size-9 items-center justify-center rounded-full border border-line bg-card"
-            >
-              <Layers className="size-[18px]" aria-hidden />
-            </button>
+            {activeRaw ? (
+              <button
+                type="button"
+                aria-label={t("fieldMenu")}
+                onClick={() => setMenuOpen(true)}
+                className="flex size-9 items-center justify-center rounded-full border border-line bg-card"
+              >
+                <MoreHorizontal className="size-[18px]" aria-hidden />
+              </button>
+            ) : (
+              <button
+                type="button"
+                aria-label={t("layers")}
+                onClick={() => toast(t("layersOn"))}
+                className="flex size-9 items-center justify-center rounded-full border border-line bg-card"
+              >
+                <Layers className="size-[18px]" aria-hidden />
+              </button>
+            )}
           </div>
 
           {loading ? (
@@ -214,17 +322,31 @@ export function FieldsScreen() {
 
         <div className="shrink-0 space-y-1.5 border-t border-line bg-background px-4 pt-2 pb-[calc(5rem+env(safe-area-inset-bottom))] md:px-6 md:pb-6">
           {active ? (
-            <Link
-              href={`/farmer/fields/${active.id}/score`}
-              className="flex h-10 w-full items-center gap-2 rounded-xl border border-line bg-card px-3 text-left"
-            >
-              <BadgeCheck className="size-4 shrink-0 text-good" aria-hidden />
-              <span className="min-w-0 flex-1">
-                <span className="block text-ap-small font-extrabold text-ink">{t("scoreCta")}</span>
-                <span className="block text-[10px] font-medium text-muted-foreground">{t("scoreCtaHint")}</span>
-              </span>
-              <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            </Link>
+            <>
+              {activeRaw ? (
+                <p className="rounded-xl bg-soft px-3 py-2 text-ap-small text-muted-foreground">
+                  {[
+                    activeRaw.variety_slug || activeRaw.variety
+                      ? varietyLabel(activeRaw.variety_slug ?? activeRaw.variety, locale)
+                      : null,
+                    activeRaw.irrigated ? t("irrigatedYes") : t("irrigatedNo"),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              ) : null}
+              <Link
+                href={`/farmer/fields/${active.id}/score`}
+                className="flex h-10 w-full items-center gap-2 rounded-xl border border-line bg-card px-3 text-left"
+              >
+                <BadgeCheck className="size-4 shrink-0 text-good" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-ap-small font-extrabold text-ink">{t("scoreCta")}</span>
+                  <span className="block text-[10px] font-medium text-muted-foreground">{t("scoreCtaHint")}</span>
+                </span>
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              </Link>
+            </>
           ) : showAll && viewFields[0] ? (
             <p className="rounded-xl bg-soft px-3 py-2 text-ap-small text-muted-foreground">{t("pickFieldForScore")}</p>
           ) : null}
@@ -289,6 +411,107 @@ export function FieldsScreen() {
           </div>
         </div>
       </div>
+
+      <BottomSheet open={menuOpen} onClose={() => setMenuOpen(false)} title={t("fieldMenu")}>
+        <button
+          type="button"
+          onClick={openEdit}
+          className="flex h-12 w-full items-center rounded-xl border border-line px-4 text-left text-ap-body font-bold text-ink"
+        >
+          {t("editField")}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMenuOpen(false);
+            setDeleteOpen(true);
+          }}
+          className="flex h-12 w-full items-center rounded-xl border border-risk/30 bg-risk-soft px-4 text-left text-ap-body font-bold text-risk"
+        >
+          {t("deleteField")}
+        </button>
+      </BottomSheet>
+
+      <BottomSheet
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        title={t("editField")}
+        actionLabel={busy ? t("saving") : t("saveField")}
+        onAction={() => void saveEdit()}
+      >
+        <label className="block text-ap-small font-bold text-muted-foreground">
+          {t("fieldName")}
+          <input
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            className="mt-1 h-11 w-full rounded-xl border border-line px-3 text-ap-body font-bold text-ink outline-none"
+          />
+        </label>
+        <label className="block text-ap-small font-bold text-muted-foreground">
+          {t("numberOfTrees")}
+          <input
+            value={editTrees}
+            inputMode="numeric"
+            onChange={(e) => setEditTrees(e.target.value.replace(/[^\d]/g, ""))}
+            className="mt-1 h-11 w-full rounded-xl border border-line px-3 text-ap-body font-bold text-ink outline-none"
+          />
+        </label>
+        <div>
+          <p className="text-ap-small font-bold text-muted-foreground">{t("oliveVariety")}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {varietyGroups.flatMap((g) => g.items).map((v) => (
+              <button
+                key={v.slug}
+                type="button"
+                onClick={() => setEditVariety(v.slug)}
+                className={cn(
+                  "h-9 rounded-full border px-3 text-ap-pill font-bold",
+                  editVariety === v.slug ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
+                )}
+              >
+                {varietyLabel(v, locale)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-ap-small font-bold text-muted-foreground">{t("irrigatedQ")}</p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setEditIrrigated(true)}
+              className={cn(
+                "h-9 rounded-full border px-4 text-ap-pill font-bold",
+                editIrrigated ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
+              )}
+            >
+              {t("yes")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditIrrigated(false)}
+              className={cn(
+                "h-9 rounded-full border px-4 text-ap-pill font-bold",
+                !editIrrigated ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
+              )}
+            >
+              {t("no")}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title={t("deleteField")}
+        actionLabel={busy ? t("saving") : t("confirmDelete")}
+        onAction={() => void confirmDelete()}
+      >
+        <p className="text-ap-body text-muted-foreground">
+          {t("deleteFieldHint", { name: activeRaw?.name ?? "" })}
+        </p>
+      </BottomSheet>
     </div>
   );
 }
