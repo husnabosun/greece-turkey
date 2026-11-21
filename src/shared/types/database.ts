@@ -330,6 +330,23 @@ export type Database = {
         };
         Returns: string;
       };
+      counter_offer: {
+        Args: { p_offer_id: string; p_price_per_kg: number };
+        Returns: string;
+      };
+      advance_delivery: {
+        Args: {
+          p_delivery_id: string;
+          p_next: DeliveryStatus;
+          p_actual_kg?: number | null;
+          p_lab_result?: LabResult | null;
+        };
+        Returns: Delivery;
+      };
+      cancel_delivery: {
+        Args: { p_delivery_id: string; p_reason?: string | null };
+        Returns: Delivery;
+      };
       create_field_from_geojson: {
         Args: {
           p_name: string;

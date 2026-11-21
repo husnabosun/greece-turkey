@@ -66,6 +66,8 @@ export async function POST(request: Request) {
     email,
     password,
     email_confirm: true,
+    // The DB trigger reads the role ONLY from app_metadata (service role), never from user_metadata.
+    app_metadata: { role },
     user_metadata: {
       role,
       locale,
