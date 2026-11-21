@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpDown, FlaskConical, Leaf, Plus, Search, SlidersHorizontal, X } from "lucide-react";
 import { toast } from "sonner";
@@ -13,8 +14,18 @@ import { Chip } from "@/shared/components/brand/chip";
 import { Link, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 import { trustBadges } from "@/features/marketplace/badges";
-import { formatEuro, formatEuroPerKg, formatTons } from "@/features/marketplace/pricing";
-import { LotsMap } from "./lots-map";
+import {
+  MARKET_LIMITS,
+  formatEuro,
+  formatEuroPerKg,
+  formatTons,
+  parseBounded,
+} from "@/features/marketplace/pricing";
+// Mapbox (~1 MB) is only fetched when a map is actually on screen.
+const LotsMap = dynamic(() => import("./lots-map").then((m) => m.LotsMap), {
+  ssr: false,
+  loading: () => <div className="w-full animate-pulse rounded-[18px] bg-soft" style={{ height: 360 }} />,
+});
 import {
   Amount,
   BottomSheet,
@@ -43,7 +54,7 @@ import {
   useProcessorMarket,
   type ProcessorLot,
 } from "./use-processor-market";
-import { useErrorMessage } from "@/shared/lib/error-message";
+import { useBoundsMessage, useErrorMessage } from "@/shared/lib/error-message";
 
 type SortKey = "score" | "price" | "harvest" | "tons";
 type MobileView = "list" | "map";
@@ -123,6 +134,7 @@ function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"p
 export function ProcessorLotsScreen() {
   const t = useTranslations("processor");
   const errMsg = useErrorMessage();
+  const boundsMsg = useBoundsMessage();
   const locale = useLocale();
   const router = useRouter();
   const varietyLabel = useVarietyLabel();
@@ -248,13 +260,22 @@ export function ProcessorLotsScreen() {
       toast.error(t("identityHidden"));
       return;
     }
-    const tons = Number(offerTons);
-    const price = Number(offerPrice);
-    if (!(tons > 0) || !(price > 0)) {
-      toast.error(t("invalidOfferValues"));
+    const tc = parseBounded(String(offerTons), {
+      min: MARKET_LIMITS.lotTons.min,
+      max: Math.min(MARKET_LIMITS.lotTons.max, offerLot.tons ?? MARKET_LIMITS.lotTons.max),
+    });
+    if (!tc.ok) {
+      toast.error(boundsMsg(tc, "tons", locale));
       return;
     }
-    toast.message(t("sendingOffer"));
+    const pc = parseBounded(String(offerPrice), MARKET_LIMITS.pricePerKg);
+    if (!pc.ok) {
+      toast.error(boundsMsg(pc, "price", locale));
+      return;
+    }
+    const tons = tc.value;
+    const price = pc.value;
+    const toastId = toast.loading(t("sendingOffer"));
     const deliveryInDays = Math.max(
       0,
       Math.round(
@@ -270,10 +291,10 @@ export function ProcessorLotsScreen() {
       deliveryInDays,
     });
     if (!res.ok) {
-      toast.error(errMsg(res.error, "saveFailed"));
+      toast.error(errMsg(res.error, "saveFailed"), { id: toastId });
       return;
     }
-    toast.success(t("offerSentDetail"));
+    toast.success(t("offerSentDetail"), { id: toastId });
     setOfferLot(null);
     await reload();
   };
@@ -288,7 +309,7 @@ export function ProcessorLotsScreen() {
   const filtersBody = (
     <>
       <div className="flex flex-col gap-1.5">
-        <p className="text-[11px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{t("variety")}</p>
+        <p className="text-[12px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{t("variety")}</p>
         <div className="flex flex-wrap gap-2">
           <Chip tone="black" on={variety === "all"} onClick={() => setVariety("all")} className={CHIP_TOUCH}>
             <span className={cn("text-[12px] font-bold", variety === "all" ? "text-white" : "text-ink")}>{t("filterAll")}</span>
@@ -316,7 +337,7 @@ export function ProcessorLotsScreen() {
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{t("minScore")}</p>
+          <p className="text-[12px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{t("minScore")}</p>
           <p className="text-[13px] font-extrabold text-ink">
             {minScore <= 0 ? t("allScores") : t("minScoreValue", { score: minScore })}
           </p>
@@ -634,7 +655,7 @@ export function ProcessorLotsScreen() {
         title={t("makeOffer")}
         subtitle={offerLot ? `${varietyLabel(offerLot.variety)} · ${formatTons(offerLot.tons, locale)}` : undefined}
         actionLabel={t("sendOffer")}
-        onAction={() => void submitOffer()}
+        onAction={() => submitOffer()}
       >
         <TextField label={t("tons")} value={offerTons} onChange={setOfferTons} suffix="t" inputMode="decimal" />
         <TextField label={t("price")} value={offerPrice} onChange={setOfferPrice} suffix="€/kg" inputMode="decimal" />

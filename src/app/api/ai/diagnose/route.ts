@@ -13,6 +13,7 @@ import { aiRateLimiter } from "@/shared/lib/api/rate-limit";
 import { fromZodError, jsonError, jsonOk } from "@/shared/lib/api/http";
 import { requireApiUser } from "@/shared/lib/api/require-user";
 import { checkImageBase64 } from "@/features/diagnostics/image-check";
+import { LANGUAGE_NAME } from "@/features/diagnostics/schemas";
 
 export const runtime = "nodejs";
 
@@ -70,9 +71,11 @@ export async function POST(request: Request) {
       });
     }
 
-    const contextLine = body.context
-      ? `\nField context: ${JSON.stringify(body.context)}`
-      : "";
+    const contextLine =
+      (body.context ? `\nField context: ${JSON.stringify(body.context)}` : "") +
+      (body.language
+        ? `\nWrite every free-text field (symptoms, notes) in ${LANGUAGE_NAME[body.language]}. Keep the enum values (diagnosis) in English exactly as listed.`
+        : "");
 
     if (body.mode === "fruit") {
       const live = await geminiJsonDetailed({

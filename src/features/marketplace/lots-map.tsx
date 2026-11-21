@@ -311,7 +311,7 @@ export function LotsMap({
                     </div>
                     {preview.score != null ? (
                       <div className="flex shrink-0 flex-col items-center rounded-lg bg-good-soft px-2 py-1">
-                        <span className="text-[9px] font-semibold text-good">{labels.qualityScore}</span>
+                        <span className="text-[12px] font-semibold text-good">{labels.qualityScore}</span>
                         <span className="text-[16px] leading-5 font-extrabold text-good">{preview.score}</span>
                       </div>
                     ) : null}
@@ -321,7 +321,7 @@ export function LotsMap({
                     <button
                       type="button"
                       onClick={() => onOpenLotRef.current?.(preview.id)}
-                      className="inline-flex min-h-9 items-center rounded-full px-2.5 text-[11px] font-bold tracking-wide text-muted-foreground uppercase transition-colors hover:bg-ink hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+                      className="inline-flex min-h-9 items-center rounded-full px-2.5 text-[12px] font-bold tracking-wide text-muted-foreground uppercase transition-colors hover:bg-ink hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
                       aria-label={`${labels.openLot}: ${preview.title}`}
                     >
                       {labels.openLot}

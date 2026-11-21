@@ -142,9 +142,28 @@ export function parseLocaleNumber(raw: string): number | null {
     if (/^\d{1,3}(,\d{3})+$/.test(s) && s.split(",").length > 2) s = s.split(",").join("");
     else s = s.replace(",", ".");
   } else if (hasDot) {
-    if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.split(".").join("");
+    if (/^[1-9]\d{0,2}(\.\d{3})+$/.test(s)) s = s.split(".").join("");
   }
   if (!/^\d+(\.\d+)?$/.test(s)) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
+}
+
+/** Same bounds the database CHECK constraints enforce (see migration 20261121020000). */
+export const MARKET_LIMITS = {
+  lotTons: { min: 0.1, max: 500 },
+  pricePerKg: { min: 0.05, max: 20 },
+  requestTons: { min: 0.1, max: 2000 },
+} as const;
+
+export type BoundedResult =
+  | { ok: true; value: number }
+  | { ok: false; reason: "invalid" | "tooLow" | "tooHigh"; min: number; max: number };
+
+export function parseBounded(raw: string, bounds: { min: number; max: number }): BoundedResult {
+  const n = parseLocaleNumber(raw);
+  if (n == null || n <= 0) return { ok: false, reason: "invalid", ...bounds };
+  if (n < bounds.min) return { ok: false, reason: "tooLow", ...bounds };
+  if (n > bounds.max) return { ok: false, reason: "tooHigh", ...bounds };
+  return { ok: true, value: n };
 }

@@ -24,6 +24,8 @@ import {
   formatEuroPerKg,
   formatTons,
   saleTotal,
+  MARKET_LIMITS,
+  parseBounded,
 } from "@/features/marketplace/pricing";
 import { trustBadges } from "@/features/marketplace/badges";
 import { canAdvanceDelivery } from "@/features/marketplace/delivery-state";
@@ -39,6 +41,7 @@ import {
   WeekStrip,
   type LotBadge,
   type WeekDayCell,
+  useAsyncDialog,
 } from "./processor-kit";
 import { regionLabel } from "./regions";
 import {
@@ -61,7 +64,7 @@ import {
   type ProcessorOffer,
 } from "./use-processor-market";
 import { useVarietyLabel } from "./processor-shared";
-import { useErrorMessage } from "@/shared/lib/error-message";
+import { useBoundsMessage, useErrorMessage } from "@/shared/lib/error-message";
 
 function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"processor">>): LotBadge[] {
   const trust = trustBadges(
@@ -116,12 +119,13 @@ function SupplyWeekBars({
   globalMax: number;
   compact?: boolean;
 }) {
+  const locale = useLocale();
   const max = Math.max(1, globalMax);
   if (compact) {
     return (
       <div className="flex h-8 items-end gap-1">
         {weekTons.map((tons, i) => (
-          <div key={labels[i]} className="flex h-full w-3 items-end rounded-sm bg-soft" title={`${tons} t`}>
+          <div key={labels[i]} className="flex h-full w-3 items-end rounded-sm bg-soft" title={formatTons(tons, locale)}>
             {tons > 0 ? (
               <div
                 className="w-full rounded-sm bg-good"
@@ -142,12 +146,12 @@ function SupplyWeekBars({
               <div
                 className="w-full max-w-[28px] rounded-sm bg-good"
                 style={{ height: `${Math.max(6, Math.round((tons / max) * 100))}%` }}
-                title={`${tons} t`}
+                title={formatTons(tons, locale)}
               />
             ) : null}
           </div>
-          <span className="text-[10px] font-semibold text-muted-foreground">{labels[i]}</span>
-          <span className="text-[11px] font-bold text-ink">{tons > 0 ? formatTons(tons) : "–"}</span>
+          <span className="text-[12px] font-semibold text-muted-foreground">{labels[i]}</span>
+          <span className="text-[12px] font-bold text-ink">{tons > 0 ? formatTons(tons, locale) : "–"}</span>
         </div>
       ))}
     </div>
@@ -157,6 +161,8 @@ function SupplyWeekBars({
 export function ProcessorOverviewScreen() {
   const t = useTranslations("processor");
   const errMsg = useErrorMessage();
+  const boundsMsg = useBoundsMessage();
+  const { confirm: confirmDialog, prompt: promptDialog, dialog: asyncDialog } = useAsyncDialog();
   const tNav = useTranslations("processorNav");
   const locale = useLocale();
   const router = useRouter();
@@ -205,14 +211,14 @@ export function ProcessorOverviewScreen() {
   const onAcceptConfirm = async () => {
     if (!acceptOffer) return;
     setBusyOfferId(acceptOffer.id);
-    toast.message(t("accepting"));
+    const toastId = toast.loading(t("accepting"));
     try {
       const res = await acceptIncomingOffer(acceptOffer.id, { scheduledFor: acceptDate });
       if (!res.ok) {
-        toast.error(errMsg(res.error, "saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"), { id: toastId });
         return;
       }
-      toast.success(t("acceptedScheduled", { date: acceptDate }));
+      toast.success(t("acceptedScheduled", { date: new Date(`${acceptDate}T12:00:00`).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" }) }), { id: toastId });
       setAcceptOffer(null);
       setSelectedDay(acceptDate);
       await reload();
@@ -223,25 +229,26 @@ export function ProcessorOverviewScreen() {
 
   const onCounter = async (offer: ProcessorOffer) => {
     const suggested = Math.max(0.05, Math.round((offer.pricePerKg - 0.05) * 100) / 100);
-    const raw = window.prompt(t("counterPrompt"), String(suggested));
+    const raw = await promptDialog(t("counterPrompt"), String(suggested).replace(".", ","));
     if (raw == null) {
       toast.message(t("counterCancelled"));
       return;
     }
-    const next = Number(raw.replace(",", "."));
-    if (!Number.isFinite(next) || next <= 0) {
-      toast.error(t("invalidPrice"));
+    const pc = parseBounded(raw, MARKET_LIMITS.pricePerKg);
+    if (!pc.ok) {
+      toast.error(boundsMsg(pc, "price", locale));
       return;
     }
+    const next = pc.value;
     setBusyOfferId(offer.id);
-    toast.message(t("countering"));
+    const toastId = toast.loading(t("countering"));
     try {
       const res = await counterIncomingOffer(offer, next);
       if (!res.ok) {
-        toast.error(errMsg(res.error, "saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"), { id: toastId });
         return;
       }
-      toast.success(t("counterSentDetail"));
+      toast.success(t("counterSentDetail"), { id: toastId });
       await reload();
     } finally {
       setBusyOfferId(null);
@@ -249,7 +256,7 @@ export function ProcessorOverviewScreen() {
   };
 
   const onReject = async (offer: ProcessorOffer) => {
-    if (!window.confirm(t("rejectConfirm"))) return;
+    if (!(await confirmDialog(t("rejectConfirm")))) return;
     setBusyOfferId(offer.id);
     try {
       const res = await rejectOffer(offer.id);
@@ -331,6 +338,7 @@ export function ProcessorOverviewScreen() {
 
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-6">
+      {asyncDialog}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-[240px] shrink">
           <p className="text-[13px] font-semibold text-muted-foreground capitalize">{greet.date}</p>
@@ -507,7 +515,7 @@ export function ProcessorOverviewScreen() {
                       type="button"
                       disabled={schedulingId === d.id}
                       onClick={() => void onQuickSchedule(d.id, iso)}
-                      className="rounded-full border border-line bg-card px-2.5 py-1 text-[11px] font-bold text-ink hover:bg-soft disabled:opacity-50"
+                      className="rounded-full border border-line bg-card px-2.5 py-1 text-[12px] font-bold text-ink hover:bg-soft disabled:opacity-50"
                     >
                       {iso === todayIsoDate() ? t("todayShort") : formatChipDay(iso)}
                     </button>
@@ -526,7 +534,7 @@ export function ProcessorOverviewScreen() {
         subtitle={t("offerDetailHint")}
         actionLabel={busyOfferId ? t("loading") : t("accept")}
         actionDisabled={busyOfferId != null}
-        onAction={() => void onAcceptConfirm()}
+        onAction={() => onAcceptConfirm()}
       >
         {acceptOffer ? (
           <div className="mb-4 space-y-2 rounded-xl bg-soft p-3">
@@ -542,7 +550,7 @@ export function ProcessorOverviewScreen() {
                     tons: acceptOffer.tons,
                     region: regionLabel(acceptOffer.lot.region, locale),
                   })
-                : `${acceptOffer.tons} t`}
+                : formatTons(acceptOffer.tons, locale)}
             </p>
             <p className="text-[18px] font-extrabold text-ink">
               {formatEuroPerKg(acceptOffer.pricePerKg, locale)}
@@ -747,7 +755,7 @@ export function ProcessorOverviewScreen() {
                   >
                     <div className="min-w-0">
                       <p className="truncate text-[14px] font-extrabold text-ink">{regionLabel(row.region, locale)}</p>
-                      <p className="text-[11px] font-medium text-muted-foreground">{formatTons(total, locale)}</p>
+                      <p className="text-[12px] font-medium text-muted-foreground">{formatTons(total, locale)}</p>
                     </div>
                     <SupplyWeekBars weekTons={row.weekTons} labels={weekLabels} globalMax={supplyGlobalMax} compact />
                   </div>

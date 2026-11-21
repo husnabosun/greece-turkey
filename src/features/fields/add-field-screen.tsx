@@ -19,6 +19,7 @@ import {
 } from "@/features/fields/olive-varieties";
 import { useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
+import { parseTreeCount, useErrorMessage } from "@/shared/lib/error-message";
 
 const FieldMapEditor = dynamic(() => import("./field-map-editor").then((m) => m.FieldMapEditor), {
   ssr: false,
@@ -39,6 +40,7 @@ const TREES_PER_HA = 130;
  */
 export function AddFieldScreen() {
   const t = useTranslations("farmerFields");
+  const errMsg = useErrorMessage();
   const locale = useLocale();
   const router = useRouter();
   const token = publicEnv.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -70,10 +72,7 @@ export function AddFieldScreen() {
   );
 
   function parseTrees(): number | null {
-    const n = Number(treesText.replace(/\s/g, "").replace(",", "."));
-    if (!Number.isFinite(n) || n < 1) return null;
-    if (n > 5000) return null;
-    return Math.round(n);
+    return parseTreeCount(treesText);
   }
 
   useEffect(() => {
@@ -177,7 +176,7 @@ export function AddFieldScreen() {
 
       if (error) {
         saveLock.current = false;
-        toast.error(error.message);
+        toast.error(errMsg(error.message, "saveFailed"));
         return;
       }
 
@@ -211,7 +210,7 @@ export function AddFieldScreen() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t("nameExample")}
-              maxLength={24}
+              maxLength={80}
               className="h-full min-w-0 flex-1 bg-transparent text-ap-card font-bold text-ink outline-none placeholder:text-muted-foreground"
             />
             <button
@@ -271,17 +270,11 @@ export function AddFieldScreen() {
                   value={treesText}
                   onChange={(e) => {
                     setTreesTouched(true);
-                    setTreesText(e.target.value.replace(/[^\d]/g, ""));
+                    // Keep exactly what was typed; invalid input is flagged below, never rewritten.
+                    setTreesText(e.target.value.slice(0, 7));
                   }}
-                  onBlur={() => {
-                    const n = parseTrees();
-                    if (n == null) {
-                      toast.message(t("invalidTrees"));
-                      return;
-                    }
-                    setTreesText(String(n));
-                  }}
-                  className="w-14 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none"
+                  aria-invalid={treesText.trim() !== "" && parseTrees() == null}
+                  className="w-16 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none"
                 />
                 <RoundBtn
                   label={t("more")}
@@ -294,6 +287,11 @@ export function AddFieldScreen() {
                   <Plus className="size-4" />
                 </RoundBtn>
               </div>
+              {treesText.trim() !== "" && parseTrees() == null ? (
+                <p className="mt-1 text-ap-small font-semibold text-risk" role="alert">
+                  {t("invalidTrees")}
+                </p>
+              ) : null}
               {satelliteTrees != null && treesTouched ? (
                 <button
                   type="button"
@@ -357,7 +355,7 @@ export function AddFieldScreen() {
             <div className="mt-2 space-y-2.5">
               {varietyGroups.map((group) => (
                 <div key={group.origin}>
-                  <p className="mb-1 text-[10px] font-bold tracking-[0.6px] text-muted-foreground uppercase">
+                  <p className="mb-1 text-[12px] font-bold tracking-[0.6px] text-muted-foreground uppercase">
                     {t(group.labelKey)}
                   </p>
                   <div className="flex flex-wrap gap-1.5">

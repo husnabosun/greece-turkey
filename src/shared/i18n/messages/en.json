@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Agro Pulse AI",
+    "title": "AgroPulse",
     "description": "AgriTech & B2B olive oil supply-chain platform for Greece and Turkey."
   },
   "landing": {
@@ -44,6 +44,13 @@
       "rateLimited": "Too many attempts. Please wait a moment.",
       "needName": "Enter a name.",
       "unavailable": "The service isn't available right now."
+    },
+    "bounds": {
+      "invalid": "Enter a positive number (e.g. 2.5)",
+      "tooLow": "Minimum {min} {unit}",
+      "tooHigh": "Maximum {max} {unit}",
+      "unitTons": "t",
+      "unitPrice": "€/kg"
     }
   },
   "common": {
@@ -51,7 +58,10 @@
     "aiGemini": "AI · Gemini",
     "aiModel": "AI · Model",
     "language": "Language",
-    "close": "Close"
+    "close": "Close",
+    "confirmTitle": "Please confirm",
+    "cancel": "Cancel",
+    "ok": "OK"
   },
   "roles": {
     "farmer": "Farmer",
@@ -62,7 +72,7 @@
     "registerTitle": "Create account",
     "loginSubtitle": "Sign in to open your workspace.",
     "registerSubtitle": "Choose a role and create your account.",
-    "subtitle": "Enter Agro Pulse.",
+    "subtitle": "Enter AgroPulse.",
     "roleFarmer": "Farmer",
     "roleProcessor": "Processor",
     "displayName": "Display name",
@@ -143,7 +153,19 @@
     "labFailed": "Lab failed",
     "paymentDone": "Payment completed",
     "highRisk": "High risk",
-    "checkField": "Check your field"
+    "checkField": "Check your field",
+    "offerBodyFmt": "{variety} · {tons} × {price} ≈ {total}",
+    "deliveryBodyFmt": "{tons} × {price} = {total} · {status}",
+    "offerSentWaiting": "Your offer is awaiting a reply",
+    "deliveryCancelled": "Pickup cancelled",
+    "deliveryStatus": {
+      "scheduled": "Scheduled",
+      "weighed": "Weighed",
+      "lab_checked": "Lab checked",
+      "paid": "Paid",
+      "cancelled": "Cancelled",
+      "unknown": "In progress"
+    }
   },
   "farmerHome": {
     "title": "Today",
@@ -193,7 +215,7 @@
     "noBigRisks": "No big risks in the next 3 days",
     "keepChecks": "Keep your normal checks.",
     "tasksRatio": "{done} / {total} tasks",
-    "risksCount": "{n} risks",
+    "risksCount": "{n, plural, one {# risk} other {# risks}}",
     "recheckCount": "{n, plural, one {# re-check} other {# re-checks}}",
     "offersCount": "{n, plural, one {# offer} other {# offers}}",
     "profileSettings": "Profile & settings",
@@ -264,7 +286,7 @@
     "layersOn": "Map layers on",
     "layersOff": "Map layers off",
     "add": "+ Add",
-    "treesCount": "{n} trees",
+    "treesCount": "{n, plural, one {# tree} other {# trees}}",
     "treeCount": "Tree count",
     "haCount": "{n} stremmata",
     "areaWithHa": "{label} · {n} stremmata",
@@ -279,7 +301,7 @@
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
     "treeN": "Tree #{id}",
-    "followUp": "{n} trees need follow-up",
+    "followUp": "{n, plural, one {# tree needs follow-up} other {# trees need follow-up}}",
     "view": "View",
     "selectTree": "Select a tree",
     "noTreeYet": "No tree health data yet.",
@@ -468,7 +490,7 @@
     "replaceCardSub": "When it is full",
     "sendPhoto": "Send a photo",
     "sendPhotoSub": "Again next week",
-    "trapTitle": "Fly trap · {n} flies",
+    "trapTitle": "Fly trap · {n, plural, one {# fly} other {# flies}}",
     "healthyLeaf": "Healthy leaf",
     "peacock": "Peacock spot",
     "budMite": "Olive bud mite",
@@ -519,7 +541,7 @@
     "needLogin": "Sign in to save sprays.",
     "needSupabase": "Supabase is not configured.",
     "saveFailed": "Could not save the spray.",
-    "safeHarvestDays": "{n} days",
+    "safeHarvestDays": "{n, plural, one {# day} other {# days}}",
     "labelOk": "Label read ({source}).",
     "labelFail": "Could not read the label.",
     "reading": "Reading…",
@@ -655,7 +677,7 @@
     "activeDeliveriesHint": "{count, plural, =0 {No active deliveries.} one {# active delivery.} other {# active deliveries.}}",
     "pickupOn": "Pickup",
     "unscheduledShort": "Pickup date pending",
-    "tonsShort": "{n} tons",
+    "tonsShort": "{n, plural, one {# ton} other {# tons}}",
     "nextPickupHint": "Next: get ready for the scheduled pickup.",
     "nextLabHint": "Next: the mill finishes the lab check.",
     "nextPaidHint": "Next: waiting for payment after lab confirmation.",
@@ -791,7 +813,7 @@
     "qualityScore": "Quality score",
     "noExchange": "No exchange data for this area",
     "setByMarket": "Set by the market, not by AgroPulse.",
-    "treesPill": "{n} trees",
+    "treesPill": "{n, plural, one {# tree} other {# trees}}",
     "haPill": "{n} stremmata",
     "period1": "3–10 Nov",
     "period2": "10–17 Nov",
@@ -804,7 +826,12 @@
     "closedLabFailed": "Rejected at the lab",
     "closedLabFailedHint": "The mill returned the lot without payment. Talk to them about the results.",
     "closedCancelled": "Cancelled",
-    "closedCancelledHint": "The buyer cancelled the pickup. Your listing is back on the market."
+    "closedCancelledHint": "The buyer cancelled the pickup. Your listing is back on the market.",
+    "fieldNotListed": "Not listed",
+    "needRegion": "This mill buys from: {region}",
+    "needScoreUnknown": "Your field needs a quality score first",
+    "needUnsoldField": "The harvest of your matching fields is already sold",
+    "noOffersAnyHint": "List your harvest so mills can bid, or send an offer to a mill's request."
   },
   "processorNav": {
     "overview": "Overview",
@@ -960,7 +987,7 @@
     "noBannedProducts": "No banned products",
     "labTestSuggested": "Lab test suggested",
     "completeRecords": "Complete records",
-    "lotsCount": "{count} lots",
+    "lotsCount": "{count, plural, one {# lot} other {# lots}}",
     "bestScoreFirst": "Best quality score first.",
     "noLotsMatch": "No lots match these filters yet.",
     "noLotsAvailableTitle": "No lots available right now",
@@ -973,7 +1000,7 @@
     "filtersWithCount": "Filters ({n})",
     "sort": "Sort",
     "applySort": "Apply sort",
-    "showLots": "Show {count} lots",
+    "showLots": "{count, plural, one {Show # lot} other {Show # lots}}",
     "sortBestScore": "Best score",
     "sortLowestPrice": "Lowest price",
     "sortNearestHarvest": "Nearest harvest",
@@ -1041,7 +1068,7 @@
     "weekStripEmpty": "No deliveries scheduled yet.",
     "dayDetailTitle": "{date}",
     "dayDetailEmpty": "Nothing scheduled this day.",
-    "dayDetailTons": "{n} t · {count} deliveries",
+    "dayDetailTons": "{n} t · {count, plural, one {# delivery} other {# deliveries}}",
     "unscheduledTitle": "Needs a date",
     "unscheduledHint": "Pick a day so they appear on the week strip.",
     "unscheduledShort": "No date",
@@ -1146,7 +1173,7 @@
     "deliveryPickEnd": "Now pick the last delivery day",
     "pickDeliveryDates": "Choose dates",
     "daysCount": "{count, plural, one {# day} other {# days}}",
-    "presetNextDays": "Next {count} days",
+    "presetNextDays": "{count, plural, one {Next # day} other {Next # days}}",
     "prevMonth": "Previous month",
     "nextMonth": "Next month",
     "scoreSliderHint": "You accept lots scoring {score} or higher.",
@@ -1252,7 +1279,7 @@
   },
   "farmerTasks": {
     "title": "This week",
-    "subtitle": "{n} open tasks",
+    "subtitle": "{n, plural, =0 {No open tasks} one {# open task} other {# open tasks}}",
     "thisWeek": "This week",
     "takePhoto": "Take photo",
     "addSpray": "Log spray",

@@ -8,7 +8,15 @@ import { formatStremmata } from "@/features/fields/area";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { varietyAgronomyContext, varietyLabelFromStored } from "@/features/fields/olive-varieties";
 import { DayChipPicker } from "@/features/marketplace/processor-kit";
-import { formatEuro, formatEuroPerKg, formatTons } from "@/features/marketplace/pricing";
+import {
+  MARKET_LIMITS,
+  formatEuro,
+  formatEuroPerKg,
+  formatTons,
+  parseBounded,
+  saleTotal,
+} from "@/features/marketplace/pricing";
+import { useBoundsMessage } from "@/shared/lib/error-message";
 import { publishLot } from "@/features/marketplace/save-lot";
 import { useFarmerMarket } from "@/features/marketplace/use-farmer-market";
 import { Link, useRouter } from "@/shared/i18n/navigation";
@@ -32,17 +40,16 @@ function addDaysIso(iso: string, days: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function parsePositiveNumber(raw: string): number | null {
-  const n = Number(raw.replace(",", ".").trim());
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return n;
-}
 
 function nextDays(fromIso: string, count: number) {
   return Array.from({ length: count }, (_, i) => addDaysIso(fromIso, i));
 }
 
 type Step = 1 | 2 | 3;
+
+function isCommitted(st: string | null | undefined) {
+  return st === "sold" || st === "reserved";
+}
 
 export function NewListingScreen({
   fieldId,
@@ -72,8 +79,21 @@ export function NewListingScreen({
       setCurrentId(fieldId);
       return;
     }
-    if (!fields.some((f) => f.id === currentId)) setCurrentId(fields[0]!.id);
-  }, [fields, fieldId, currentId]);
+    if (!fields.some((f) => f.id === currentId)) {
+      // Suggest a field whose harvest isn't already sold / in delivery.
+      const free = fields.find((f) => !isCommitted(fieldCards[f.id]?.lotStatus));
+      setCurrentId((free ?? fields[0]!).id);
+    }
+  }, [fields, fieldId, currentId, fieldCards]);
+  const orderedFields = useMemo(
+    () =>
+      [...fields].sort(
+        (a, b) =>
+          Number(isCommitted(fieldCards[a.id]?.lotStatus)) -
+          Number(isCommitted(fieldCards[b.id]?.lotStatus)),
+      ),
+    [fields, fieldCards],
+  );
 
   const defaultStart = useMemo(() => isoToday(), []);
   const [tonsText, setTonsText] = useState("");
@@ -89,17 +109,23 @@ export function NewListingScreen({
   const endDays = useMemo(() => nextDays(harvestStart, 14), [harvestStart]);
 
   const score = field ? fieldCards[field.id]?.qualityScore ?? null : null;
-  const tons = parsePositiveNumber(tonsText);
-  const price = parsePositiveNumber(priceText);
+  const boundsMsg = useBoundsMessage();
+  const tonsCheck = parseBounded(tonsText, MARKET_LIMITS.lotTons);
+  const priceCheck = parseBounded(priceText, MARKET_LIMITS.pricePerKg);
+  const tons = tonsCheck.ok ? tonsCheck.value : null;
+  const price = priceCheck.ok ? priceCheck.value : null;
+  const tonsError = tonsText.trim() && !tonsCheck.ok ? boundsMsg(tonsCheck, "tons", locale) : null;
+  const priceError =
+    priceText.trim() && !priceCheck.ok ? boundsMsg(priceCheck, "price", locale) : null;
 
   async function publish() {
     if (!field || publishing || publishLock.current) return;
-    if (tons == null) {
-      toast.error(t("invalidTons"));
+    if (!tonsCheck.ok) {
+      toast.error(boundsMsg(tonsCheck, "tons", locale));
       return;
     }
-    if (price == null) {
-      toast.error(t("invalidPrice"));
+    if (!priceCheck.ok) {
+      toast.error(boundsMsg(priceCheck, "price", locale));
       return;
     }
     if (!harvestStart || !harvestEnd || harvestEnd < harvestStart) {
@@ -113,8 +139,8 @@ export function NewListingScreen({
         fieldId: field.id,
         variety: field.variety,
         varietySlug: field.variety_slug ?? null,
-        tons,
-        pricePerKg: price,
+        tons: tonsCheck.value,
+        pricePerKg: priceCheck.value,
         negotiable,
         delivery,
         harvestStart,
@@ -182,9 +208,10 @@ export function NewListingScreen({
         <>
           <Label>{t("fieldLabel")}</Label>
           <div className="space-y-2">
-            {fields.map((f) => {
+            {orderedFields.map((f) => {
               const on = f.id === field?.id;
               const sc = fieldCards[f.id]?.qualityScore;
+              const st = fieldCards[f.id]?.lotStatus;
               return (
                 <button
                   key={f.id}
@@ -204,6 +231,11 @@ export function NewListingScreen({
                       {f.variety || f.variety_slug ? (
                         <span className="rounded-full bg-white/80 px-2 py-0.5 text-ap-pill font-bold text-ink">
                           {varietyLabelFromStored(f.variety_slug ?? f.variety, locale)}
+                        </span>
+                      ) : null}
+                      {isCommitted(st) ? (
+                        <span className="rounded-full bg-warn-soft px-2 py-0.5 text-ap-pill font-bold text-warn-text">
+                          {st === "sold" ? t("fieldSold") : t("fieldInDelivery")}
                         </span>
                       ) : null}
                       {f.area_ha != null ? (
@@ -251,7 +283,15 @@ export function NewListingScreen({
               />
               <span className="text-ap-body font-bold text-muted-foreground">t</span>
             </div>
-            <p className="mt-1 text-ap-small text-muted-foreground">{t("anyQuantityHint")}</p>
+            {tonsError ? (
+              <p className="mt-1 text-ap-small font-semibold text-risk" role="alert">{tonsError}</p>
+            ) : tons != null ? (
+              <p className="mt-1 text-ap-small font-semibold text-ink">
+                = {Math.round(tons * 1000).toLocaleString(locale)} kg
+              </p>
+            ) : (
+              <p className="mt-1 text-ap-small text-muted-foreground">{t("anyQuantityHint")}</p>
+            )}
           </div>
 
           <Label>{t("harvestPeriod")}</Label>
@@ -292,8 +332,8 @@ export function NewListingScreen({
             <button
               type="button"
               onClick={() => {
-                if (parsePositiveNumber(tonsText) == null) {
-                  toast.error(t("invalidTons"));
+                if (!tonsCheck.ok) {
+                  toast.error(boundsMsg(tonsCheck, "tons", locale));
                   return;
                 }
                 setStep(3);
@@ -365,6 +405,9 @@ export function NewListingScreen({
               />
               <span className="text-ap-small font-medium text-muted-foreground">{t("perKg")}</span>
             </div>
+            {priceError ? (
+              <p className="mt-1 text-ap-small font-semibold text-risk" role="alert">{priceError}</p>
+            ) : null}
           </div>
 
           <div className="mt-3 rounded-[18px] bg-soft p-3">
@@ -375,7 +418,7 @@ export function NewListingScreen({
               {" · "}
               {price != null ? formatEuroPerKg(price, locale) : "—"}
               {tons != null && price != null
-                ? ` · ≈ ${formatEuro(tons * 1000 * price, locale)}`
+                ? ` · ≈ ${formatEuro(saleTotal(tons, price), locale)}`
                 : null}
             </p>
             {score != null ? (

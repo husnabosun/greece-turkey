@@ -1,5 +1,6 @@
 "use client";
 
+import { useErrorMessage } from "@/shared/lib/error-message";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
@@ -269,6 +270,7 @@ export function ScanScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode,
+          language: locale === "tr" || locale === "en" ? locale : "el",
           imageBase64: toBase64(primary),
           imageBase64List: selected.map(toBase64),
           context,
@@ -500,7 +502,7 @@ export function ScanScreen() {
                     className="flex size-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border border-dashed border-white/40 bg-white/10 text-white"
                   >
                     <ImageIcon className="size-4" aria-hidden />
-                    <span className="text-[10px] font-bold">{t("addPhoto")}</span>
+                    <span className="text-[12px] font-bold">{t("addPhoto")}</span>
                   </button>
                 ) : null}
               </div>
@@ -751,7 +753,7 @@ function ResultView({
   onRecheck: () => void;
 }) {
   const t = useTranslations("farmerScan");
-  const tTasks = useTranslations("farmerTasks");
+  const errMsg = useErrorMessage();
   const router = useRouter();
   const { presented } = scan;
   const displayTitle = localizedScanTitle(presented, t);
@@ -772,7 +774,7 @@ function ResultView({
       kind: "recheck",
     });
     if (!result.ok) {
-      toast.error(result.error ?? tTasks("actionFailed"));
+      toast.error(errMsg(result.error, "actionFailed"));
       return;
     }
     toast.success(t("taskCreated"));

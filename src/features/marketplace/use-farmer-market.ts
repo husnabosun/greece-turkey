@@ -58,6 +58,10 @@ export type FieldMarketCard = {
   offerCount: number;
   /** Best active lot status for this field: listed | reserved | sold | null */
   lotStatus: "listed" | "reserved" | "sold" | null;
+  /** Every open listing on this field (a field can carry more than one lot). */
+  listedLots: { id: string; pricePerKg: number | null; tons: number | null }[];
+  /** Tons still unsold on this field across open listings (null when nothing listed). */
+  soldOrReservedTons: number;
 };
 
 type State = {
@@ -65,6 +69,8 @@ type State = {
   requests: MarketRequest[];
   deliveries: MarketDelivery[];
   fieldCards: Record<string, FieldMarketCard>;
+  /** Farmer's country from profile (GR/TR) — used for region matching. */
+  farmerCountry: "GR" | "TR" | null;
   loading: boolean;
   error: string | null;
 };
@@ -74,6 +80,7 @@ const EMPTY: State = {
   requests: [],
   deliveries: [],
   fieldCards: {},
+  farmerCountry: null,
   loading: true,
   error: null,
 };
@@ -105,7 +112,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         return;
       }
 
-      const [offersRes, requestsRes, deliveriesRes, lotsRes, qualityRes] = await Promise.all([
+      const [offersRes, requestsRes, deliveriesRes, lotsRes, qualityRes, meRes] = await Promise.all([
         supabase
           .from("offers")
           .select(
@@ -140,7 +147,10 @@ export function useFarmerMarket(fieldIds: string[]) {
               .in("field_id", ids)
               .order("computed_at", { ascending: false })
           : Promise.resolve({ data: [] as { field_id: string; score: number }[] }),
+        supabase.from("profiles").select("country").eq("id", user.id).maybeSingle(),
       ]);
+      const meCountry = meRes.data?.country;
+      const farmerCountry = meCountry === "GR" || meCountry === "TR" ? meCountry : null;
 
       const processorIds = [
         ...new Set([
@@ -243,12 +253,28 @@ export function useFarmerMarket(fieldIds: string[]) {
       const listedLotIdByField = new Map<string, string>();
       const lotStatusByField = new Map<string, "listed" | "reserved" | "sold">();
       const statusRank = { sold: 3, reserved: 2, listed: 1 } as const;
+      const listedLotsByField = new Map<string, FieldMarketCard["listedLots"]>();
+      const committedTonsByField = new Map<string, number>();
       for (const lot of lotsRes.data ?? []) {
         if (!lot.field_id) continue;
         const st = lot.status as "listed" | "reserved" | "sold";
         const prev = lotStatusByField.get(lot.field_id);
         if (!prev || statusRank[st] > statusRank[prev]) {
           lotStatusByField.set(lot.field_id, st);
+        }
+        if (lot.status === "listed") {
+          const arr = listedLotsByField.get(lot.field_id) ?? [];
+          arr.push({
+            id: lot.id,
+            pricePerKg: lot.price_per_kg == null ? null : Number(lot.price_per_kg),
+            tons: lot.tons == null ? null : Number(lot.tons),
+          });
+          listedLotsByField.set(lot.field_id, arr);
+        } else if (lot.tons != null) {
+          committedTonsByField.set(
+            lot.field_id,
+            (committedTonsByField.get(lot.field_id) ?? 0) + Number(lot.tons),
+          );
         }
         if (lot.status === "listed" && !listedLotIdByField.has(lot.field_id)) {
           listedLotIdByField.set(lot.field_id, lot.id);
@@ -267,6 +293,8 @@ export function useFarmerMarket(fieldIds: string[]) {
           listedLotId: listedLotIdByField.get(id) ?? null,
           offerCount: offerCountByField.get(id) ?? 0,
           lotStatus: lotStatusByField.get(id) ?? null,
+          listedLots: listedLotsByField.get(id) ?? [],
+          soldOrReservedTons: committedTonsByField.get(id) ?? 0,
         };
       }
 
@@ -275,6 +303,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         requests,
         deliveries,
         fieldCards,
+        farmerCountry,
         loading: false,
         error: offersRes.error?.message || requestsRes.error?.message || null,
       });

@@ -35,6 +35,16 @@ export function errorCode(raw?: string | null): string {
   return "actionFailed";
 }
 
+/** Whole tree count 1–5000; "1,5" / "-50" / "abc" → null (never silently rewritten). */
+export function parseTreeCount(raw: string): number | null {
+  const s = raw.trim().replace(/[\s\u00a0]/g, "");
+  if (!s) return null;
+  const grouped = /^[1-9]\d{0,2}([.,]\d{3})+$/.test(s) ? s.replace(/[.,]/g, "") : s;
+  if (!/^\d+$/.test(grouped)) return null;
+  const n = Number(grouped);
+  return n >= 1 && n <= 5000 ? n : null;
+}
+
 export function useErrorMessage() {
   const t = useTranslations("errors.action");
   return useCallback(
@@ -42,6 +52,24 @@ export function useErrorMessage() {
       const code = errorCode(raw);
       if (t.has(code as never)) return t(code as never);
       return t.has(fallback as never) ? t(fallback as never) : t("actionFailed");
+    },
+    [t],
+  );
+}
+
+type BoundsFail = { ok: false; reason: "invalid" | "tooLow" | "tooHigh"; min: number; max: number };
+
+/** Message for a failed parseBounded(): "Enter a number", "Minimum 0,1 t", "Maximum 500 t". */
+export function useBoundsMessage() {
+  const t = useTranslations("errors.bounds");
+  return useCallback(
+    (r: BoundsFail, unit: "tons" | "price", locale: string) => {
+      const fmt = (n: number) =>
+        n.toLocaleString(locale, { maximumFractionDigits: unit === "price" ? 2 : 1 });
+      const u = unit === "price" ? t("unitPrice") : t("unitTons");
+      if (r.reason === "invalid") return t("invalid");
+      if (r.reason === "tooLow") return t("tooLow", { min: fmt(r.min), unit: u });
+      return t("tooHigh", { max: fmt(r.max), unit: u });
     },
     [t],
   );

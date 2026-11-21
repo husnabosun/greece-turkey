@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, FlaskConical, Lock, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useLocale, useTranslations } from "next-intl";
@@ -20,8 +21,15 @@ import {
   formatEuro,
   formatEuroPerKg,
   formatTons,
+  MARKET_LIMITS,
+  parseBounded,
+  saleTotal,
 } from "@/features/marketplace/pricing";
-import { LotsMap } from "./lots-map";
+// Mapbox (~1 MB) is only fetched when a map is actually on screen.
+const LotsMap = dynamic(() => import("./lots-map").then((m) => m.LotsMap), {
+  ssr: false,
+  loading: () => <div className="w-full animate-pulse rounded-[18px] bg-soft" style={{ height: 240 }} />,
+});
 import {
   BottomSheet,
   DayChipPicker,
@@ -45,7 +53,7 @@ import {
   useProcessorMarket,
   type ProcessorLot,
 } from "./use-processor-market";
-import { useErrorMessage } from "@/shared/lib/error-message";
+import { useBoundsMessage, useErrorMessage } from "@/shared/lib/error-message";
 
 const DEMO_EXCHANGE = 0.8;
 
@@ -155,6 +163,7 @@ function FactorRow({
 export function ProcessorLotDetailScreen({ id }: { id: string }) {
   const t = useTranslations("processor");
   const errMsg = useErrorMessage();
+  const boundsMsg = useBoundsMessage();
   const locale = useLocale();
   const wide = useWide();
   const { lots, offers, loading, reload } = useProcessorMarket();
@@ -288,13 +297,35 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
     setOpen(true);
   };
 
-  const offerTons = Number(String(tons).replace(",", ".")) || 0;
-  const offerPrice = Number(String(price).replace(",", ".")) || 0;
-  const offerValid =
-    lot != null && offerTons > 0 && offerTons <= lot.tons && offerPrice > 0;
-  const offerTotal = offerValid ? formatEuro(offerTons * 1000 * offerPrice, locale) : null;
+  const tonsCheck = parseBounded(String(tons), {
+    min: MARKET_LIMITS.lotTons.min,
+    max: Math.min(MARKET_LIMITS.lotTons.max, lot?.tons ?? MARKET_LIMITS.lotTons.max),
+  });
+  const priceCheck = parseBounded(String(price), MARKET_LIMITS.pricePerKg);
+  const offerTons = tonsCheck.ok ? tonsCheck.value : 0;
+  const offerPrice = priceCheck.ok ? priceCheck.value : 0;
+  const offerValid = lot != null && tonsCheck.ok && priceCheck.ok;
+  const offerTotal = offerValid ? formatEuro(saleTotal(offerTons, offerPrice), locale) : null;
+  const offerErrors = [
+    String(tons).trim() && !tonsCheck.ok ? boundsMsg(tonsCheck, "tons", locale) : null,
+    String(price).trim() && !priceCheck.ok ? boundsMsg(priceCheck, "price", locale) : null,
+  ].filter(Boolean) as string[];
+  const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false);
 
   const submit = async () => {
+    if (submitLock.current) return;
+    submitLock.current = true;
+    setSubmitting(true);
+    try {
+      await submitInner();
+    } finally {
+      submitLock.current = false;
+      setSubmitting(false);
+    }
+  };
+
+  const submitInner = async () => {
     if (!lot?.farmerId) {
       toast.error(t("identityHidden"));
       return;
@@ -303,7 +334,7 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
       toast.error(t("invalidOfferValues"));
       return;
     }
-    toast.message(t("sendingOffer"));
+    const toastId = toast.loading(t("sendingOffer"));
     const deliveryInDays = Math.max(
       0,
       Math.round(
@@ -318,10 +349,10 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
       deliveryInDays,
     });
     if (!res.ok) {
-      toast.error(errMsg(res.error, "saveFailed"));
+      toast.error(errMsg(res.error, "saveFailed"), { id: toastId });
       return;
     }
-    toast.success(t("offerSentDetail"));
+    toast.success(t("offerSentDetail"), { id: toastId });
     setOpen(false);
     await reload();
   };
@@ -375,6 +406,11 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
         {t("tonsExceedLot", { max: formatTons(lot.tons, locale) })}
       </p>
       <TextField label={t("price")} value={price} onChange={setPrice} suffix="€/kg" inputMode="decimal" />
+      {offerErrors.map((m) => (
+        <p key={m} className="text-[13px] font-semibold text-risk" role="alert">
+          {m}
+        </p>
+      ))}
       {offerTotal ? (
         <p className="rounded-xl bg-soft px-3 py-2.5 text-[14px] font-medium text-muted-foreground">
           {t("offerTotalPreview", { total: offerTotal })}
@@ -642,8 +678,8 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
           title={t("makeOffer")}
           subtitle={`${variety} · ${formatTons(lot.tons, locale)}`}
           actionLabel={t("sendOfferAction")}
-          onAction={() => void submit()}
-          actionDisabled={!offerValid || sent}
+          onAction={() => submit()}
+          actionDisabled={!offerValid || sent || submitting}
         >
           {offerForm}
         </Dialog>
@@ -653,12 +689,12 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
           onClose={() => setOpen(false)}
           title={t("makeOffer")}
           actionLabel={t("sendOfferAction")}
-          onAction={() => void submit()}
+          onAction={() => submit()}
           footer={
             <ApButton
               label={t("sendOfferAction")}
               variant="dark"
-              disabled={!offerValid || sent}
+              disabled={!offerValid || sent || submitting}
               onClick={() => void submit()}
               className="h-12 w-full"
             />

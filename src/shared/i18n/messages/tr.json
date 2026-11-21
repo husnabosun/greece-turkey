@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Agro Pulse AI",
+    "title": "AgroPulse",
     "description": "Yunanistan ve Türkiye için AgriTech ve B2B zeytinyağı tedarik zinciri platformu."
   },
   "landing": {
@@ -44,6 +44,13 @@
       "rateLimited": "Çok fazla deneme. Biraz bekle.",
       "needName": "Bir ad gir.",
       "unavailable": "Hizmet şu an kullanılamıyor."
+    },
+    "bounds": {
+      "invalid": "Pozitif bir sayı girin (ör. 2,5)",
+      "tooLow": "En az {min} {unit}",
+      "tooHigh": "En fazla {max} {unit}",
+      "unitTons": "ton",
+      "unitPrice": "€/kg"
     }
   },
   "common": {
@@ -51,7 +58,10 @@
     "aiGemini": "AI · Gemini",
     "aiModel": "AI · Model",
     "language": "Dil",
-    "close": "Kapat"
+    "close": "Kapat",
+    "confirmTitle": "Onaylayın",
+    "cancel": "Vazgeç",
+    "ok": "Tamam"
   },
   "roles": {
     "farmer": "Çiftçi",
@@ -62,7 +72,7 @@
     "registerTitle": "Kayıt",
     "loginSubtitle": "Çalışma alanınıza girmek için oturum açın.",
     "registerSubtitle": "Rol seçin ve hesap oluşturun.",
-    "subtitle": "Agro Pulse'a girin.",
+    "subtitle": "AgroPulse'a girin.",
     "roleFarmer": "Çiftçi",
     "roleProcessor": "İşleyici",
     "displayName": "Görünen ad",
@@ -143,7 +153,19 @@
     "labFailed": "Laboratuvar başarısız",
     "paymentDone": "Ödeme tamamlandı",
     "highRisk": "Yüksek risk",
-    "checkField": "Tarlanızı kontrol edin"
+    "checkField": "Tarlanızı kontrol edin",
+    "offerBodyFmt": "{variety} · {tons} × {price} ≈ {total}",
+    "deliveryBodyFmt": "{tons} × {price} = {total} · {status}",
+    "offerSentWaiting": "Teklifiniz yanıt bekliyor",
+    "deliveryCancelled": "Teslim alma iptal edildi",
+    "deliveryStatus": {
+      "scheduled": "Planlandı",
+      "weighed": "Tartıldı",
+      "lab_checked": "Laboratuvar kontrolü yapıldı",
+      "paid": "Ödendi",
+      "cancelled": "İptal edildi",
+      "unknown": "Devam ediyor"
+    }
   },
   "farmerHome": {
     "title": "Bugün",
@@ -804,7 +826,12 @@
     "closedLabFailed": "Laboratuvarda reddedildi",
     "closedLabFailedHint": "Fabrika partiyi ödemesiz iade etti. Sonuçlar hakkında onlarla konuş.",
     "closedCancelled": "İptal edildi",
-    "closedCancelledHint": "Alıcı teslim almayı iptal etti. İlanın yeniden pazarda."
+    "closedCancelledHint": "Alıcı teslim almayı iptal etti. İlanın yeniden pazarda.",
+    "fieldNotListed": "İlanda değil",
+    "needRegion": "Bu fabrika şuradan alıyor: {region}",
+    "needScoreUnknown": "Önce tarlanın kalite puanı gerekli",
+    "needUnsoldField": "Uygun tarlaların hasadı zaten satıldı",
+    "noOffersAnyHint": "Fabrikaların teklif vermesi için ilan verin veya bir talebe teklif gönderin."
   },
   "processorNav": {
     "overview": "Özet",
@@ -1252,7 +1279,7 @@
   },
   "farmerTasks": {
     "title": "Bu hafta",
-    "subtitle": "{n} açık görev",
+    "subtitle": "{n, plural, =0 {Açık görev yok} other {# açık görev}}",
     "thisWeek": "Bu hafta",
     "takePhoto": "Fotoğraf çek",
     "addSpray": "İlaç kaydı",
@@ -1268,7 +1295,7 @@
     "alerts": "Uyarılar",
     "checksDone": "Kontroller:",
     "of": "/",
-    "scorePlus": "+{n} score",
+    "scorePlus": "+{n} puan",
     "photoTitle": "Tuzak fotoğrafı gönder",
     "sprayTitle": "Bu hafta ilaçlama yaptın mı?",
     "recheckTitle": "Ağacı yeniden kontrol et",

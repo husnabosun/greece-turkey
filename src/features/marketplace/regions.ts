@@ -94,6 +94,23 @@ const ALIASES: Record<string, MarketRegion> = {
   evia: "Central Greece",
   attica: "Central Greece",
   αττική: "Central Greece",
+  "north aegean": "Aegean Islands",
+  "βόρειο αιγαίο": "Aegean Islands",
+  "περιφέρεια βορείου αιγαίου": "Aegean Islands",
+  "kuzey ege": "Aegean Islands",
+  "south aegean": "Aegean Islands",
+  "νότιο αιγαίο": "Aegean Islands",
+  mytilene: "Aegean Islands",
+  μυτιλήνη: "Aegean Islands",
+  "north aegean region": "Aegean Islands",
+  peloponnese: "Peloponnese",
+  "peloponnese region": "Peloponnese",
+  "περιφέρεια πελοποννήσου": "Peloponnese",
+  "western greece": "Central Greece",
+  "central macedonia": "Macedonia",
+  "κεντρική μακεδονία": "Macedonia",
+  "eastern macedonia and thrace": "Thrace",
+  "ανατολική μακεδονία και θράκη": "Thrace",
   lesvos: "Aegean Islands",
   lesbos: "Aegean Islands",
   λέσβος: "Aegean Islands",
@@ -230,4 +247,55 @@ export function regionMatches(lotRegion: string, place: string, selected: string
 
 export function marketRegionOptions(locale: string): { value: string; label: string }[] {
   return MARKET_REGIONS.map((value) => ({ value, label: regionLabel(value, locale) }));
+}
+
+const GR_REGIONS: MarketRegion[] = [
+  "Thrace",
+  "Macedonia",
+  "Epirus",
+  "Thessaly",
+  "Central Greece",
+  "Peloponnese",
+  "Ionian Islands",
+  "Aegean Islands",
+  "Crete",
+];
+
+/** Nearest market region for a field point, restricted to the farmer's country when known. */
+export function regionForPoint(
+  lat: number | null | undefined,
+  lon: number | null | undefined,
+  country: "GR" | "TR" | null | undefined,
+): MarketRegion | null {
+  if (lat == null || lon == null || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const pool = MARKET_REGIONS.filter((r) =>
+    country === "GR" ? GR_REGIONS.includes(r) : country === "TR" ? !GR_REGIONS.includes(r) : true,
+  );
+  let best: MarketRegion | null = null;
+  let bestD = Infinity;
+  for (const r of pool) {
+    const [clon, clat] = REGION_CENTERS[r];
+    const dx = (lon - clon) * Math.cos((lat * Math.PI) / 180);
+    const d = dx * dx + (lat - clat) * (lat - clat);
+    if (d < bestD) {
+      bestD = d;
+      best = r;
+    }
+  }
+  return best;
+}
+
+/** Resolved regions of a (possibly comma-separated) request region. Empty = anywhere. */
+export function requestRegions(raw: string | null | undefined): MarketRegion[] {
+  if (!raw?.trim()) return [];
+  const whole = resolveMarketRegion(raw);
+  if (whole) return [whole];
+  return [
+    ...new Set(
+      raw
+        .split(/[,·]/)
+        .map((p) => resolveMarketRegion(p))
+        .filter((r): r is MarketRegion => r != null),
+    ),
+  ];
 }

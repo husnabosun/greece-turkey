@@ -495,7 +495,7 @@ function AddSpraySheet({
           <div className="flex items-center gap-2">
             <Label htmlFor="spray-product">{t("product")}</Label>
             {fromLabel ? (
-              <span className="inline-flex h-5 items-center rounded-full bg-good-soft px-2 text-[11px] font-bold text-good">
+              <span className="inline-flex h-5 items-center rounded-full bg-good-soft px-2 text-[12px] font-bold text-good">
                 {t("fromLabel")}
               </span>
             ) : null}

@@ -22,9 +22,17 @@ import {
   deliveryStepIndex,
 } from "@/features/marketplace/delivery-state";
 import { BottomSheet, DayChipPicker } from "@/features/marketplace/processor-kit";
-import { formatEuro, formatEuroPerKg, formatTons } from "@/features/marketplace/pricing";
+import {
+  MARKET_LIMITS,
+  formatEuro,
+  formatEuroPerKg,
+  formatTons,
+  parseBounded,
+  parseLocaleNumber,
+  saleTotal,
+} from "@/features/marketplace/pricing";
 import { formatRequestWindow, isRequestWindowExpired } from "@/features/marketplace/request-window";
-import { regionLabel } from "@/features/marketplace/regions";
+import { regionForPoint, regionLabel, requestRegions } from "@/features/marketplace/regions";
 import {
   DEFAULT_DELIVERY_IN_DAYS,
   addDaysIso,
@@ -49,7 +57,7 @@ import { Link, useRouter } from "@/shared/i18n/navigation";
 import type { Field } from "@/shared/types/database";
 import { FIELD_DOTS } from "@/shared/theme/tokens";
 import { cn } from "@/shared/lib/utils";
-import { useErrorMessage } from "@/shared/lib/error-message";
+import { useBoundsMessage, useErrorMessage } from "@/shared/lib/error-message";
 
 type Tab = "overview" | "requests" | "offers" | "sales";
 type FilterKey = "fits" | "near" | string;
@@ -125,30 +133,53 @@ function fieldVariety(f: Field): string | null {
   return f.variety_slug ?? f.variety ?? null;
 }
 
-function requestFitsField(
-  req: MarketRequest,
-  field: Field,
-  fieldCards: Record<string, FieldMarketCard>,
-): boolean {
-  const v = fieldVariety(field)?.toLowerCase();
-  if (v && req.variety && v !== req.variety.toLowerCase()) return false;
-  const score = fieldCards[field.id]?.qualityScore;
-  if (score != null && score < req.minScore) return false;
-  const remaining = req.tons - req.filledTons;
-  if (remaining <= 0) return false;
-  return true;
+type MatchCtx = {
+  fieldCards: Record<string, FieldMarketCard>;
+  country: "GR" | "TR" | null;
+};
+
+function fieldRegion(field: Field, ctx: MatchCtx) {
+  return regionForPoint(field.lat, field.lon, ctx.country);
 }
 
-function bestFieldForRequest(
-  fields: Field[],
-  fieldCards: Record<string, FieldMarketCard>,
-  req: MarketRequest,
-): Field | undefined {
-  const fitting = fields.filter((f) => requestFitsField(req, f, fieldCards));
+/** Region rule: request without a resolvable region = anywhere; otherwise the field must sit in one of them. */
+function regionOk(req: MarketRequest, field: Field, ctx: MatchCtx): boolean {
+  const wanted = requestRegions(req.region);
+  if (!wanted.length) return true;
+  const here = fieldRegion(field, ctx);
+  return here != null && wanted.includes(here);
+}
+
+function varietyOk(req: MarketRequest, field: Field): boolean {
+  const v = fieldVariety(field)?.toLowerCase();
+  return Boolean(v && req.variety && v === req.variety.toLowerCase());
+}
+
+function scoreOk(req: MarketRequest, field: Field, ctx: MatchCtx): boolean {
+  const score = ctx.fieldCards[field.id]?.qualityScore;
+  if (req.minScore <= 0) return true;
+  return score != null && score >= req.minScore;
+}
+
+/** A field whose harvest is already sold / in delivery (and has nothing else listed) can't sell again. */
+function availableOk(field: Field, ctx: MatchCtx): boolean {
+  const card = ctx.fieldCards[field.id];
+  if (!card) return true;
+  const committed = card.lotStatus === "sold" || card.lotStatus === "reserved";
+  return !committed || card.listedLots.length > 0;
+}
+
+function requestFitsField(req: MarketRequest, field: Field, ctx: MatchCtx): boolean {
+  if (req.tons - req.filledTons <= 0) return false;
+  return varietyOk(req, field) && regionOk(req, field, ctx) && scoreOk(req, field, ctx) && availableOk(field, ctx);
+}
+
+function bestFieldForRequest(fields: Field[], ctx: MatchCtx, req: MarketRequest): Field | undefined {
+  const fitting = fields.filter((f) => requestFitsField(req, f, ctx));
   if (!fitting.length) return undefined;
   return fitting.reduce((best, f) => {
-    const bestScore = fieldCards[best.id]?.qualityScore ?? -1;
-    const score = fieldCards[f.id]?.qualityScore ?? -1;
+    const bestScore = ctx.fieldCards[best.id]?.qualityScore ?? -1;
+    const score = ctx.fieldCards[f.id]?.qualityScore ?? -1;
     return score > bestScore ? f : best;
   });
 }
@@ -156,32 +187,29 @@ function bestFieldForRequest(
 function requestMismatchReason(
   req: MarketRequest,
   fields: Field[],
-  fieldCards: Record<string, FieldMarketCard>,
+  ctx: MatchCtx,
   locale: string,
   t: ReturnType<typeof useTranslations<"farmerMarket">>,
 ): string {
   if (!fields.length) return t("needFieldFirst");
-  const remaining = req.tons - req.filledTons;
-  if (remaining <= 0) return t("requestFilled");
-  const hasVariety = fields.some((f) => {
-    const v = fieldVariety(f)?.toLowerCase();
-    return v && v === req.variety.toLowerCase();
-  });
-  if (!hasVariety) {
-    return t("needVariety", { variety: varietyLabel(req.variety, locale) });
+  if (req.tons - req.filledTons <= 0) return t("requestFilled");
+  const withVariety = fields.filter((f) => varietyOk(req, f));
+  if (!withVariety.length) return t("needVariety", { variety: varietyLabel(req.variety, locale) });
+  const inRegion = withVariety.filter((f) => regionOk(req, f, ctx));
+  if (!inRegion.length) return t("needRegion", { region: regionLabel(req.region, locale) });
+  const withScore = inRegion.filter((f) => scoreOk(req, f, ctx));
+  if (!withScore.length) {
+    const unknown = inRegion.every((f) => ctx.fieldCards[f.id]?.qualityScore == null);
+    return unknown ? t("needScoreUnknown") : t("needScore", { score: req.minScore });
   }
-  const scoreOk = fields.some((f) => {
-    const v = fieldVariety(f)?.toLowerCase();
-    if (!v || v !== req.variety.toLowerCase()) return false;
-    return (fieldCards[f.id]?.qualityScore ?? 0) >= req.minScore;
-  });
-  if (!scoreOk) return t("needScore", { score: req.minScore });
+  if (!withScore.some((f) => availableOk(f, ctx))) return t("needUnsoldField");
   return t("cannotSellHere");
 }
 
 export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const t = useTranslations("farmerMarket");
   const errMsg = useErrorMessage();
+  const boundsMsg = useBoundsMessage();
   const tFields = useTranslations("farmerFields");
   const locale = useLocale();
   const router = useRouter();
@@ -192,9 +220,14 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     requests,
     deliveries,
     fieldCards,
+    farmerCountry,
     loading: marketLoading,
     reload,
   } = useFarmerMarket(fieldIds);
+  const matchCtx = useMemo<MatchCtx>(
+    () => ({ fieldCards, country: farmerCountry }),
+    [fieldCards, farmerCountry],
+  );
   const [tab, setTab] = useState<Tab>(isTab(initialTab) ? initialTab : "overview");
   const [filters, setFilters] = useState<FilterKey[]>(["fits"]);
   const [busyOfferId, setBusyOfferId] = useState<string | null>(null);
@@ -255,12 +288,18 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const closedDeliveries = deliveries.filter((d) => d.status === "cancelled");
 
   const regionChips = useMemo(() => {
-    const set = new Set<string>();
+    // One chip per resolved region (different spellings of the same place used to give duplicate chips).
+    const byLabel = new Map<string, string>();
     for (const r of requests) {
-      if (r.region?.trim()) set.add(r.region.trim());
+      const resolved = requestRegions(r.region);
+      const keys = resolved.length ? resolved : r.region?.trim() ? [r.region.trim()] : [];
+      for (const k of keys) {
+        const label = regionLabel(k, locale);
+        if (!byLabel.has(label)) byLabel.set(label, k);
+      }
     }
-    return [...set].slice(0, 6);
-  }, [requests]);
+    return [...byLabel.values()].slice(0, 6);
+  }, [requests, locale]);
 
   const filterChips: { key: FilterKey; label: string }[] = [
     { key: "fits", label: t("fits") },
@@ -271,27 +310,25 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const filteredRequests = useMemo(() => {
     let list = requests.filter((req) => !isRequestWindowExpired(req.windowLabel));
     if (filters.includes("fits")) {
-      list = list.filter((req) => bestFieldForRequest(fields, fieldCards, req) != null);
+      list = list.filter((req) => bestFieldForRequest(fields, matchCtx, req) != null);
     }
     const regionFilters = filters
       .filter((f) => f.startsWith("region:"))
       .map((f) => f.slice("region:".length).toLowerCase());
     if (regionFilters.length) {
-      list = list.filter((req) =>
-        regionFilters.some((r) => (req.region ?? "").toLowerCase().includes(r)),
-      );
-    }
-    if (filters.includes("near") && fields.some((f) => f.lat != null && f.lon != null)) {
-      // Prefer requests whose region matches any field's known area label when present.
-      // Without geocoded field regions, keep list but put variety-matching first.
-      list = [...list].sort((a, b) => {
-        const aFit = bestFieldForRequest(fields, fieldCards, a) ? 0 : 1;
-        const bFit = bestFieldForRequest(fields, fieldCards, b) ? 0 : 1;
-        return aFit - bFit;
+      list = list.filter((req) => {
+        const resolved = requestRegions(req.region).map((x) => x.toLowerCase());
+        return regionFilters.some(
+          (r) => resolved.includes(r) || (req.region ?? "").toLowerCase().includes(r),
+        );
       });
     }
+    if (filters.includes("near") && fields.some((f) => f.lat != null && f.lon != null)) {
+      // Near = at least one of my fields lies in the request's region.
+      list = list.filter((req) => fields.some((f) => regionOk(req, f, matchCtx)));
+    }
     return list;
-  }, [requests, filters, fields, fieldCards]);
+  }, [requests, filters, fields, matchCtx]);
 
   function openAccept(offer: MarketOffer) {
     if (offer.initiatedBy !== "processor") return;
@@ -379,12 +416,18 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
 
   async function confirmSaveListing() {
     if (!listingTarget?.card.listedLotId) return;
-    const price = Number(listingPrice.replace(",", "."));
-    const tons = Number(listingTons.replace(",", "."));
-    if (!(price > 0) || !(tons > 0)) {
-      toast.error(t("invalidTons"));
+    const pc = parseBounded(listingPrice, MARKET_LIMITS.pricePerKg);
+    const tc = parseBounded(listingTons, MARKET_LIMITS.lotTons);
+    if (!pc.ok) {
+      toast.error(boundsMsg(pc, "price", locale));
       return;
     }
+    if (!tc.ok) {
+      toast.error(boundsMsg(tc, "tons", locale));
+      return;
+    }
+    const price = pc.value;
+    const tons = tc.value;
     setListingBusy(true);
     try {
       const result = await updateListedLot(listingTarget.card.listedLotId, {
@@ -429,11 +472,12 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   async function confirmCounter() {
     const offer = counterTarget;
     if (!offer) return;
-    const price = Number(counterPrice.replace(",", "."));
-    if (!Number.isFinite(price) || price <= 0) {
-      toast.error(t("invalidPrice"));
+    const pc = parseBounded(counterPrice, MARKET_LIMITS.pricePerKg);
+    if (!pc.ok) {
+      toast.error(boundsMsg(pc, "price", locale));
       return;
     }
+    const price = pc.value;
     setBusyOfferId(offer.id);
     const toastId = toast.loading(t("countering"));
     try {
@@ -454,9 +498,8 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const counterTotal =
     counterTarget != null
       ? (() => {
-          const price = Number(counterPrice.replace(",", "."));
-          if (!Number.isFinite(price) || price <= 0) return null;
-          return counterTarget.tons * 1000 * price;
+          const pc = parseBounded(counterPrice, MARKET_LIMITS.pricePerKg);
+          return pc.ok ? saleTotal(counterTarget.tons, pc.value) : null;
         })()
       : null;
 
@@ -494,7 +537,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
             >
               {t(id)}
               {id === "offers" && incomingBids.length > 0 ? (
-                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-risk px-1 text-[10px] leading-none font-bold text-white">
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-risk px-1 text-[12px] leading-none font-bold text-white">
                   {incomingBids.length}
                 </span>
               ) : null}
@@ -561,7 +604,8 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
             <div className="mt-2 grid grid-cols-2 gap-2">
               {fields.map((field, i) => {
                 const card = fieldCards[field.id];
-                const soldOut = card?.lotStatus === "sold" || card?.lotStatus === "reserved";
+                const listed = card?.listedLots ?? [];
+                const committed = card?.lotStatus === "sold" || card?.lotStatus === "reserved";
                 return (
                   <div key={field.id} className="rounded-[18px] border border-line bg-card p-3">
                     <div className="flex items-start justify-between gap-1">
@@ -576,41 +620,49 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                         {card?.qualityScore ?? "—"}
                       </span>
                     </div>
-                    {soldOut ? (
+                    {committed ? (
                       <p className="mt-2 text-ap-small font-bold text-ap-accent">
                         {card?.lotStatus === "sold" ? t("fieldSold") : t("fieldInDelivery")}
                       </p>
-                    ) : card?.lotStatus === "listed" && card.listedLotId ? (
+                    ) : null}
+                    {listed.length > 0 && card ? (
                       <>
                         <p className="mt-2 text-ap-small font-bold text-good">{t("fieldListed")}</p>
-                        <p className="mt-1 text-ap-card text-ink">
-                          {card.listedPrice != null ? formatEuroPerKg(card.listedPrice, locale) : "—"}
-                          {card.listedTons != null ? ` · ${formatTons(card.listedTons, locale)}` : ""}
-                        </p>
+                        {listed.map((lot) => (
+                          <div key={lot.id}>
+                            <p className="mt-1 text-ap-card text-ink">
+                              {lot.pricePerKg != null ? formatEuroPerKg(lot.pricePerKg, locale) : "—"}
+                              {lot.tons != null ? ` · ${formatTons(lot.tons, locale)}` : ""}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openListing(field, {
+                                  ...card,
+                                  lotStatus: "listed",
+                                  listedLotId: lot.id,
+                                  listedPrice: lot.pricePerKg,
+                                  listedTons: lot.tons,
+                                })
+                              }
+                              className="inline-flex min-h-11 items-center text-ap-body font-bold text-ink"
+                            >
+                              {t("manageListing")}
+                              <ChevronRight className="size-3.5" />
+                            </button>
+                          </div>
+                        ))}
                         {card.offerCount > 0 ? (
                           <p className="mt-1 text-ap-small font-semibold text-good">
                             {t("offersCount", { n: card.offerCount })}
                           </p>
                         ) : null}
-                        <button
-                          type="button"
-                          onClick={() => openListing(field, card)}
-                          className="mt-1 inline-flex min-h-11 items-center text-ap-body font-bold text-ink"
-                        >
-                          {t("manageListing")}
-                          <ChevronRight className="size-3.5" />
-                        </button>
                       </>
-                    ) : (
+                    ) : !committed ? (
                       <>
-                        <p className="mt-2 text-ap-card text-ink">
-                          {card?.listedPrice != null ? formatEuroPerKg(card.listedPrice, locale) : "—"}
+                        <p className="mt-2 text-ap-small font-semibold text-muted-foreground">
+                          {t("fieldNotListed")}
                         </p>
-                        {card && card.offerCount > 0 ? (
-                          <p className="mt-1 text-ap-small font-semibold text-good">
-                            {t("offersCount", { n: card.offerCount })}
-                          </p>
-                        ) : null}
                         <Link
                           href={`/farmer/market/new?field=${field.id}`}
                           className="mt-1 inline-flex min-h-11 items-center text-ap-body font-bold text-ink"
@@ -619,7 +671,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                           <ChevronRight className="size-3.5" />
                         </Link>
                       </>
-                    )}
+                    ) : null}
                   </div>
                 );
               })}
@@ -638,14 +690,14 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   key={req.id}
                   req={req}
                   locale={locale}
-                  fitField={bestFieldForRequest(fields, fieldCards, req)}
+                  fitField={bestFieldForRequest(fields, matchCtx, req)}
                   fitScore={
                     (() => {
-                      const f = bestFieldForRequest(fields, fieldCards, req);
+                      const f = bestFieldForRequest(fields, matchCtx, req);
                       return f ? fieldCards[f.id]?.qualityScore ?? null : null;
                     })()
                   }
-                  mismatch={requestMismatchReason(req, fields, fieldCards, locale, t)}
+                  mismatch={requestMismatchReason(req, fields, matchCtx, locale, t)}
                   offerLabel={t("offer")}
                   canSellLabel={t("canSellHere")}
                   filledOf={t("filledOf", {
@@ -653,9 +705,9 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                     total: formatTons(req.tons, locale).replace(" t", ""),
                   })}
                   onOffer={() => {
-                    const field = bestFieldForRequest(fields, fieldCards, req);
+                    const field = bestFieldForRequest(fields, matchCtx, req);
                     if (!field) {
-                      toast.message(requestMismatchReason(req, fields, fieldCards, locale, t));
+                      toast.message(requestMismatchReason(req, fields, matchCtx, locale, t));
                       return;
                     }
                     const qs = new URLSearchParams();
@@ -723,14 +775,14 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                 key={req.id}
                 req={req}
                 locale={locale}
-                fitField={bestFieldForRequest(fields, fieldCards, req)}
+                fitField={bestFieldForRequest(fields, matchCtx, req)}
                 fitScore={
                   (() => {
-                    const f = bestFieldForRequest(fields, fieldCards, req);
+                    const f = bestFieldForRequest(fields, matchCtx, req);
                     return f ? fieldCards[f.id]?.qualityScore ?? null : null;
                   })()
                 }
-                mismatch={requestMismatchReason(req, fields, fieldCards, locale, t)}
+                mismatch={requestMismatchReason(req, fields, matchCtx, locale, t)}
                 offerLabel={t("offer")}
                 canSellLabel={t("canSellHere")}
                 filledOf={t("filledOf", {
@@ -738,9 +790,9 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   total: formatTons(req.tons, locale).replace(" t", ""),
                 })}
                 onOffer={() => {
-                  const field = bestFieldForRequest(fields, fieldCards, req);
+                  const field = bestFieldForRequest(fields, matchCtx, req);
                   if (!field) {
-                    toast.message(requestMismatchReason(req, fields, fieldCards, locale, t));
+                    toast.message(requestMismatchReason(req, fields, matchCtx, locale, t));
                     return;
                   }
                   const qs = new URLSearchParams();
@@ -762,21 +814,26 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               <div className="h-24 animate-pulse rounded-[18px] bg-soft" />
               <div className="h-24 animate-pulse rounded-[18px] bg-soft" />
             </div>
+          ) : incomingBids.length === 0 && sentOffers.length === 0 && activeDeliveries.length === 0 ? (
+            <div className="rounded-[18px] border border-line bg-card p-4 text-center">
+              <p className="text-ap-body font-semibold text-ink">{t("noIncomingOffersTitle")}</p>
+              <p className="mt-1 text-ap-small text-muted-foreground">{t("noOffersAnyHint")}</p>
+              <Link
+                href="/farmer/market/new"
+                className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-5 text-ap-btn font-bold text-white"
+              >
+                {t("listNow")}
+              </Link>
+            </div>
           ) : null}
 
-          <SectionTitle>{t("activeDeliveriesTitle")}</SectionTitle>
+          {!marketLoading && activeDeliveries.length > 0 ? (
+            <>
+              <SectionTitle>{t("activeDeliveriesTitle")}</SectionTitle>
           <p className="text-ap-small text-muted-foreground">
             {t("activeDeliveriesHint", { count: activeDeliveries.length })}
           </p>
-          {activeDeliveries.length === 0 ? (
-            <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
-              <p className="text-ap-small font-semibold text-ink">{t("noActiveSalesTitle")}</p>
-              <p className="mt-1 text-ap-small text-muted-foreground">{t("noActiveSales")}</p>
-              <div className="mt-3 opacity-40">
-                <StatusSteps steps={steps} current={-1} />
-              </div>
-            </div>
-          ) : (
+          {(
             <div className="mt-2 space-y-2">
               {activeDeliveries.map((d) => (
                 <ActiveDeliveryCard
@@ -801,14 +858,14 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
             </div>
           )}
 
-          <SectionTitle>{t("offersForField")}</SectionTitle>
+            </>
+          ) : null}
+
+          {!marketLoading && incomingBids.length > 0 ? (
+            <>
+              <SectionTitle>{t("offersForField")}</SectionTitle>
           <p className="text-ap-small text-muted-foreground">{t("incomingBidsHint")}</p>
-          {incomingBids.length === 0 ? (
-            <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
-              <p className="text-ap-small font-semibold text-ink">{t("noIncomingOffersTitle")}</p>
-              <p className="mt-1 text-ap-small text-muted-foreground">{t("noIncomingOffers")}</p>
-            </div>
-          ) : (
+          {(
             groupOffersByLot(incomingBids, fieldCards).map((group) => (
               <div key={group.lotId} className="mt-2 rounded-[18px] border border-line bg-card p-3">
                 <div className="flex items-start justify-between gap-2">
@@ -863,14 +920,14 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
             ))
           )}
 
-          <SectionTitle>{t("yourSentOffers")}</SectionTitle>
+            </>
+          ) : null}
+
+          {!marketLoading && sentOffers.length > 0 ? (
+            <>
+              <SectionTitle>{t("yourSentOffers")}</SectionTitle>
           <p className="text-ap-small text-muted-foreground">{t("sentOffersHint")}</p>
-          {sentOffers.length === 0 ? (
-            <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
-              <p className="text-ap-small font-semibold text-ink">{t("noSentOffersTitle")}</p>
-              <p className="mt-1 text-ap-small text-muted-foreground">{t("noSentOffers")}</p>
-            </div>
-          ) : (
+          {(
             sentOffers.map((offer) => (
               <SentOfferCard
                 key={offer.id}
@@ -884,6 +941,8 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               />
             ))
           )}
+            </>
+          ) : null}
         </div>
       ) : null}
 
@@ -991,7 +1050,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
         onClose={() => setAcceptTarget(null)}
         title={t("confirmSaleTitle")}
         actionLabel={t("confirmSale")}
-        onAction={() => void confirmAccept()}
+        onAction={() => confirmAccept()}
       >
         {acceptTarget ? (
           <div className="space-y-3">
@@ -1025,7 +1084,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
         onClose={() => setCounterTarget(null)}
         title={t("counter")}
         actionLabel={t("sendCounter")}
-        onAction={() => void confirmCounter()}
+        onAction={() => confirmCounter()}
       >
         {counterTarget ? (
           <div className="space-y-3">
@@ -1039,8 +1098,9 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   type="button"
                   className="flex size-11 items-center justify-center rounded-full border border-line"
                   onClick={() => {
-                    const n = Number(counterPrice.replace(",", ".")) || 0;
-                    setCounterPrice(Math.max(0.01, Math.round((n - 0.01) * 100) / 100).toFixed(2).replace(".", ","));
+                    const n = parseLocaleNumber(counterPrice) ?? 0;
+                    const next = Math.max(MARKET_LIMITS.pricePerKg.min, Math.round((n - 0.01) * 100) / 100);
+                    setCounterPrice(next.toFixed(2).replace(".", ","));
                   }}
                 >
                   −
@@ -1056,14 +1116,23 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   type="button"
                   className="flex size-11 items-center justify-center rounded-full border border-line"
                   onClick={() => {
-                    const n = Number(counterPrice.replace(",", ".")) || 0;
-                    setCounterPrice((Math.round((n + 0.01) * 100) / 100).toFixed(2).replace(".", ","));
+                    const n = parseLocaleNumber(counterPrice) ?? 0;
+                    const next = Math.min(MARKET_LIMITS.pricePerKg.max, Math.round((n + 0.01) * 100) / 100);
+                    setCounterPrice(next.toFixed(2).replace(".", ","));
                   }}
                 >
                   +
                 </button>
               </div>
             </label>
+            {(() => {
+              const pc = parseBounded(counterPrice, MARKET_LIMITS.pricePerKg);
+              return counterPrice.trim() && !pc.ok ? (
+                <p className="text-ap-small font-semibold text-risk" role="alert">
+                  {boundsMsg(pc, "price", locale)}
+                </p>
+              ) : null;
+            })()}
             {counterTotal != null ? (
               <p className="text-ap-body font-semibold text-ink">
                 {t("counterTotal", {
@@ -1081,7 +1150,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
         onClose={() => setRejectTarget(null)}
         title={t("reject")}
         actionLabel={t("reject")}
-        onAction={() => void confirmRejectBid()}
+        onAction={() => confirmRejectBid()}
       >
         {rejectTarget ? (
           <div className="space-y-2">
@@ -1099,7 +1168,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
         onClose={() => setWithdrawTarget(null)}
         title={t("withdraw")}
         actionLabel={t("withdraw")}
-        onAction={() => void confirmWithdrawOffer()}
+        onAction={() => confirmWithdrawOffer()}
       >
         {withdrawTarget ? (
           <div className="space-y-2">
@@ -1418,7 +1487,7 @@ function OfferCard({
           <div className="flex flex-wrap items-center gap-1.5">
             <p className="truncate text-ap-card text-ink">{offer.processorName}</p>
             {bestLabel ? (
-              <span className="rounded-md bg-good-soft px-1.5 py-0.5 text-[11px] font-bold text-good">
+              <span className="rounded-md bg-good-soft px-1.5 py-0.5 text-[12px] font-bold text-good">
                 {bestLabel}
               </span>
             ) : null}

@@ -87,7 +87,7 @@ function BottomTab({
       />
       <span
         className={cn(
-          "max-w-full truncate text-center text-[11px] leading-[14px]",
+          "max-w-full truncate text-center text-[12px] leading-[14px]",
           active ? "font-bold text-ink" : "font-medium text-muted-foreground",
         )}
       >
@@ -182,7 +182,7 @@ function UserMenu({
           )}
         >
           <p className="truncate px-3 pt-2 pb-1 text-[12px] font-extrabold text-ink">{company}</p>
-          <p className="px-3 pb-2 text-[11px] font-medium text-muted-foreground">{panel}</p>
+          <p className="px-3 pb-2 text-[12px] font-medium text-muted-foreground">{panel}</p>
           <button
             type="button"
             role="menuitem"
@@ -251,7 +251,7 @@ export function ProcessorShell({ children }: { children: ReactNode }) {
           <Initials text={initials} size={44} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[15px] leading-5 font-extrabold text-ink">{company}</p>
-            <p className="mt-0.5 text-[11px] leading-[14px] font-medium text-muted-foreground">{panel}</p>
+            <p className="mt-0.5 text-[12px] leading-[14px] font-medium text-muted-foreground">{panel}</p>
           </div>
         </div>
         <nav className="mt-5 flex flex-col gap-1">

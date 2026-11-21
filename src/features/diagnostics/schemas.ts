@@ -23,6 +23,8 @@ export const diagnoseRequest = z.object({
   /** Extra photos from the same capture session (max 3 more). */
   imageBase64List: z.array(image).max(4).optional(),
   mode: z.enum(["leaf", "fruit", "trap"]),
+  /** UI language — free-text parts of the answer (symptoms, notes) come back in it. */
+  language: z.enum(LANGUAGES).optional(),
   /** Optional field/weather context for better diagnosis. */
   context: z
     .object({

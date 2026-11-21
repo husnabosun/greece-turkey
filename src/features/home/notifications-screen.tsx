@@ -15,6 +15,8 @@ import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { Link, useRouter } from "@/shared/i18n/navigation";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
+import { varietyLabelFromStored } from "@/features/fields/olive-varieties";
+import { formatEuro, formatEuroPerKg, formatTons, saleTotal } from "@/features/marketplace/pricing";
 
 type NotifKind = "offer" | "delivery" | "lab" | "paid" | "risk";
 
@@ -55,13 +57,13 @@ export function NotificationsScreen() {
       const [offersRes, deliveriesRes, tasksRes] = await Promise.all([
         supabase
           .from("offers")
-          .select("id, status, tons, price_per_kg, created_at, updated_at, lots(variety)")
+          .select("id, status, initiated_by, tons, price_per_kg, created_at, updated_at, lots(variety)")
           .eq("farmer_id", user.id)
           .order("updated_at", { ascending: false })
           .limit(20),
         supabase
           .from("deliveries")
-          .select("id, status, lab_result, tons, updated_at, scheduled_for")
+          .select("id, status, lab_result, tons, price_per_kg, actual_kg, updated_at, scheduled_for")
           .eq("farmer_id", user.id)
           .order("updated_at", { ascending: false })
           .limit(20),
@@ -77,6 +79,38 @@ export function NotificationsScreen() {
       if (cancelled) return;
 
       const next: NotifItem[] = [];
+      const offerBody = (tons: number, price: number, variety: string) =>
+        t("offerBodyFmt", {
+          tons: formatTons(tons, locale),
+          price: formatEuroPerKg(price, locale),
+          variety: variety ? varietyLabelFromStored(variety, locale) : "—",
+          total: formatEuro(saleTotal(tons, price), locale),
+        });
+      const deliveryBody = (row: {
+        status: string;
+        tons: number | string;
+        price_per_kg: number | string;
+        actual_kg: number | string | null;
+        amount_eur?: number | string | null;
+      }) => {
+        const tons = Number(row.tons);
+        const price = Number(row.price_per_kg);
+        const amount =
+          row.amount_eur != null
+            ? Number(row.amount_eur)
+            : row.actual_kg != null
+              ? Math.round(Number(row.actual_kg) * price * 100) / 100
+              : saleTotal(tons, price);
+        const statusKey = ["scheduled", "weighed", "lab_checked", "paid", "cancelled"].includes(row.status)
+          ? row.status
+          : "unknown";
+        return t("deliveryBodyFmt", {
+          tons: formatTons(tons, locale),
+          price: formatEuroPerKg(price, locale),
+          total: formatEuro(amount, locale),
+          status: t(`deliveryStatus.${statusKey}` as never),
+        });
+      };
       for (const row of offersRes.data ?? []) {
         const variety =
           row.lots && typeof row.lots === "object" && !Array.isArray(row.lots)
@@ -86,26 +120,18 @@ export function NotificationsScreen() {
           next.push({
             id: `offer-${row.id}`,
             kind: "offer",
-            title: t("newOffer"),
-            body: t("offerBody", {
-              tons: Number(row.tons),
-              price: Number(row.price_per_kg),
-              variety: variety || "—",
-            }),
+            title: row.initiated_by === "farmer" ? t("offerSentWaiting") : t("newOffer"),
+            body: offerBody(Number(row.tons), Number(row.price_per_kg), variety),
             at: row.updated_at ?? row.created_at,
             href: "/farmer/market?tab=offers",
-            unread: true,
+            unread: row.initiated_by !== "farmer",
           });
         } else if (row.status === "rejected" || row.status === "countered") {
           next.push({
             id: `offer-${row.id}-${row.status}`,
             kind: "offer",
             title: row.status === "rejected" ? t("offerRejected") : t("offerCountered"),
-            body: t("offerBody", {
-              tons: Number(row.tons),
-              price: Number(row.price_per_kg),
-              variety: variety || "—",
-            }),
+            body: offerBody(Number(row.tons), Number(row.price_per_kg), variety),
             at: row.updated_at ?? row.created_at,
             href: "/farmer/market?tab=offers",
             unread: false,
@@ -119,7 +145,7 @@ export function NotificationsScreen() {
             id: `del-${row.id}-paid`,
             kind: "paid",
             title: t("paymentDone"),
-            body: t("deliveryBody", { tons: Number(row.tons), status: row.status }),
+            body: deliveryBody(row),
             at: row.updated_at,
             href: "/farmer/market?tab=sales",
             unread: false,
@@ -129,7 +155,7 @@ export function NotificationsScreen() {
             id: `del-${row.id}-lab`,
             kind: "lab",
             title: row.lab_result === "passed" ? t("labPassed") : t("labFailed"),
-            body: t("deliveryBody", { tons: Number(row.tons), status: row.status }),
+            body: deliveryBody(row),
             at: row.updated_at,
             href: "/farmer/market?tab=sales",
             unread: row.lab_result === "failed",
@@ -138,8 +164,8 @@ export function NotificationsScreen() {
           next.push({
             id: `del-${row.id}`,
             kind: "delivery",
-            title: t("deliveryStep"),
-            body: t("deliveryBody", { tons: Number(row.tons), status: row.status }),
+            title: row.status === "cancelled" ? t("deliveryCancelled") : t("deliveryStep"),
+            body: deliveryBody(row),
             at: row.updated_at,
             href: "/farmer/market?tab=sales",
             unread: row.status === "scheduled" || row.status === "weighed",
@@ -168,7 +194,7 @@ export function NotificationsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, [t, locale]);
 
   const unread = useMemo(() => items.filter((i) => i.unread).length, [items]);
 
@@ -250,7 +276,7 @@ export function NotificationsScreen() {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-start justify-between gap-2">
                       <span className="text-ap-body font-bold text-ink">{item.title}</span>
-                      <span className="shrink-0 text-[11px] text-muted-foreground">{fmt(item.at)}</span>
+                      <span className="shrink-0 text-[12px] text-muted-foreground">{fmt(item.at)}</span>
                     </span>
                     <span className="mt-0.5 block text-ap-small text-muted-foreground">{item.body}</span>
                   </span>

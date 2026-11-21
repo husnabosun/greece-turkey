@@ -354,7 +354,7 @@ export function ProcessorDeliveriesScreen() {
           <ApCard className="p-4">
             <div className="flex flex-wrap items-start justify-between gap-3 opacity-45">
               <div className="min-w-[200px] flex-1">
-                <p className="text-[11px] font-bold tracking-[1px] text-ap-accent uppercase">
+                <p className="text-[12px] font-bold tracking-[1px] text-ap-accent uppercase">
                   {t("inProgress")}
                 </p>
                 <p className="text-[16px] font-extrabold text-ink">—</p>
@@ -603,7 +603,7 @@ export function ProcessorDeliveriesScreen() {
         subtitle={t("scheduleDialogHint")}
         actionLabel={scheduling ? t("loading") : t("scheduleDialogTitle")}
         actionDisabled={scheduling}
-        onAction={() => void onScheduleConfirm()}
+        onAction={() => onScheduleConfirm()}
       >
         <DayChipPicker
           label={t("arriveOn")}
@@ -637,7 +637,7 @@ export function ProcessorDeliveriesScreen() {
               : t("advance")
         }
         actionDisabled={advancing || (advanceTarget?.status === "scheduled" && weighInvalid)}
-        onAction={() => void onAdvanceConfirm()}
+        onAction={() => onAdvanceConfirm()}
       >
         {advanceTarget?.status === "scheduled" ? (
           <>
@@ -712,7 +712,7 @@ export function ProcessorDeliveriesScreen() {
         }
         actionLabel={cancelling ? t("loading") : cancelTarget?.labResult === "failed" ? t("returnLot") : t("cancelPickup")}
         actionDisabled={cancelling}
-        onAction={() => void onCancelConfirm()}
+        onAction={() => onCancelConfirm()}
       >
         <p className="text-[14px] font-medium text-muted-foreground">
           {cancelTarget?.labResult === "failed" ? t("returnLotBody") : t("cancelPickupBody")}
@@ -746,7 +746,7 @@ function DeliveryKpiCard({
           <p className="mt-0.5 truncate text-[26px] leading-8 font-extrabold tracking-tight text-ink">
             {value}
           </p>
-          <p className="mt-0.5 truncate text-[11px] leading-[14px] font-medium text-muted-foreground">
+          <p className="mt-0.5 truncate text-[12px] leading-[14px] font-medium text-muted-foreground">
             {hint}
           </p>
         </div>

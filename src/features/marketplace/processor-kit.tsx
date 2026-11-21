@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ChevronRight,
   ClipboardCheck,
@@ -11,7 +11,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { ApButton } from "@/shared/components/brand/ap-button";
 import { ApCard } from "@/shared/components/brand/ap-card";
 import { Chip } from "@/shared/components/brand/chip";
@@ -112,7 +112,7 @@ export function StatCard({
         >
           {value}
         </p>
-        {hint ? <p className="mt-0.5 text-[11px] leading-[14px] font-medium text-muted-foreground">{hint}</p> : null}
+        {hint ? <p className="mt-0.5 text-[12px] leading-[14px] font-medium text-muted-foreground">{hint}</p> : null}
       </div>
     </div>
   );
@@ -255,7 +255,7 @@ export function ScoreBox({
       )}
     >
       {!hideLabel ? (
-        <span className={cn("font-semibold", hero ? "text-[12px]" : "text-[10px] leading-3", tone.text)}>
+        <span className={cn("font-semibold", hero ? "text-[12px]" : "text-[12px] leading-3", tone.text)}>
           {t("qualityScore")}
         </span>
       ) : null}
@@ -276,7 +276,7 @@ export function Amount({ value, unit, large = false }: { value: string; unit?: s
   return (
     <span className={cn("font-extrabold text-ink", large ? "text-[24px] leading-7" : "text-[16px] leading-5")}>
       {value}
-      {unit ? <span className="text-[11px] leading-[14px] font-medium text-muted-foreground">{` ${unit}`}</span> : null}
+      {unit ? <span className="text-[12px] leading-[14px] font-medium text-muted-foreground">{` ${unit}`}</span> : null}
     </span>
   );
 }
@@ -311,7 +311,7 @@ export function Segmented<T extends string>({
           >
             <span className={cn("text-[12px] leading-4 font-bold", on ? "text-white" : "text-muted-foreground")}>{o.label}</span>
             {o.badge ? (
-              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-risk px-1 text-[10px] font-bold text-white">{o.badge}</span>
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-risk px-1 text-[12px] font-bold text-white">{o.badge}</span>
             ) : null}
           </button>
         );
@@ -336,7 +336,7 @@ export function ChipGroup({
   return (
     <div className="flex flex-col gap-1.5">
       {label ? (
-        <p className="text-[11px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{label}</p>
+        <p className="text-[12px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{label}</p>
       ) : null}
       <div className="flex flex-wrap gap-2">
         {options.map((o) => {
@@ -369,7 +369,7 @@ export function TextField({
 }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-[11px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{label}</span>
+      <span className="text-[12px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{label}</span>
       <span className="flex h-11 items-center rounded-xl border border-line bg-card px-3 focus-within:border-ink">
         <input
           value={value}
@@ -403,7 +403,7 @@ export function DayChipPicker({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-[11px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{label}</p>
+      <p className="text-[12px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{label}</p>
       <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
         {days.map((iso, i) => {
           const on = iso === value;
@@ -417,7 +417,7 @@ export function DayChipPicker({
                 on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink hover:bg-soft",
               )}
             >
-              <span className={cn("text-[10px] font-semibold", on ? "text-white/70" : "text-muted-foreground")}>
+              <span className={cn("text-[12px] font-semibold", on ? "text-white/70" : "text-muted-foreground")}>
                 {i === 0 ? todayLabel : formatDay(iso, i)}
               </span>
               <span className="text-[15px] font-extrabold leading-5">{Number(iso.slice(8, 10))}</span>
@@ -461,6 +461,7 @@ export function WeekStrip({
   legendOverloaded?: string;
   deliveriesLabel?: (count: number) => string;
 }) {
+  const locale = useLocale();
   const maxTons = Math.max(1, ...days.map((d) => d.tons));
   const hasAny = days.some((d) => d.tons > 0 || (d.deliveryCount ?? d.chips.length) > 0);
 
@@ -493,7 +494,7 @@ export function WeekStrip({
             >
               <span
                 className={cn(
-                  "text-[10px] font-bold",
+                  "text-[12px] font-bold",
                   selected ? "text-white/75" : day.isToday ? "text-good" : "text-muted-foreground",
                 )}
               >
@@ -501,7 +502,7 @@ export function WeekStrip({
               </span>
               <span className={cn("text-[13px] font-extrabold", selected ? "text-white" : "text-ink")}>{day.dayNum}</span>
               {day.tons > 0 ? (
-                <span className={cn("mt-0.5 text-[9px] font-bold", selected ? "text-white" : day.overloaded ? "text-warn-text" : "text-good")}>
+                <span className={cn("mt-0.5 text-[12px] font-bold", selected ? "text-white" : day.overloaded ? "text-warn-text" : "text-good")}>
                   {day.tons % 1 ? day.tons.toFixed(1) : day.tons}
                 </span>
               ) : (
@@ -533,7 +534,7 @@ export function WeekStrip({
               <div className="flex items-baseline justify-between gap-1">
                 <span
                   className={cn(
-                    "text-[11px] font-bold",
+                    "text-[12px] font-bold",
                     selected ? "text-white/75" : day.isToday ? "text-good" : "text-muted-foreground",
                   )}
                 >
@@ -554,14 +555,14 @@ export function WeekStrip({
                 </div>
               )}
               <p className={cn("mt-1.5 text-[12px] font-extrabold", selected ? "text-white" : "text-ink")}>
-                {day.tons > 0 ? `${day.tons % 1 ? day.tons.toFixed(1) : day.tons} t` : "–"}
+                {day.tons > 0 ? `${day.tons.toLocaleString(locale, { maximumFractionDigits: 1 })} t` : "–"}
               </p>
               {count > 0 ? (
-                <p className={cn("mt-0.5 text-[10px] font-semibold", selected ? "text-white/70" : "text-muted-foreground")}>
+                <p className={cn("mt-0.5 text-[12px] font-semibold", selected ? "text-white/70" : "text-muted-foreground")}>
                   {deliveriesLabel ? deliveriesLabel(count) : `${count}`}
                 </p>
               ) : (
-                <p className="mt-0.5 text-[10px] font-semibold opacity-0">–</p>
+                <p className="mt-0.5 text-[12px] font-semibold opacity-0">–</p>
               )}
             </button>
           );
@@ -648,7 +649,7 @@ export function LotResultCard({
       <div className="flex min-h-[24px] flex-wrap gap-1">{badges}</div>
       <div className="mt-auto border-t border-line pt-3">
         <div className="text-[16px] font-extrabold text-ink">{price}</div>
-        {priceHint ? <p className="text-[11px] font-medium text-muted-foreground">{priceHint}</p> : null}
+        {priceHint ? <p className="text-[12px] font-medium text-muted-foreground">{priceHint}</p> : null}
         {ctaLabel ? (
           <div className="mt-3">
             <ApButton label={ctaLabel} variant="dark" className="w-full" />
@@ -666,6 +667,7 @@ export function BottomSheet({
   children,
   actionLabel,
   onAction,
+  actionDisabled,
   footer,
 }: {
   open: boolean;
@@ -673,10 +675,15 @@ export function BottomSheet({
   title: string;
   children: ReactNode;
   actionLabel?: string;
-  onAction?: () => void;
+  /** May return a promise — the action button stays disabled until it settles (no double submits). */
+  onAction?: () => void | Promise<unknown>;
+  actionDisabled?: boolean;
   /** Sticky footer slot; falls back to actionLabel button when omitted. */
   footer?: ReactNode;
 }) {
+  const tc = useTranslations("common");
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -688,10 +695,29 @@ export function BottomSheet({
 
   if (!open) return null;
 
+  const runAction = () => {
+    if (!onAction || busyRef.current) return;
+    const out = onAction();
+    if (out && typeof (out as Promise<unknown>).then === "function") {
+      busyRef.current = true;
+      setBusy(true);
+      void (out as Promise<unknown>).finally(() => {
+        busyRef.current = false;
+        setBusy(false);
+      });
+    }
+  };
+
   const footerContent =
     footer ??
     (actionLabel && onAction ? (
-      <ApButton label={actionLabel} variant="dark" onClick={onAction} className="w-full" />
+      <ApButton
+        label={actionLabel}
+        variant="dark"
+        onClick={runAction}
+        disabled={busy || actionDisabled}
+        className="w-full"
+      />
     ) : null);
 
   return (
@@ -705,7 +731,7 @@ export function BottomSheet({
       >
         <div className="flex shrink-0 items-center justify-between gap-3 px-5 pt-5 pb-3">
           <h2 className="text-[20px] font-extrabold text-ink">{title}</h2>
-          <button type="button" onClick={onClose} className="flex size-9 items-center justify-center rounded-full border border-line" aria-label="Close">
+          <button type="button" onClick={onClose} className="flex size-11 items-center justify-center rounded-full border border-line" aria-label={tc("close")}>
             <X className="size-4" />
           </button>
         </div>
@@ -855,12 +881,12 @@ export function LotBadges({ badges, max }: { badges: LotBadge[]; max?: number })
         return (
           <span key={b.id} title={b.why ? `${b.label}. ${b.why}` : b.label} className={cn("flex h-6 shrink-0 items-center gap-1 rounded-full px-2", tone.bg)}>
             <Icon className={cn("size-[11px]", tone.text)} strokeWidth={2.4} aria-hidden />
-            <span className={cn("text-[11px] leading-[14px] font-bold whitespace-nowrap", tone.text)}>{b.label}</span>
+            <span className={cn("text-[12px] leading-[14px] font-bold whitespace-nowrap", tone.text)}>{b.label}</span>
           </span>
         );
       })}
       {more > 0 ? (
-        <span className="flex h-6 shrink-0 items-center rounded-full bg-soft px-2 text-[11px] leading-[14px] font-bold text-ink">{`+${more}`}</span>
+        <span className="flex h-6 shrink-0 items-center rounded-full bg-soft px-2 text-[12px] leading-[14px] font-bold text-ink">{`+${more}`}</span>
       ) : null}
     </div>
   );
@@ -937,4 +963,72 @@ export function LotRow({
       </div>
     </div>
   );
+}
+
+type AsyncDialogState =
+  | { kind: "confirm"; message: string; resolve: (v: boolean) => void }
+  | { kind: "prompt"; message: string; value: string; resolve: (v: string | null) => void }
+  | null;
+
+/**
+ * In-app replacement for window.confirm / window.prompt (native dialogs are untranslated,
+ * look broken on mobile and are blocked in some in-app browsers).
+ * Usage: const { confirm, prompt, dialog } = useAsyncDialog(); … {dialog}
+ */
+export function useAsyncDialog() {
+  const t = useTranslations("common");
+  const [state, setState] = useState<AsyncDialogState>(null);
+  const close = (v: boolean | string | null) => {
+    if (!state) return;
+    if (state.kind === "confirm") state.resolve(Boolean(v));
+    else state.resolve(typeof v === "string" ? v : null);
+    setState(null);
+  };
+  const confirm = (message: string) =>
+    new Promise<boolean>((resolve) => setState({ kind: "confirm", message, resolve }));
+  const prompt = (message: string, initial = "") =>
+    new Promise<string | null>((resolve) =>
+      setState({ kind: "prompt", message, value: initial, resolve }),
+    );
+  const dialog = state ? (
+    <BottomSheet
+      open
+      onClose={() => close(state.kind === "confirm" ? false : null)}
+      title={state.kind === "confirm" ? t("confirmTitle") : state.message}
+      footer={
+        <div className="flex gap-2">
+          <ApButton
+            label={t("cancel")}
+            variant="outline"
+            onClick={() => close(state.kind === "confirm" ? false : null)}
+            className="flex-1"
+          />
+          <ApButton
+            label={t("ok")}
+            variant="dark"
+            onClick={() => close(state.kind === "confirm" ? true : state.value)}
+            className="flex-1"
+          />
+        </div>
+      }
+    >
+      {state.kind === "confirm" ? (
+        <p className="text-ap-body text-ink">{state.message}</p>
+      ) : (
+        <input
+          autoFocus
+          type="text"
+          inputMode="decimal"
+          value={state.value}
+          onChange={(e) => setState({ ...state, value: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") close(state.value);
+          }}
+          className="h-12 w-full rounded-xl border border-line bg-card px-3 text-center text-ap-card font-extrabold text-ink"
+          aria-label={state.message}
+        />
+      )}
+    </BottomSheet>
+  ) : null;
+  return { confirm, prompt, dialog };
 }

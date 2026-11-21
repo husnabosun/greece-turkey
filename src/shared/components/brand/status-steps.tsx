@@ -44,7 +44,7 @@ export function StatusSteps({
             <p
               className={cn(
                 "mt-1 max-w-full px-0.5 text-center leading-tight",
-                "text-[11px] max-[399px]:line-clamp-2 min-[400px]:text-ap-small min-[400px]:leading-normal",
+                "text-[12px] max-[399px]:line-clamp-2 min-[400px]:text-ap-small min-[400px]:leading-normal",
                 failed
                   ? "font-semibold text-risk"
                   : active
@@ -57,7 +57,7 @@ export function StatusSteps({
               {label}
             </p>
             {caption ? (
-              <p className="mt-0.5 max-w-full truncate px-0.5 text-center text-[11px] text-muted-foreground">
+              <p className="mt-0.5 max-w-full truncate px-0.5 text-center text-[12px] text-muted-foreground">
                 {caption}
               </p>
             ) : null}

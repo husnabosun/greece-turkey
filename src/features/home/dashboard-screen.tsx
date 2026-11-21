@@ -1,5 +1,7 @@
 "use client";
 
+import { useErrorMessage } from "@/shared/lib/error-message";
+import { localizeTip } from "@/features/weather-risk/tip-i18n";
 import { useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -97,6 +99,7 @@ function weatherLabelKey(label: string) {
 export function DashboardScreen() {
   const t = useTranslations("farmerHome");
   const tTasks = useTranslations("farmerTasks");
+  const errMsg = useErrorMessage();
   const tThreats = useTranslations("riskThreats");
   const tFields = useTranslations("farmerFields");
   const locale = useLocale();
@@ -303,7 +306,7 @@ export function DashboardScreen() {
     try {
       const result = await completeTask(taskId);
       if (!result.ok) {
-        toast.error(result.error ?? tTasks("actionFailed"));
+        toast.error(errMsg(result.error, "actionFailed"));
         await reloadTasks();
         return;
       }
@@ -319,7 +322,7 @@ export function DashboardScreen() {
     try {
       const result = await dismissTask(taskId);
       if (!result.ok) {
-        toast.error(result.error ?? tTasks("actionFailed"));
+        toast.error(errMsg(result.error, "actionFailed"));
         await reloadTasks();
         return;
       }
@@ -400,7 +403,7 @@ export function DashboardScreen() {
       : t("kickerAllClear");
 
   const tipText =
-    (elevated?.actions?.[0] ?? "") ||
+    localizeTip(elevated?.actions?.[0] ?? "", locale) ||
     (elevated ? threatTip(elevated.threat, tThreats) : "") ||
     (weather ? t("keepChecks") : fields.length === 0 ? t("noFieldsBody") : t("noLocationBody"));
 
@@ -600,7 +603,7 @@ export function DashboardScreen() {
               <MapPin className="size-3" style={{ color: tone.iconColor }} aria-hidden />
               {fieldBadge}
             </div>
-            <p className={cn("mt-3 text-[11.5px] font-bold tracking-[1.4px] uppercase", tone.kicker)}>
+            <p className={cn("mt-3 text-[12px] font-bold tracking-[1.4px] uppercase", tone.kicker)}>
               {kickerText}
             </p>
             <h2 className="mt-1.5 max-w-[240px] text-[23px] leading-tight font-extrabold tracking-tight text-ink">
@@ -666,7 +669,7 @@ export function DashboardScreen() {
           <SectionHeader
             title={t("todayTasks")}
             action={
-              <Link href="/farmer/tasks" className="text-ap-body font-medium text-muted-foreground">
+              <Link href="/farmer/tasks" className="inline-flex min-h-11 min-w-11 items-center justify-end text-ap-body font-medium text-muted-foreground">
                 {t("seeAll")}
               </Link>
             }
@@ -714,7 +717,7 @@ export function DashboardScreen() {
           <SectionHeader
             title={t("yourFields")}
             action={
-              <Link href="/farmer/fields" className="text-ap-body font-medium text-muted-foreground">
+              <Link href="/farmer/fields" className="inline-flex min-h-11 min-w-11 items-center justify-end text-ap-body font-medium text-muted-foreground">
                 {t("seeAll")}
               </Link>
             }

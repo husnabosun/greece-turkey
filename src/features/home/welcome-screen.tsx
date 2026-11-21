@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { ArrowRight, Check, Globe, MapPin, Sprout } from "lucide-react";
@@ -8,6 +8,7 @@ import { LOCALES, type Locale } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
+import { useErrorMessage } from "@/shared/lib/error-message";
 
 const REGIONS_GR = [
   { id: "north-aegean", el: "Βόρειο Αιγαίο", en: "North Aegean", tr: "Kuzey Ege" },
@@ -26,12 +27,33 @@ const REGIONS_TR = [
 type Step = 1 | 2 | 3;
 
 /** 3-step farmer onboarding (Β10): country/region → first field → language. */
+const STEP_KEY = "ap_onboarding_step";
+
 export function WelcomeScreen() {
   const t = useTranslations("farmerWelcome");
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
-  const [step, setStep] = useState<Step>(1);
+  const errMsg = useErrorMessage();
+  // Step survives the language switch (router.replace remounts) and a page refresh.
+  const [step, setStepState] = useState<Step>(1);
+  useEffect(() => {
+    try {
+      const n = Number(window.sessionStorage.getItem(STEP_KEY));
+      if (n === 2 || n === 3) setStepState(n as Step);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const setStep = (n: Step) => {
+    setStepState(n);
+    try {
+      window.sessionStorage.setItem(STEP_KEY, String(n));
+    } catch {
+      /* ignore */
+    }
+  };
+  const nameTouched = useRef(false);
   const [country, setCountry] = useState<"GR" | "TR">("GR");
   const [regionId, setRegionId] = useState<string>("north-aegean");
   const [displayName, setDisplayName] = useState("");
@@ -50,15 +72,26 @@ export function WelcomeScreen() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
+      const prefs = (user.user_metadata as { notify_prefs?: { offers?: boolean; risk?: boolean } } | null)
+        ?.notify_prefs;
+      if (prefs) {
+        if (typeof prefs.offers === "boolean") setNotifyOffers(prefs.offers);
+        if (typeof prefs.risk === "boolean") setNotifyRisk(prefs.risk);
+      }
       const { data } = await supabase
         .from("profiles")
         .select("display_name, country, place, locale")
         .eq("id", user.id)
         .maybeSingle();
-      if (data?.display_name) setDisplayName(data.display_name);
+      // Never overwrite what the farmer already started typing.
+      if (data?.display_name && !nameTouched.current) setDisplayName(data.display_name);
       if (data?.country === "GR" || data?.country === "TR") {
         setCountry(data.country);
-        setRegionId(data.country === "TR" ? "izmir" : "north-aegean");
+        const list = data.country === "TR" ? REGIONS_TR : REGIONS_GR;
+        const saved = list.find(
+          (r) => data.place && [r.el, r.en, r.tr].some((l) => l === data.place),
+        );
+        setRegionId(saved?.id ?? (data.country === "TR" ? "izmir" : "north-aegean"));
       }
       if (data?.locale === "el" || data?.locale === "en" || data?.locale === "tr") {
         setPrefLocale(data.locale);
@@ -89,19 +122,25 @@ export function WelcomeScreen() {
       return false;
     }
     const place = regionLabel(regionId);
+    const name = displayName.trim().slice(0, 80);
     const { error } = await supabase
       .from("profiles")
       .update({
         country,
         place,
         locale: prefLocale,
-        display_name: displayName.trim() || null,
+        // Empty input keeps the existing name instead of wiping it.
+        ...(name ? { display_name: name } : {}),
       })
       .eq("id", user.id);
     if (error) {
-      toast.error(error.message);
+      toast.error(errMsg(error.message, "saveFailed"));
       return false;
     }
+    // Notification prefs follow the account (all devices), not just this browser.
+    await supabase.auth
+      .updateUser({ data: { notify_prefs: { offers: notifyOffers, risk: notifyRisk } } })
+      .catch(() => undefined);
     try {
       localStorage.setItem(
         "ap_notify_prefs",
@@ -119,6 +158,11 @@ export function WelcomeScreen() {
       const ok = await saveProfile();
       if (!ok) return;
       toast.success(t("done"));
+      try {
+        window.sessionStorage.removeItem(STEP_KEY);
+      } catch {
+        /* ignore */
+      }
       if (prefLocale !== locale) {
         router.replace("/farmer/fields/new", { locale: prefLocale });
       } else {
@@ -160,7 +204,11 @@ export function WelcomeScreen() {
             <span className="text-ap-small font-bold text-muted-foreground uppercase">{t("yourName")}</span>
             <input
               value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
+              onChange={(e) => {
+                nameTouched.current = true;
+                setDisplayName(e.target.value);
+              }}
+              maxLength={80}
               className="h-12 w-full rounded-2xl border border-line bg-card px-4 text-ap-body font-semibold text-ink outline-none focus:border-ink"
               placeholder={t("namePlaceholder")}
             />
@@ -276,7 +324,7 @@ export function WelcomeScreen() {
         {step > 1 ? (
           <button
             type="button"
-            onClick={() => setStep((s) => (s === 1 ? 1 : ((s - 1) as Step)))}
+            onClick={() => setStep(step === 1 ? 1 : ((step - 1) as Step))}
             className="flex h-12 flex-1 items-center justify-center rounded-full border border-line bg-card text-ap-btn font-bold text-ink"
           >
             {t("back")}

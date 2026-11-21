@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -16,7 +17,11 @@ import {
 import { formatStremmata } from "@/features/fields/area";
 import { deleteFarmerField, updateFarmerField } from "@/features/fields/field-mutations";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
-import { FieldHealthMap } from "@/features/fields/field-health-map";
+// Mapbox (~1 MB) is only fetched when a map is actually on screen.
+const FieldHealthMap = dynamic(() => import("@/features/fields/field-health-map").then((m) => m.FieldHealthMap), {
+  ssr: false,
+  loading: () => <div className="w-full animate-pulse rounded-[18px] bg-soft" style={{ height: 320 }} />,
+});
 import { useFieldTrees } from "@/features/fields/use-field-trees";
 import {
   defaultVarietySlug,
@@ -33,7 +38,7 @@ import type { Field } from "@/shared/types/database";
 import { FIELD_DOTS, colors } from "@/shared/theme/tokens";
 import { threatLabel } from "@/features/weather-risk/threat-labels";
 import { cn } from "@/shared/lib/utils";
-import { useErrorMessage } from "@/shared/lib/error-message";
+import { parseTreeCount, useErrorMessage } from "@/shared/lib/error-message";
 
 export function FieldsScreen() {
   const t = useTranslations("farmerFields");
@@ -141,8 +146,8 @@ export function FieldsScreen() {
 
   async function saveEdit() {
     if (!activeRaw) return;
-    const trees = editTrees.trim() === "" ? null : Number(editTrees.replace(",", "."));
-    if (trees != null && (!Number.isFinite(trees) || trees < 1 || trees > 5000)) {
+    const trees = editTrees.trim() === "" ? null : parseTreeCount(editTrees);
+    if (editTrees.trim() !== "" && trees == null) {
       toast.error(t("invalidTrees"));
       return;
     }
@@ -485,13 +490,14 @@ export function FieldsScreen() {
         onClose={() => setEditOpen(false)}
         title={t("editField")}
         actionLabel={busy ? t("saving") : t("saveField")}
-        onAction={() => void saveEdit()}
+        onAction={() => saveEdit()}
       >
         <label className="block text-ap-small font-bold text-muted-foreground">
           {t("fieldName")}
           <input
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
+            maxLength={80}
             className="mt-1 h-11 w-full rounded-xl border border-line px-3 text-ap-body font-bold text-ink outline-none"
           />
         </label>
@@ -500,9 +506,15 @@ export function FieldsScreen() {
           <input
             value={editTrees}
             inputMode="numeric"
-            onChange={(e) => setEditTrees(e.target.value.replace(/[^\d]/g, ""))}
+            onChange={(e) => setEditTrees(e.target.value.slice(0, 7))}
+            aria-invalid={editTrees.trim() !== "" && parseTreeCount(editTrees) == null}
             className="mt-1 h-11 w-full rounded-xl border border-line px-3 text-ap-body font-bold text-ink outline-none"
           />
+          {editTrees.trim() !== "" && parseTreeCount(editTrees) == null ? (
+            <span className="mt-1 block text-ap-small font-semibold text-risk" role="alert">
+              {t("invalidTrees")}
+            </span>
+          ) : null}
         </label>
         <div>
           <p className="text-ap-small font-bold text-muted-foreground">{t("oliveVariety")}</p>
@@ -554,7 +566,7 @@ export function FieldsScreen() {
         onClose={() => setDeleteOpen(false)}
         title={t("deleteField")}
         actionLabel={busy ? t("saving") : t("confirmDelete")}
-        onAction={() => void confirmDelete()}
+        onAction={() => confirmDelete()}
       >
         <p className="text-ap-body text-muted-foreground">
           {t("deleteFieldHint", { name: activeRaw?.name ?? "" })}

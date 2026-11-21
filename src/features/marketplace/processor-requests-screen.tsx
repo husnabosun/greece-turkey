@@ -1,12 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import mapboxgl from "mapbox-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Minus, MoreHorizontal, Plus, X } from "lucide-react";
 import { toast } from "sonner";
-import { publicEnv } from "@/core/config/env";
-import { SATELLITE_STYLE } from "@/features/fields/satellite-style";
+import dynamic from "next/dynamic";
 import { colors } from "@/shared/theme/tokens";
 import { useLocale, useTranslations } from "next-intl";
 import { ApButton } from "@/shared/components/brand/ap-button";
@@ -15,7 +12,15 @@ import { Chip } from "@/shared/components/brand/chip";
 import { Pill } from "@/shared/components/brand/pill";
 import { Link } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
-import { euroPrice, euroTotal, formatTons, saleTotal } from "@/features/marketplace/pricing";
+import {
+  MARKET_LIMITS,
+  euroPrice,
+  euroTotal,
+  formatTons,
+  parseBounded,
+  parseLocaleNumber,
+  saleTotal,
+} from "@/features/marketplace/pricing";
 import {
   defaultVarietySlug,
   marketplaceVarietyOptions,
@@ -30,8 +35,14 @@ import {
   PageHeader,
   Panel,
   Switch,
+  useAsyncDialog,
 } from "./processor-kit";
-import { MARKET_REGIONS, REGION_CENTERS, marketRegionOptions, regionLabel, resolveMarketRegion } from "./regions";
+import { marketRegionOptions, regionLabel, resolveMarketRegion } from "./regions";
+
+const RegionMap = dynamic(() => import("./region-map").then((m) => m.RegionMap), {
+  ssr: false,
+  loading: () => <div className="h-[260px] w-full animate-pulse rounded-[18px] bg-soft" />,
+});
 import {
   DEFAULT_DELIVERY_IN_DAYS,
   addDaysIso,
@@ -52,7 +63,7 @@ import {
   type ProcessorRequest,
 } from "./use-processor-market";
 import { useVarietyLabel } from "./processor-shared";
-import { useErrorMessage } from "@/shared/lib/error-message";
+import { useBoundsMessage, useErrorMessage } from "@/shared/lib/error-message";
 
 const SCORE_MIN = 50;
 const SCORE_MAX = 95;
@@ -212,172 +223,6 @@ function FormSwitch({ label, checked, onChange }: { label: string; checked: bool
 
 /* ---------- region map (new-request form) ---------- */
 
-function RegionMap({
-  values,
-  onChange,
-  locale,
-  label,
-  needTokenLabel,
-}: {
-  values: string[];
-  onChange: (regions: string[]) => void;
-  locale: string;
-  label: string;
-  needTokenLabel: string;
-}) {
-  const token = publicEnv.NEXT_PUBLIC_MAPBOX_TOKEN || undefined;
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<mapboxgl.Marker[]>([]);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const valuesRef = useRef(values);
-  valuesRef.current = values;
-  const [ready, setReady] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (!token || !containerRef.current || mapRef.current) return;
-    mapboxgl.accessToken = token;
-    try {
-      const bounds = new mapboxgl.LngLatBounds();
-      for (const r of MARKET_REGIONS) bounds.extend(REGION_CENTERS[r]);
-      const map = new mapboxgl.Map({
-        container: containerRef.current,
-        style: SATELLITE_STYLE,
-        bounds,
-        fitBoundsOptions: { padding: 28 },
-        attributionControl: false,
-        dragRotate: false,
-        pitchWithRotate: false,
-        cooperativeGestures: true,
-      });
-      map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-right");
-      map.on("load", () => {
-        map.resize();
-        setReady(true);
-      });
-      // Only a failure before the style loads means "no map"; a single bad tile later is harmless.
-      map.on("error", () => {
-        if (!map.loaded()) setFailed(true);
-      });
-      mapRef.current = map;
-    } catch {
-      setFailed(true);
-    }
-    // The dialog animates/lays out after mount — keep the canvas in sync with the box size.
-    const ro = new ResizeObserver(() => mapRef.current?.resize());
-    ro.observe(containerRef.current);
-    return () => {
-      ro.disconnect();
-      markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
-      mapRef.current?.remove();
-      mapRef.current = null;
-      setReady(false);
-    };
-  }, [token]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !ready) return;
-    markersRef.current.forEach((m) => m.remove());
-    markersRef.current = [];
-    const selected = new Set(
-      values.map((v) => resolveMarketRegion(v)).filter((r): r is NonNullable<typeof r> => r != null),
-    );
-
-    for (const region of MARKET_REGIONS) {
-      const active = selected.has(region);
-      const name = regionLabel(region, locale);
-      const el = document.createElement("button");
-      el.type = "button";
-      el.setAttribute("aria-label", name);
-      el.setAttribute("aria-pressed", String(active));
-      el.title = name;
-      el.style.cssText = [
-        "display:flex",
-        "align-items:center",
-        "gap:6px",
-        "padding:0",
-        "border:0",
-        "background:transparent",
-        "cursor:pointer",
-        "position:relative",
-        active ? "z-index:2" : "z-index:1",
-      ].join(";");
-      const pin = document.createElement("span");
-      pin.style.cssText = "position:relative;display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;flex-shrink:0;";
-      if (active) {
-        const shade = document.createElement("span");
-        shade.setAttribute("aria-hidden", "true");
-        shade.style.cssText = [
-          "position:absolute",
-          "inset:0",
-          "border-radius:999px",
-          `background:${colors.good}`,
-          "opacity:0.3",
-          "box-shadow:0 0 0 12px rgba(63,107,47,0.18), 0 10px 28px rgba(0,0,0,0.4)",
-          "pointer-events:none",
-        ].join(";");
-        pin.appendChild(shade);
-      }
-      const dot = document.createElement("span");
-      dot.style.cssText = [
-        "position:relative",
-        `width:${active ? 18 : 14}px`,
-        `height:${active ? 18 : 14}px`,
-        "border-radius:999px",
-        `background:${active ? colors.ink : colors.good}`,
-        "border:3px solid #fff",
-        active
-          ? "box-shadow:0 4px 14px rgba(0,0,0,.55), 0 0 0 4px rgba(63,107,47,0.4)"
-          : "box-shadow:0 2px 8px rgba(0,0,0,.45)",
-      ].join(";");
-      pin.appendChild(dot);
-      el.appendChild(pin);
-      if (active) {
-        const tag = document.createElement("span");
-        tag.textContent = name;
-        tag.style.cssText =
-          "position:relative;padding:3px 8px;border-radius:999px;background:#fff;color:" +
-          colors.ink +
-          ";font:800 12px/16px Inter,system-ui,sans-serif;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.35)";
-        el.appendChild(tag);
-      }
-      el.addEventListener("click", (e) => {
-        e.stopPropagation();
-        onChangeRef.current(toggleValue(valuesRef.current, region));
-      });
-      const marker = new mapboxgl.Marker({ element: el, anchor: "center" })
-        .setLngLat(REGION_CENTERS[region])
-        .addTo(map);
-      markersRef.current.push(marker);
-    }
-  }, [ready, values, locale]);
-
-  if (!token || failed) {
-    return (
-      <div
-        style={{ height: 200 }}
-        className="flex shrink-0 items-center justify-center rounded-xl border border-line bg-soft px-4 text-center text-[13px] font-semibold text-muted-foreground">
-        {needTokenLabel}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      role="group"
-      aria-label={label}
-      style={{ height: 220 }}
-      className="relative w-full shrink-0 overflow-hidden rounded-xl border border-line bg-ink"
-    >
-      <div ref={containerRef} className="absolute inset-0" />
-    </div>
-  );
-}
-
 /* ---------- tonnes stepper ---------- */
 
 function TonsStepper({
@@ -393,10 +238,10 @@ function TonsStepper({
   decLabel: string;
   incLabel: string;
 }) {
-  const n = Number(value.replace(",", "."));
+  const n = parseLocaleNumber(value);
   const step = (delta: number) => {
-    const base = Number.isFinite(n) ? n : 0;
-    onChange(String(Math.max(1, Math.round(base + delta))));
+    const base = n ?? 0;
+    onChange(String(Math.min(MARKET_LIMITS.requestTons.max, Math.max(1, Math.round(base + delta)))));
   };
   return (
     <div className="flex flex-col gap-1.5">
@@ -501,7 +346,7 @@ function ScoreSlider({
           )}
         />
       </div>
-      <div className="relative h-4 text-[11px] font-semibold text-muted-foreground">
+      <div className="relative h-4 text-[12px] font-semibold text-muted-foreground">
         {ticks.map((tick) => (
           <span key={tick} className="absolute -translate-x-1/2" style={{ left: `${pos(tick)}%` }}>
             {tick}
@@ -833,9 +678,20 @@ function RequestMenu({
 export function ProcessorRequestsScreen() {
   const t = useTranslations("processor");
   const errMsg = useErrorMessage();
+  const boundsMsg = useBoundsMessage();
+  const { confirm: confirmDialog, prompt: promptDialog, dialog: asyncDialog } = useAsyncDialog();
   const locale = useLocale();
   const varietyLabel = useVarietyLabel();
-  const varietyOptions = useMemo(() => marketplaceVarietyOptions(locale), [locale]);
+  // Mills buy across the border too: show both countries' varieties (locale's country first), deduped.
+  const varietyOptions = useMemo(() => {
+    const own = resolveOliveCountry({ locale }).country;
+    const other = own === "GR" ? "TR" : "GR";
+    const seen = new Set<string>();
+    return [
+      ...marketplaceVarietyOptions(locale, { profileCountry: own }),
+      ...marketplaceVarietyOptions(locale, { profileCountry: other }),
+    ].filter((v) => (seen.has(v.value) ? false : (seen.add(v.value), true)));
+  }, [locale]);
   const { requests, offers, loading, error, reload } = useProcessorMarket();
   const [open, setOpen] = useState(false);
   const [varieties, setVarieties] = useState<string[]>(() => [
@@ -847,7 +703,13 @@ export function ProcessorRequestsScreen() {
   const [rangeStart, setRangeStart] = useState<string | null>(() => todayIso);
   const [rangeEnd, setRangeEnd] = useState<string | null>(() => addDaysIso(todayIso, 9));
   const [calendarKey, setCalendarKey] = useState(0);
-  const [provinces, setProvinces] = useState<string[]>(["Peloponnese"]);
+  const [provinces, setProvincesRaw] = useState<string[]>([]);
+  // Chips and map can both add a region — keep one canonical entry per region (no duplicate «Πελοπόννησος»).
+  const setProvinces = useCallback(
+    (next: string[]) =>
+      setProvincesRaw([...new Set(next.map((r) => resolveMarketRegion(r) ?? r))]),
+    [],
+  );
   const [noBanned, setNoBanned] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -873,7 +735,7 @@ export function ProcessorRequestsScreen() {
     setRangeStart(todayIso);
     setRangeEnd(addDaysIso(todayIso, 9));
     setCalendarKey((k) => k + 1);
-    setProvinces(["Peloponnese"]);
+    setProvinces([]);
     setNoBanned(true);
   };
 
@@ -902,7 +764,7 @@ export function ProcessorRequestsScreen() {
     const parsedRegions = splitStoredList(req.region)
       .map((r) => resolveMarketRegion(r))
       .filter((r): r is NonNullable<typeof r> => r != null);
-    setProvinces(parsedRegions.length > 0 ? parsedRegions : ["Peloponnese"]);
+    setProvinces(parsedRegions);
     setNoBanned(req.noBanned);
     setOpen(true);
   };
@@ -914,11 +776,12 @@ export function ProcessorRequestsScreen() {
 
   const onSubmit = async () => {
     if (saving) return;
-    const tonsN = Number(tons.replace(",", "."));
-    if (!(tonsN > 0)) {
-      toast.error(t("saveFailed"));
+    const tc = parseBounded(tons, MARKET_LIMITS.requestTons);
+    if (!tc.ok) {
+      toast.error(boundsMsg(tc, "tons", locale));
       return;
     }
+    const tonsN = tc.value;
     if (!rangeStart || !rangeEnd) {
       toast.error(t("deliveryPickEnd"));
       return;
@@ -950,7 +813,7 @@ export function ProcessorRequestsScreen() {
   };
 
   const onCloseRequest = async (requestId: string) => {
-    if (!window.confirm(t("deleteRequestConfirm"))) return;
+    if (!(await confirmDialog(t("deleteRequestConfirm")))) return;
     setBusyId(requestId);
     try {
       const res = await deactivateBuyRequest(requestId);
@@ -974,7 +837,7 @@ export function ProcessorRequestsScreen() {
         toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
-      toast.success(t("acceptedScheduled", { date: acceptDate }));
+      toast.success(t("acceptedScheduled", { date: new Date(`${acceptDate}T12:00:00`).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" }) }));
       setAcceptOffer(null);
       await reload();
     } finally {
@@ -983,7 +846,7 @@ export function ProcessorRequestsScreen() {
   };
 
   const onRejectOffer = async (offer: ProcessorOffer) => {
-    if (!window.confirm(t("rejectConfirm"))) return;
+    if (!(await confirmDialog(t("rejectConfirm")))) return;
     setBusyId(offer.id);
     try {
       const res = await rejectOffer(offer.id);
@@ -1001,13 +864,14 @@ export function ProcessorRequestsScreen() {
 
   const onCounterOffer = async (offer: ProcessorOffer) => {
     const suggested = Math.max(0.05, Math.round((offer.pricePerKg - 0.05) * 100) / 100);
-    const raw = window.prompt(t("counterPrompt"), String(suggested));
+    const raw = await promptDialog(t("counterPrompt"), String(suggested).replace(".", ","));
     if (raw == null) return;
-    const next = Number(raw.replace(",", "."));
-    if (!Number.isFinite(next) || next <= 0) {
-      toast.error(t("invalidPrice"));
+    const pc = parseBounded(raw, MARKET_LIMITS.pricePerKg);
+    if (!pc.ok) {
+      toast.error(boundsMsg(pc, "price", locale));
       return;
     }
+    const next = pc.value;
     setBusyId(offer.id);
     try {
       const res = await counterIncomingOffer(offer, next);
@@ -1024,6 +888,7 @@ export function ProcessorRequestsScreen() {
 
   return (
     <div className="space-y-5">
+      {asyncDialog}
       <PageHeader
         title={t("requestsTitle")}
         subtitle={t("requestsSubtitle")}
@@ -1043,7 +908,7 @@ export function ProcessorRequestsScreen() {
         subtitle={t("offerDetailHint")}
         actionLabel={busyId ? t("loading") : t("accept")}
         actionDisabled={busyId != null}
-        onAction={() => void onAcceptConfirm()}
+        onAction={() => onAcceptConfirm()}
       >
         {acceptOffer ? (
           <div className="mb-4 space-y-2 rounded-xl bg-soft p-3">
@@ -1128,7 +993,7 @@ export function ProcessorRequestsScreen() {
                     <div className="mt-2 h-2 max-w-[280px] overflow-hidden rounded-full bg-soft">
                       <div className="h-full rounded-full bg-ink" style={{ width: `${pct}%` }} />
                     </div>
-                    <p className="mt-1 text-[11px] font-semibold text-muted-foreground">
+                    <p className="mt-1 text-[12px] font-semibold text-muted-foreground">
                       {t("filledPct", { pct })} · {t("filledOf", { filled: req.filledTons, total: req.tons })}
                     </p>
                   </div>
@@ -1190,7 +1055,7 @@ export function ProcessorRequestsScreen() {
           !saving &&
           rangeStart != null &&
           rangeEnd != null &&
-          Number(tons.replace(",", ".")) > 0 &&
+          parseBounded(tons, MARKET_LIMITS.requestTons).ok &&
           varieties.length > 0 &&
           provinces.length > 0;
         const rangeText =
@@ -1200,7 +1065,8 @@ export function ProcessorRequestsScreen() {
               ? `${isoToDate(rangeStart).toLocaleDateString(locale, { day: "numeric", month: "short" })} – …`
               : t("pickDeliveryDates");
         const rangeDays = rangeStart && rangeEnd ? daysBetween(rangeStart, rangeEnd) + 1 : null;
-        const tonsN = Number(tons.replace(",", "."));
+        const tonsCheck = parseBounded(tons, MARKET_LIMITS.requestTons);
+        const tonsN = tonsCheck.ok ? tonsCheck.value : NaN;
         const presets = [7, 14, 30];
         const band = scoreBand(minScore);
         const varietiesText = varieties.map((v) => varietyLabel(v)).join(" · ") || "—";
@@ -1260,6 +1126,11 @@ export function ProcessorRequestsScreen() {
                     decLabel={t("decreaseTons")}
                     incLabel={t("increaseTons")}
                   />
+                  {!tonsCheck.ok && tons.trim() ? (
+                    <p className="text-[13px] font-semibold text-risk" role="alert">
+                      {boundsMsg(tonsCheck, "tons", locale)}
+                    </p>
+                  ) : null}
                 </SectionCard>
 
                 <SectionCard step={2} title={t("requestFormQuality")}>

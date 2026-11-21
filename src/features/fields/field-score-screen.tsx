@@ -32,6 +32,7 @@ import type { ProofLevel } from "@/shared/types/database";
 import { useRouter } from "@/shared/i18n/navigation";
 import { colors } from "@/shared/theme/tokens";
 import { cn } from "@/shared/lib/utils";
+import { useErrorMessage } from "@/shared/lib/error-message";
 
 const STAGES: { key: CropStage; icon: LucideIcon }[] = [
   { key: "growing", icon: Sprout },
@@ -44,6 +45,7 @@ type Props = { fieldId: string };
 /** Field certification — real proof uploads + single quality_scores value (Χ6). */
 export function FieldScoreScreen({ fieldId }: Props) {
   const t = useTranslations("farmerFields");
+  const errMsg = useErrorMessage();
   const locale = useLocale();
   const router = useRouter();
   const { fields, loading } = useFarmerFields();
@@ -224,7 +226,7 @@ export function FieldScoreScreen({ fieldId }: Props) {
         .eq("id", field.id);
 
       if (error) {
-        toast.error(error.message);
+        toast.error(errMsg(error.message, "saveFailed"));
         return;
       }
 
@@ -409,7 +411,7 @@ export function FieldScoreScreen({ fieldId }: Props) {
                     </span>
                     <span
                       className={cn(
-                        "text-[10px] font-bold tracking-[0.5px]",
+                        "text-[12px] font-bold tracking-[0.5px]",
                         on ? "text-good" : p.note === "REQUIRED" ? "text-risk" : "text-muted-foreground",
                       )}
                     >
@@ -461,7 +463,7 @@ export function FieldScoreScreen({ fieldId }: Props) {
                 <span
                   key={key}
                   className={cn(
-                    "flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-0.5 text-[10px] font-bold sm:text-[10.5px]",
+                    "flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-0.5 text-[12px] font-bold sm:text-[10.5px]",
                     on ? "bg-warn-soft text-warn-text" : "bg-black/5 text-muted-foreground",
                   )}
                 >
