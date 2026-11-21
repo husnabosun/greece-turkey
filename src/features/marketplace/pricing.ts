@@ -1,4 +1,4 @@
-/** Pure market helpers: prices are rounded to €0.05 and totals to €50. No UI imports. */
+/** Pure market helpers. Prices round to €0.05 in pickers; money totals are exact to the cent. No UI imports. */
 
 const toCents = (n: number) => Math.round(n * 100);
 const fromCents = (c: number) => c / 100;
@@ -120,4 +120,31 @@ export function hasBannedLast12Months(sprays: { fieldId: string; banned: boolean
   return sprays.some((s) => s.fieldId === fieldId && s.banned && s.ts >= from && s.ts <= now);
 }
 
-export const saleTotal = (tons: number, pricePerKg: number) => roundTotal(tons * 1000 * pricePerKg);
+/** Exact sale amount in euros (to the cent). Both sides must show the same number, so never round to €50. */
+export const saleTotal = (tons: number, pricePerKg: number) => Math.round(tons * 1000 * pricePerKg * 100) / 100;
+
+/**
+ * Locale-aware number parser for user input ("12.300" Greek thousands, "12,5" decimal comma, "12 300").
+ * Returns null for anything that is not a plain positive decimal (no "1e6", "0x10", "-5").
+ */
+export function parseLocaleNumber(raw: string): number | null {
+  let s = String(raw ?? "").trim().replace(/[\s\u00a0\u202f']/g, "");
+  if (!s) return null;
+  if (!/^[0-9.,]+$/.test(s)) return null;
+  const hasDot = s.includes(".");
+  const hasComma = s.includes(",");
+  if (hasDot && hasComma) {
+    const dec = s.lastIndexOf(".") > s.lastIndexOf(",") ? "." : ",";
+    const thou = dec === "." ? "," : ".";
+    s = s.split(thou).join("");
+    if (dec === ",") s = s.replace(",", ".");
+  } else if (hasComma) {
+    if (/^\d{1,3}(,\d{3})+$/.test(s) && s.split(",").length > 2) s = s.split(",").join("");
+    else s = s.replace(",", ".");
+  } else if (hasDot) {
+    if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.split(".").join("");
+  }
+  if (!/^\d+(\.\d+)?$/.test(s)) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}

@@ -49,6 +49,7 @@ import { Link, useRouter } from "@/shared/i18n/navigation";
 import type { Field } from "@/shared/types/database";
 import { FIELD_DOTS } from "@/shared/theme/tokens";
 import { cn } from "@/shared/lib/utils";
+import { useErrorMessage } from "@/shared/lib/error-message";
 
 type Tab = "overview" | "requests" | "offers" | "sales";
 type FilterKey = "fits" | "near" | string;
@@ -180,6 +181,7 @@ function requestMismatchReason(
 
 export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const t = useTranslations("farmerMarket");
+  const errMsg = useErrorMessage();
   const tFields = useTranslations("farmerFields");
   const locale = useLocale();
   const router = useRouter();
@@ -247,10 +249,10 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     (sum, d) => sum + deliveryPayableAmount(d.tons, d.pricePerKg, d.actualKg),
     0,
   );
-  const onTheWay = activeDeliveries.reduce(
-    (sum, d) => sum + deliveryPayableAmount(d.tons, d.pricePerKg, d.actualKg),
-    0,
-  );
+  const onTheWay = activeDeliveries
+    .filter((d) => d.labResult !== "failed")
+    .reduce((sum, d) => sum + deliveryPayableAmount(d.tons, d.pricePerKg, d.actualKg), 0);
+  const closedDeliveries = deliveries.filter((d) => d.status === "cancelled");
 
   const regionChips = useMemo(() => {
     const set = new Set<string>();
@@ -305,7 +307,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     try {
       const result = await acceptOffer(offer.id, { scheduledFor: acceptDate });
       if (!result.ok) {
-        toast.error(result.error ?? t("actionFailed"), { id: toastId });
+        toast.error(errMsg(result.error, "actionFailed"), { id: toastId });
         return;
       }
       const dateLabel = new Date(`${acceptDate}T12:00:00`).toLocaleDateString(locale, {
@@ -333,7 +335,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     try {
       const result = await rejectIncomingBid(rejectTarget.id);
       if (!result.ok) {
-        toast.error(result.error ?? t("actionFailed"));
+        toast.error(errMsg(result.error, "actionFailed"));
         return;
       }
       toast.success(t("rejectedBidOk"));
@@ -355,7 +357,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     try {
       const result = await withdrawOffer(withdrawTarget.id);
       if (!result.ok) {
-        toast.error(result.error ?? t("actionFailed"));
+        toast.error(errMsg(result.error, "actionFailed"));
         return;
       }
       toast.success(t("withdrawnOk"));
@@ -390,7 +392,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
         tons,
       });
       if (!result.ok) {
-        toast.error(result.error === "invalidTons" ? t("invalidTons") : (result.error ?? t("actionFailed")));
+        toast.error(result.error === "invalidTons" ? t("invalidTons") : (errMsg(result.error, "actionFailed")));
         return;
       }
       toast.success(t("listingSavedOk"));
@@ -407,7 +409,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     try {
       const result = await withdrawListedLot(listingTarget.card.listedLotId);
       if (!result.ok) {
-        toast.error(result.error ?? t("actionFailed"));
+        toast.error(errMsg(result.error, "actionFailed"));
         return;
       }
       toast.success(t("listingWithdrawnOk"));
@@ -438,7 +440,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
       // Use the exact price the farmer typed — no silent 0.05 rounding.
       const result = await counterOffer(offer, Math.round(price * 100) / 100);
       if (!result.ok) {
-        toast.error(result.error ?? t("actionFailed"), { id: toastId });
+        toast.error(errMsg(result.error, "actionFailed"), { id: toastId });
         return;
       }
       toast.success(t("counteredOkDetail"), { id: toastId });
@@ -793,6 +795,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   labFailed={t("labFailedTitle")}
                   labFailedHint={t("labFailedHint")}
                   weighedLabel={t("weighedKg")}
+                  notPayable={t("notPayable")}
                 />
               ))}
             </div>
@@ -932,7 +935,30 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   labFailed={t("labFailedTitle")}
                   labFailedHint={t("labFailedHint")}
                   weighedLabel={t("weighedKg")}
+                  notPayable={t("notPayable")}
                 />
+              ))}
+            </div>
+          ) : null}
+          {closedDeliveries.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              {closedDeliveries.map((d) => (
+                <div key={d.id} className="rounded-[18px] border border-line bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-ap-card font-extrabold text-ink">{d.fieldName ?? "—"}</p>
+                      <p className="text-ap-body text-muted-foreground">
+                        {d.processorName ?? "—"} · {formatTons(d.tons, locale)}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-risk-soft px-2.5 py-1 text-ap-small font-bold text-risk">
+                      {d.labResult === "failed" ? t("closedLabFailed") : t("closedCancelled")}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-ap-small text-muted-foreground">
+                    {d.labResult === "failed" ? t("closedLabFailedHint") : t("closedCancelledHint")}
+                  </p>
+                </div>
               ))}
             </div>
           ) : null}
@@ -1163,6 +1189,7 @@ function ActiveDeliveryCard({
   labFailed,
   labFailedHint,
   weighedLabel,
+  notPayable,
 }: {
   delivery: MarketDelivery;
   steps: string[];
@@ -1178,13 +1205,18 @@ function ActiveDeliveryCard({
   labFailed: string;
   labFailedHint: string;
   weighedLabel: string;
+  notPayable: string;
 }) {
   const when = formatDeliveryDay(delivery.scheduledFor, locale);
   const payableKg = deliveryPayableKg(delivery.tons, delivery.actualKg);
   const amount = deliveryPayableAmount(delivery.tons, delivery.pricePerKg, delivery.actualKg);
   const contractedKg = delivery.tons * 1000;
   const delta = delivery.actualKg != null ? delivery.actualKg - contractedKg : null;
-  const meta = [when ? `${pickupOn} ${when}` : unscheduled, tonsLabel, delivery.lotVariety]
+  const meta = [
+    when ? `${pickupOn} ${when}` : unscheduled,
+    tonsLabel,
+    delivery.lotVariety ? varietyLabel(delivery.lotVariety, locale) : null,
+  ]
     .filter(Boolean)
     .join(" · ");
   const failed = delivery.labResult === "failed";
@@ -1212,20 +1244,27 @@ function ActiveDeliveryCard({
                   "{delta}",
                   delta == null
                     ? ""
-                    : `(${delta >= 0 ? "+" : ""}${new Intl.NumberFormat(locale).format(delta)} kg)`,
+                    : `(${delta >= 0 ? "+" : "−"}${new Intl.NumberFormat(locale).format(Math.abs(delta))} kg)`,
                 )}
             </p>
           ) : null}
         </div>
         <div className="text-right">
-          <p className="text-[22px] font-extrabold text-ink">{formatEuro(amount, locale)}</p>
-          <p className="text-ap-small text-muted-foreground">{youllGet}</p>
+          <p className={cn("text-[22px] font-extrabold", failed ? "text-muted-foreground line-through" : "text-ink")}>
+            {formatEuro(amount, locale)}
+          </p>
+          <p className="text-ap-small text-muted-foreground">{failed ? notPayable : youllGet}</p>
         </div>
       </div>
       <div className="mt-3">
-        <StatusSteps steps={steps} current={step < 0 ? 0 : step} captions={stepCaptions} />
+        <StatusSteps
+          steps={steps}
+          current={failed ? 2 : step < 0 ? 0 : step}
+          failedAt={failed ? 2 : undefined}
+          captions={stepCaptions}
+        />
       </div>
-      <p className="mt-2 text-ap-small font-semibold text-muted-foreground">{nextHint}</p>
+      {failed ? null : <p className="mt-2 text-ap-small font-semibold text-muted-foreground">{nextHint}</p>}
       {failed ? (
         <div className="mt-2 flex items-center gap-2.5 rounded-xl bg-risk/10 p-2.5">
           <FlaskConical className="size-5 shrink-0 text-risk" />

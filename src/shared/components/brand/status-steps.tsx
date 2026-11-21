@@ -1,21 +1,25 @@
-import { Check } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
 export function StatusSteps({
   steps,
   current,
   captions,
+  failedAt,
 }: {
   steps: string[];
   current: number;
+  /** Step that failed (e.g. lab check): drawn red with an ✗ and nothing after it is reached. */
+  failedAt?: number;
   /** Optional date/meta under each step label (B3). */
   captions?: (string | null | undefined)[];
 }) {
   return (
     <div className="flex">
       {steps.map((label, i) => {
-        const done = i < current;
-        const active = i === current;
+        const failed = failedAt != null && i === failedAt;
+        const done = !failed && i < current;
+        const active = !failed && i === current;
         const caption = captions?.[i];
         return (
           <div key={`${label}-${i}`} className="flex min-w-0 flex-1 flex-col items-center">
@@ -24,10 +28,11 @@ export function StatusSteps({
               <div
                 className={cn(
                   "flex size-6 shrink-0 items-center justify-center rounded-full",
-                  done ? "bg-good" : active ? "border-2 border-good bg-card" : "bg-soft",
+                  failed ? "bg-risk" : done ? "bg-good" : active ? "border-2 border-good bg-card" : "bg-soft",
                 )}
               >
                 {done ? <Check className="size-3.5 text-white" strokeWidth={3} aria-hidden /> : null}
+                {failed ? <X className="size-3.5 text-white" strokeWidth={3} aria-hidden /> : null}
               </div>
               <div
                 className={cn(
@@ -40,13 +45,19 @@ export function StatusSteps({
               className={cn(
                 "mt-1 max-w-full px-0.5 text-center leading-tight",
                 "text-[11px] max-[399px]:line-clamp-2 min-[400px]:text-ap-small min-[400px]:leading-normal",
-                active ? "font-semibold text-ink" : done ? "font-semibold text-good" : "font-normal text-muted-foreground",
+                failed
+                  ? "font-semibold text-risk"
+                  : active
+                    ? "font-semibold text-ink"
+                    : done
+                      ? "font-semibold text-good"
+                      : "font-normal text-muted-foreground",
               )}
             >
               {label}
             </p>
             {caption ? (
-              <p className="mt-0.5 max-w-full truncate px-0.5 text-center text-[10px] text-muted-foreground">
+              <p className="mt-0.5 max-w-full truncate px-0.5 text-center text-[11px] text-muted-foreground">
                 {caption}
               </p>
             ) : null}
