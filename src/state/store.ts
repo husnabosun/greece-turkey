@@ -1,9 +1,10 @@
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 import {
   areas,
   deliveries as seedDeliveries,
   factories,
-  farmer,
+  farmerProfiles,
   fields as seedFields,
   incomingOffers as seedIncoming,
   initialNotifications,
@@ -19,7 +20,9 @@ import {
   sprays as seedSprays,
   tasks as seedTasks,
   tonsAvailable,
+  type AppNotification,
   type Delivery,
+  type FarmerProfile,
   type Field,
   type IncomingOffer,
   type Offer,
@@ -38,6 +41,8 @@ import { createFeedback, upsertFeedback, type FeedbackAnswer, type FeedbackEntry
 import type { Assessment } from '@/lib/risk';
 import { buildSignals } from '@/lib/risk/signals';
 import { seasonStage } from '@/lib/risk/season';
+import { addToInbox, harvestReminders, offerNotification } from '@/lib/notifications';
+import { applyProfile, countryOf, languageFromLocales, weatherKey } from '@/lib/profile';
 import { nextTimestamp } from '@/lib/scans';
 import type { FieldWeather } from '@/lib/weather';
 import { loadAllWeather, loadFeedback, loadLanguage, saveFeedback, saveLanguage } from './services';
@@ -70,17 +75,17 @@ export interface OnboardingDraft {
   proofs: string[];
 }
 
-const EMPTY_DRAFT: OnboardingDraft = {
+const emptyDraft = (profile: FarmerProfile): OnboardingDraft => ({
   name: '',
   trees: 80,
   age: '20–50 years',
-  variety: 'Ayvalık',
+  variety: profile.varieties[0],
   irrigated: false,
   stage: 'harvested',
   sprays: '1-2',
   records: 'brecete',
   proofs: ['olives-photo', 'spray-receipt'],
-};
+});
 
 const FIELD_COLORS = ['#2E6FB0', '#7B3FB5', '#2E8B8B', '#B5663F'];
 
@@ -120,12 +125,16 @@ interface AppState {
   weatherLoading: boolean;
   /** "Was this right?" answers, kept as training data. */
   feedback: FeedbackEntry[];
-  /** Language of the AI advisor text (the app itself stays in English). */
+  /** Language of the farmer app and of the AI advisor text. The processor panel stays in English. */
   language: Language;
+  /** The demo farmer: in Türkiye, or in Greece when the app is in Greek. */
+  farmer: FarmerProfile;
   locationRiskDone: boolean;
   labTestOrdered: boolean;
   draft: OnboardingDraft;
-  banners: typeof initialNotifications | null;
+  banners: AppNotification[] | null;
+  /** Ids of notifications that open a screen (harvest, new offer). They stay under the bell after the banner is gone. */
+  inbox: string[];
   notificationsSeen: boolean;
   toast: ToastMsg | null;
 
@@ -199,10 +208,12 @@ export const useStore = create<AppState>((set, get) => ({
   weatherLoading: false,
   feedback: [],
   language: 'en',
+  farmer: farmerProfiles.tr,
   locationRiskDone: false,
   labTestOrdered: false,
-  draft: EMPTY_DRAFT,
+  draft: emptyDraft(farmerProfiles.tr),
   banners: null,
+  inbox: [],
   notificationsSeen: false,
   toast: null,
   procRequests: seedRequests,
@@ -216,9 +227,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   loadWeather: async (opts) => {
     set({ weatherLoading: true });
-    const fields = get().fields;
-    const results = await loadAllWeather(fields, opts);
-    set((s) => ({ weather: { ...s.weather, ...results }, weatherLoading: false }));
+    const { fields, farmer } = get();
+    const country = farmer.country;
+    const results = await loadAllWeather(fields.map((f) => ({ ...f, id: weatherKey(f.id, country) })), opts);
+    // The country may have changed while loading: then a newer load is on its way.
+    if (get().farmer.country !== country) return;
+    set((s) => ({ weather: { ...s.weather, ...Object.fromEntries(fields.map((f) => [f.id, results[weatherKey(f.id, country)]])) }, weatherLoading: false }));
   },
 
   loadAreaWeather: async (opts) => {
@@ -248,13 +262,14 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setLanguage: (language) => {
-    set({ language });
+    applyLanguage(language);
     void saveLanguage(language);
   },
 
   hydrateFeedback: async () => {
-    const language = await loadLanguage();
-    if (language) set({ language });
+    // A language the farmer picked wins; otherwise the device language, so the app opens in Turkish or Greek by itself.
+    const language = (await loadLanguage()) ?? languageFromLocales(deviceLocales());
+    if (language !== get().language) applyLanguage(language);
     const stored = await loadFeedback();
     if (stored.length) set((s) => ({ feedback: [...stored.filter((e) => !s.feedback.some((x) => x.id === e.id)), ...s.feedback] }));
   },
@@ -334,8 +349,8 @@ export const useStore = create<AppState>((set, get) => ({
                 id: uid('d'),
                 saleId,
                 lotId: offer.fieldId,
-                farmerName: farmer.name,
-                place: farmer.place,
+                farmerName: s.farmer.name,
+                place: s.farmer.place,
                 variety: field?.variety ?? '',
                 tons,
                 pricePerKg: offer.pricePerKg,
@@ -370,16 +385,16 @@ export const useStore = create<AppState>((set, get) => ({
 
   markLocationRiskDone: () => {
     set({ locationRiskDone: true });
-    get().showToast(`Done. Hill keeps its score (no -${LOCATION_RISK_PENALTY})`);
+    get().showToast(`Done. ${fieldName('hill')} keeps its score (no -${LOCATION_RISK_PENALTY})`);
   },
 
   orderLabTest: () => {
     set({ labTestOrdered: true });
-    get().showToast('Lab test ordered for Hill');
+    get().showToast(`Lab test ordered for ${fieldName('hill')}`);
   },
 
   setDraft: (patch) => set((s) => ({ draft: { ...s.draft, ...patch } })),
-  resetDraft: () => set({ draft: EMPTY_DRAFT }),
+  resetDraft: () => set((s) => ({ draft: emptyDraft(s.farmer) })),
 
   addField: (input) => {
     const id = `f${Date.now()}`;
@@ -395,7 +410,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   showWelcomeBanners: () => {
     if (get().notificationsSeen) return;
-    set({ notificationsSeen: true, banners: initialNotifications });
+    // A waiting banner (e.g. a new offer) first, then harvest reminders: they are about money today. At most 3 fit on screen.
+    const waiting = get().banners ?? [];
+    const banners = [...waiting, ...harvestReminders(get().fields), ...initialNotifications(fieldName)].slice(0, 3);
+    set((s) => ({ notificationsSeen: true, banners, inbox: addToInbox(s.inbox, [...harvestReminders(s.fields), ...waiting]) }));
   },
   hideBanners: () => set({ banners: null }),
 
@@ -411,9 +429,15 @@ export const useStore = create<AppState>((set, get) => ({
   makeOffer: ({ lotId, tons, pricePerKg, deliveryIn }) => {
     const forDemoFarmer = get().fields.some((f) => f.id === lotId);
     if (forDemoFarmer) {
+      const offer: Offer = { id: uid('o'), fieldId: lotId, factoryId: PROCESSOR_ID, pricePerKg, status: 'open', tons, deliveryIn };
+      const factoryName = factories.find((f) => f.id === PROCESSOR_ID)?.name ?? '';
+      const notice = offerNotification(offer, factoryName, fieldName(lotId));
       set((s) => ({
+        // The farmer sees a "New offer" banner the next time the farmer app is open.
+        banners: [notice, ...(s.banners ?? []).filter((b) => !b.id.startsWith('offer-'))].slice(0, 3),
+        inbox: addToInbox(s.inbox, [notice]),
         offers: [
-          { id: uid('o'), fieldId: lotId, factoryId: PROCESSOR_ID, pricePerKg, status: 'open', tons, deliveryIn },
+          offer,
           ...s.offers.filter((o) => !(o.factoryId === PROCESSOR_ID && o.fieldId === lotId && o.status === 'open')),
         ],
       }));
@@ -431,7 +455,7 @@ export const useStore = create<AppState>((set, get) => ({
     const field = s.fields.find((f) => f.id === offer.lotId);
     const lot = field ? undefined : otherLots.find((l) => l.id === offer.lotId);
     if (!field && !lot) return;
-    const farmerName = field ? farmer.name : lot!.farmerName;
+    const farmerName = field ? s.farmer.name : lot!.farmerName;
     const saleId = field ? uid('a') : undefined;
     set((st) => ({
       incomingOffers: st.incomingOffers.map((o) => (o.id === id ? { ...o, status: 'accepted' } : o)),
@@ -444,7 +468,7 @@ export const useStore = create<AppState>((set, get) => ({
           saleId,
           lotId: offer.lotId,
           farmerName,
-          place: field ? farmer.place : `${lot!.town}, ${lot!.region}`,
+          place: field ? s.farmer.place : `${lot!.town}, ${lot!.region}`,
           variety: field?.variety ?? lot!.variety,
           tons: offer.tons,
           pricePerKg: offer.pricePerKg,
@@ -490,6 +514,34 @@ export const useStore = create<AppState>((set, get) => ({
     get().showToast('Marked as paid');
   },
 }));
+
+/** Current name of a field (it changes with the farmer's country). */
+function fieldName(id: string): string {
+  return useStore.getState().fields.find((f) => f.id === id)?.name ?? '';
+}
+
+/** Preferred locales of the phone or browser, e.g. ["el-GR"]. */
+function deviceLocales(): string[] {
+  try {
+    // On the web, Intl follows the operating system; the browser's language list is what the visitor chose.
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.languages?.length) return [...navigator.languages];
+    return [Intl.DateTimeFormat().resolvedOptions().locale];
+  } catch {
+    return [];
+  }
+}
+
+/** Sets the language. Greek also switches to the farmer in Greece (and back): field names, places, varieties and weather. */
+function applyLanguage(language: Language) {
+  const s = useStore.getState();
+  const profile = farmerProfiles[countryOf(language)];
+  if (profile.country === s.farmer.country) {
+    useStore.setState({ language });
+    return;
+  }
+  useStore.setState({ language, farmer: profile, fields: applyProfile(s.fields, profile), draft: emptyDraft(profile) });
+  void s.loadWeather();
+}
 
 /** The field shown on single-field screens: the selected one, or the first when "All fields" is on. */
 export function useActiveField(): Field {

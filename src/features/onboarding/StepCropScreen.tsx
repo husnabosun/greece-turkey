@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/Screen';
 import { Button, Card } from '@/components/ui';
-import { farmerLocation, type Field } from '@/data/mock';
+import type { Field } from '@/data/mock';
 import {
   haFromTrees,
   PROOFS,
@@ -19,6 +19,7 @@ import {
   type SprayCount,
 } from '@/lib/onboarding';
 import { useStore } from '@/state/store';
+import { useT } from '@/state/i18n';
 import { colors } from '@/theme/tokens';
 import { OnboardingHeader } from './OnboardingHeader';
 
@@ -32,22 +33,25 @@ const SPRAYS: { key: SprayCount; label: string }[] = [
   { key: '1-2', label: '1–2' },
   { key: '3+', label: '3+' },
 ];
+/** The third choice is the country's official record: B-Reçete in Türkiye, e-Prescription in Greece. */
 const RECORDS: { key: RecordsKind; label: string }[] = [
   { key: 'none', label: 'None' },
   { key: 'paper', label: 'Paper' },
-  { key: 'brecete', label: 'B-Reçete' },
+  { key: 'brecete', label: '' },
 ];
 const LEVELS: ProofLevel[] = ['Self-reported', 'Evidence-based', 'Lab verified'];
 const STAGE_TITLE: Record<CropStage, string> = { growing: 'a growing crop', almost: 'an almost ready crop', harvested: 'a harvested crop' };
 
 function Label({ children }: { children: string }) {
-  return <Text className="mb-1.5 mt-3 font-i7 text-ap-small uppercase tracking-[1px] text-muted">{children}</Text>;
+  const t = useT();
+  return <Text className="mb-1.5 mt-3 font-i7 text-ap-small uppercase tracking-[1px] text-muted">{t(children)}</Text>;
 }
 
 function Opt({ on, onPress, children }: { on: boolean; onPress: () => void; children: ReactNode }) {
+  const t = useT();
   return (
     <Pressable onPress={onPress} className={`h-[30px] items-center justify-center rounded-full border px-3 ${on ? 'border-ink bg-ink' : 'border-line bg-card'}`}>
-      <Text className={`font-i7 text-ap-pill ${on ? 'text-white' : 'text-ink'}`}>{children}</Text>
+      <Text className={`font-i7 text-ap-pill ${on ? 'text-white' : 'text-ink'}`}>{typeof children === 'string' ? t(children) : children}</Text>
     </Pressable>
   );
 }
@@ -66,6 +70,8 @@ export function StepCropScreen() {
   const addField = useStore((s) => s.addField);
   const resetDraft = useStore((s) => s.resetDraft);
   const showToast = useStore((s) => s.showToast);
+  const farmer = useStore((s) => s.farmer);
+  const t = useT();
 
   const proofs = PROOFS[draft.stage];
   const added = validProofs(draft.stage, draft.proofs);
@@ -87,8 +93,8 @@ export function StepCropScreen() {
     addField({
       name,
       proofLevel: level,
-      lat: farmerLocation.lat,
-      lon: farmerLocation.lon,
+      lat: farmer.location.lat,
+      lon: farmer.location.lon,
       trees: draft.trees,
       ha: haFromTrees(draft.trees),
       variety: draft.variety,
@@ -119,7 +125,7 @@ export function StepCropScreen() {
             return (
               <Pressable key={key} onPress={() => setDraft({ stage: key })} className={`h-[68px] flex-1 items-center justify-center gap-1 rounded-2xl border ${on ? 'border-good/40 bg-good-soft' : 'border-line bg-card'}`}>
                 <Icon size={20} color={on ? colors.good : colors.ink} />
-                <Text className={`font-i7 text-ap-body ${on ? 'text-good' : 'text-ink'}`}>{label}</Text>
+                <Text className={`font-i7 text-ap-body ${on ? 'text-good' : 'text-ink'}`}>{t(label)}</Text>
               </Pressable>
             );
           })}
@@ -127,7 +133,7 @@ export function StepCropScreen() {
 
         <Label>Last season</Label>
         <Card className="h-12 flex-row items-center justify-between px-3">
-          <Text className="font-i8 text-ap-body text-ink">Sprays</Text>
+          <Text className="font-i8 text-ap-body text-ink">{t('Sprays')}</Text>
           <View className="flex-row gap-1.5">
             {SPRAYS.map((s) => (
               <Opt key={s.key} on={draft.sprays === s.key} onPress={() => setDraft({ sprays: s.key })}>{s.label}</Opt>
@@ -135,16 +141,16 @@ export function StepCropScreen() {
           </View>
         </Card>
         <Card className="mt-2 h-12 flex-row items-center justify-between px-3">
-          <Text className="font-i8 text-ap-body text-ink">Records</Text>
+          <Text className="font-i8 text-ap-body text-ink">{t('Records')}</Text>
           <View className="flex-row gap-1.5">
             {RECORDS.map((r) => (
-              <Opt key={r.key} on={draft.records === r.key} onPress={() => setDraft({ records: r.key })}>{r.label}</Opt>
+              <Opt key={r.key} on={draft.records === r.key} onPress={() => setDraft({ records: r.key })}>{r.label || farmer.records.label}</Opt>
             ))}
           </View>
         </Card>
-        <Text className="mt-1 px-1 font-i5 text-ap-small text-muted">B-Reçete: the official pesticide prescription (Türkiye).</Text>
+        <Text className="mt-1 px-1 font-i5 text-ap-small text-muted">{t(farmer.records.note)}</Text>
 
-        <Label>{`Proof for ${STAGE_TITLE[draft.stage]}`}</Label>
+        <Label>{t('Proof for {stage}', { stage: t(STAGE_TITLE[draft.stage]) })}</Label>
         <View className="flex-row flex-wrap gap-2">
           {proofs.map((p) => {
             const on = added.includes(p.id);
@@ -158,8 +164,8 @@ export function StepCropScreen() {
               >
                 {on ? <Check size={18} color={colors.good} strokeWidth={2.6} /> : <FileText size={18} color={colors.muted} />}
                 <View className="flex-1">
-                  <Text numberOfLines={1} className={`font-i7 text-ap-body ${on ? 'text-good' : 'text-[#555]'}`}>{p.label}</Text>
-                  <Text className={`font-i7 text-[10px] tracking-[0.5px] ${on ? 'text-good' : p.note === 'REQUIRED' ? 'text-risk' : 'text-muted'}`}>{on ? 'ADDED' : p.note}</Text>
+                  <Text numberOfLines={1} className={`font-i7 text-ap-body ${on ? 'text-good' : 'text-[#555]'}`}>{t(p.label)}</Text>
+                  <Text className={`font-i7 text-[10px] tracking-[0.5px] ${on ? 'text-good' : p.note === 'REQUIRED' ? 'text-risk' : 'text-muted'}`}>{on ? t('ADDED') : p.note ? t(p.note) : ''}</Text>
                 </View>
               </Pressable>
             );
@@ -171,32 +177,32 @@ export function StepCropScreen() {
             <Text className="font-i8 text-[34px] leading-[38px] text-good">{score}</Text>
             <View className="ml-3 flex-1">
               <View className="flex-row items-center gap-2">
-                <Text className="font-i8 text-ap-card text-ink">Starting score</Text>
+                <Text className="font-i8 text-ap-card text-ink">{t('Starting score')}</Text>
                 <View className="h-5 justify-center rounded-md bg-warn-soft px-1.5">
-                  <Text className="font-i7 text-[10px] text-warn-text">ESTIMATED</Text>
+                  <Text className="font-i7 text-[10px] text-warn-text">{t('ESTIMATED')}</Text>
                 </View>
               </View>
-              <Text className="font-i5 text-ap-small text-muted">From answers, photos and satellite history</Text>
+              <Text className="font-i5 text-ap-small text-muted">{t('From answers, photos and satellite history')}</Text>
             </View>
           </View>
           <View className="mt-2 flex-row gap-1.5">
             {LEVELS.map((l) => (
               <View key={l} className={`h-7 flex-1 flex-row items-center justify-center gap-1 rounded-lg ${l === level ? 'bg-warn-soft' : 'bg-black/5'}`}>
                 {l === level ? <Check size={12} color={colors.warnText} strokeWidth={3} /> : null}
-                <Text className={`font-i7 text-[10.5px] ${l === level ? 'text-warn-text' : 'text-muted'}`}>{l}</Text>
+                <Text className={`font-i7 text-[10.5px] ${l === level ? 'text-warn-text' : 'text-muted'}`}>{t(l)}</Text>
               </View>
             ))}
           </View>
           <View className="mt-2 flex-row items-center gap-1.5">
             <Sparkles size={13} color={colors.good} />
-            <Text className="font-i5 text-ap-small text-good">Shown to buyers who can pick up within 48 h.</Text>
+            <Text className="font-i5 text-ap-small text-good">{t('Shown to buyers who can pick up within 48 h.')}</Text>
           </View>
         </View>
         <View className="h-14" />
       </Screen>
 
       <View className="absolute left-5 right-5" style={{ bottom: insets.bottom + 14 }}>
-        <Button label="Start selling" icon={<ArrowRight size={18} color="#fff" />} className="h-12" onPress={start} />
+        <Button label={t('Start selling')} icon={<ArrowRight size={18} color="#fff" />} className="h-12" onPress={start} />
       </View>
     </View>
   );

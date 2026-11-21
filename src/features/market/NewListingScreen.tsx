@@ -7,6 +7,7 @@ import { Screen } from '@/components/Screen';
 import { Button, Card, Pill } from '@/components/ui';
 import { tonsAvailable } from '@/data/mock';
 import { euroPrice, exchangeSpan, roundPrice } from '@/lib/market';
+import { useT } from '@/state/i18n';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { factoryById, useExchangeRange, useHasBanned } from './shared';
@@ -18,6 +19,7 @@ export function NewListingScreen() {
   const params = useLocalSearchParams<{ fieldId?: string; factoryId?: string }>();
   const fields = useStore((s) => s.fields);
   const publishListing = useStore((s) => s.publishListing);
+  const t = useT();
 
   const request = params.factoryId ? factoryById(params.factoryId) : null;
   const [fieldId, setFieldId] = useState(params.fieldId && fields.some((f) => f.id === params.fieldId) ? params.fieldId : 'river');
@@ -51,7 +53,7 @@ export function NewListingScreen() {
     <Screen tabs={false}>
       <ScreenHeader
         back
-        title="New listing"
+        title={t('New listing')}
         right={
           <View className="flex-row gap-1">
             <View className="h-1 w-6 rounded-full bg-ink" />
@@ -63,11 +65,11 @@ export function NewListingScreen() {
 
       {request ? (
         <View className="mt-2.5 self-start">
-          <Pill tone="good">{`For ${request.name} request · ${euroPrice(request.priceLow)}–${euroPrice(request.priceHigh)}/kg`}</Pill>
+          <Pill tone="good">{t('For {name} request · {low}–{high}/kg', { name: request.name, low: euroPrice(request.priceLow), high: euroPrice(request.priceHigh) })}</Pill>
         </View>
       ) : null}
 
-      <Label>Field</Label>
+      <Label>{t('Field')}</Label>
       <Card className="flex-row items-center p-3">
         <View className="h-14 w-14 items-center justify-center rounded-[10px] bg-good-soft">
           <Trees size={24} color={colors.good} />
@@ -76,25 +78,25 @@ export function NewListingScreen() {
           <View className="flex-row items-center justify-between">
             <Text className="font-i8 text-ap-card text-ink">{field.name}</Text>
             <Pressable onPress={changeField} accessibilityRole="button" className="h-6 justify-center">
-              <Text className="font-i7 text-ap-body text-accent">Change</Text>
+              <Text className="font-i7 text-ap-body text-accent">{t('Change')}</Text>
             </Pressable>
           </View>
           <View className="mt-1 flex-row flex-wrap gap-1">
-            <Pill tone="neutral">{`${field.variety} variety`}</Pill>
-            <Pill tone="neutral">{`${field.trees} trees`}</Pill>
-            <Pill tone="good">{field.harvest.ready ? 'Ready to harvest' : 'Safe to harvest'}</Pill>
-            <Pill tone={hasBanned ? 'risk' : 'good'}>{hasBanned ? 'Banned product used' : 'No banned products'}</Pill>
+            <Pill tone="neutral">{t('{variety} variety', { variety: field.variety })}</Pill>
+            <Pill tone="neutral">{t('{n} trees', { n: field.trees })}</Pill>
+            <Pill tone="good">{t(field.harvest.ready ? 'Ready to harvest' : 'Safe to harvest')}</Pill>
+            <Pill tone={hasBanned ? 'risk' : 'good'}>{t(hasBanned ? 'Banned product used' : 'No banned products')}</Pill>
           </View>
         </View>
         <View className={`ml-2 items-center rounded-xl px-2.5 py-1.5 ${low ? 'bg-risk-soft' : 'bg-good-soft'}`}>
-          <Text className={`font-i6 text-[10px] ${low ? 'text-risk' : 'text-good'}`}>Quality score</Text>
+          <Text className={`font-i6 text-[10px] ${low ? 'text-risk' : 'text-good'}`}>{t('Quality score')}</Text>
           <Text className={`font-i8 text-ap-title ${low ? 'text-risk' : 'text-good'}`}>{field.score}</Text>
         </View>
       </Card>
 
       <View className="mt-2 flex-row gap-2">
         <Card className="flex-1 p-3">
-          <Text className="font-i5 text-ap-body text-muted">How much?</Text>
+          <Text className="font-i5 text-ap-body text-muted">{t('How much?')}</Text>
           <Stepper
             value={`${tons} t`}
             onMinus={() => setTons((t) => Math.max(0.5, t - 0.5))}
@@ -102,13 +104,13 @@ export function NewListingScreen() {
           />
         </Card>
         <Card className="flex-1 p-3">
-          <Text className="font-i5 text-ap-body text-muted">Harvest period</Text>
+          <Text className="font-i5 text-ap-body text-muted">{t('Harvest period')}</Text>
           <Pressable
             onPress={() => setPeriod(PERIODS[(PERIODS.indexOf(period) + 1) % PERIODS.length])}
             accessibilityRole="button"
             className="mt-1.5 h-10 flex-row items-center justify-between rounded-xl border border-line px-3"
           >
-            <Text className="font-i6 text-ap-btn text-ink">{period}</Text>
+            <Text className="font-i6 text-ap-btn text-ink">{t(period)}</Text>
             <ChevronDown size={16} color={colors.muted} />
           </Pressable>
         </Card>
@@ -119,11 +121,11 @@ export function NewListingScreen() {
           <View className={`h-5 w-5 items-center justify-center rounded-md border-2 ${negotiable ? 'border-primary bg-primary' : 'border-ink/60'}`}>
             {negotiable ? <Check size={13} color="#fff" strokeWidth={3} /> : null}
           </View>
-          <Text className="ml-3 font-i6 text-ap-btn text-ink">Open to negotiation</Text>
+          <Text className="ml-3 font-i6 text-ap-btn text-ink">{t('Open to negotiation')}</Text>
         </Card>
       </Pressable>
 
-      <Label>Delivery</Label>
+      <Label>{t('Delivery')}</Label>
       <View className="h-10 flex-row rounded-xl bg-soft p-1">
         {(
           [
@@ -132,43 +134,43 @@ export function NewListingScreen() {
           ] as const
         ).map(([key, text]) => (
           <Pressable key={key} onPress={() => setDelivery(key)} className={`flex-1 items-center justify-center rounded-lg ${delivery === key ? 'border border-ink bg-white' : ''}`}>
-            <Text className={`font-i7 text-ap-body ${delivery === key ? 'text-ink' : 'text-muted'}`}>{text}</Text>
+            <Text className={`font-i7 text-ap-body ${delivery === key ? 'text-ink' : 'text-muted'}`}>{t(text)}</Text>
           </Pressable>
         ))}
       </View>
 
-      <Label>Price</Label>
+      <Label>{t('Price')}</Label>
       <Card className="p-3">
         <View className="rounded-xl bg-good-soft p-2.5">
           <View className="flex-row items-center justify-between">
-            <Text className="font-i8 text-ap-body text-good">Exchange price range</Text>
+            <Text className="font-i8 text-ap-body text-good">{t('Exchange price range')}</Text>
             <Text className="font-i8 text-ap-card text-ink">
               {range ? exchangeSpan(range) : '–'}
               <Text className="font-i5 text-ap-small text-muted">{' /kg'}</Text>
             </Text>
           </View>
-          <Text className="mt-0.5 font-i5 text-ap-small text-muted">{range ? 'Min–max at the local commodity exchange today · sample data' : 'No exchange data for this area'}</Text>
+          <Text className="mt-0.5 font-i5 text-ap-small text-muted">{t(range ? 'Min–max at the local commodity exchange today · sample data' : 'No exchange data for this area')}</Text>
         </View>
 
-        <Text className="mb-1.5 mt-2.5 font-i5 text-ap-body text-muted">Your price per kg</Text>
+        <Text className="mb-1.5 mt-2.5 font-i5 text-ap-body text-muted">{t('Your price per kg')}</Text>
         <View className="h-12 flex-row items-center justify-between rounded-xl border border-line px-2">
-          <RoundStep label="Lower price" onPress={() => setPrice(Math.max(0.5, roundPrice(price - 0.05)))}>
+          <RoundStep label={t('Lower price')} onPress={() => setPrice(Math.max(0.5, roundPrice(price - 0.05)))}>
             <Minus size={18} color={colors.ink} />
           </RoundStep>
           <Text className="font-i8 text-ap-title text-ink">{euroPrice(price)}</Text>
-          <RoundStep label="Raise price" onPress={() => setPrice(roundPrice(price + 0.05))}>
+          <RoundStep label={t('Raise price')} onPress={() => setPrice(roundPrice(price + 0.05))}>
             <Plus size={18} color={colors.ink} />
           </RoundStep>
         </View>
-        <Text className="mt-1 font-i5 text-ap-small text-muted">{range ? `Exchange range today: ${exchangeSpan(range)} /kg` : 'No exchange data for this area'}</Text>
+        <Text className="mt-1 font-i5 text-ap-small text-muted">{range ? t('Exchange range today: {range} /kg', { range: exchangeSpan(range) }) : t('No exchange data for this area')}</Text>
 
-        <Text className="mt-2.5 font-i5 text-ap-small text-muted">Set by the market, not by AgroPulse.</Text>
+        <Text className="mt-2.5 font-i5 text-ap-small text-muted">{t('Set by the market, not by AgroPulse.')}</Text>
 
       </Card>
 
       <Button
         className="mt-3 h-12"
-        label="Publish listing"
+        label={t('Publish listing')}
         icon={<ArrowRight size={18} color="#fff" />}
         onPress={publish}
       />
@@ -181,8 +183,9 @@ function Label({ children }: { children: ReactNode }) {
 }
 
 function RoundStep({ children, onPress, label }: { children: ReactNode; onPress: () => void; label: string }) {
+  const t = useT();
   return (
-    <Pressable onPress={onPress} accessibilityLabel={label} className="h-9 w-9 items-center justify-center rounded-full bg-soft">
+    <Pressable onPress={onPress} accessibilityLabel={t(label)} className="h-9 w-9 items-center justify-center rounded-full bg-soft">
       {children}
     </Pressable>
   );

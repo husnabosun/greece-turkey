@@ -9,6 +9,7 @@ import type { Tree } from '@/data/mock';
 import { openCamera } from '@/features/scan/nav';
 import { currentRisk, LEVEL_COLOR, useRisk } from '@/state/risk';
 import { useActiveField, useStore } from '@/state/store';
+import { useT } from '@/state/i18n';
 import { colors } from '@/theme/tokens';
 import { FieldMap } from './FieldMap';
 
@@ -16,6 +17,7 @@ const NO_TREES: Tree[] = [];
 
 export function FieldScreen() {
   const router = useRouter();
+  const t = useT();
   const field = useActiveField();
   const fields = useStore((s) => s.fields);
   const selectField = useStore((s) => s.selectField);
@@ -33,10 +35,10 @@ export function FieldScreen() {
   return (
     <Screen>
       <ScreenHeader
-        title="My Field"
+        title={t('My Field')}
         back
         right={
-          <RoundButton label="Map layers" onPress={() => showToast('Satellite view is on')}>
+          <RoundButton label={t('Map layers')} onPress={() => showToast('Satellite view is on')}>
             <Layers size={18} color={colors.ink} />
           </RoundButton>
         }
@@ -49,7 +51,7 @@ export function FieldScreen() {
           onSelect={selectField}
           trailing={
             <Chip on={false} onPress={() => router.push('/farmer/onboarding')}>
-              <Text className="font-i7 text-ap-pill text-ink">+ Add</Text>
+              <Text className="font-i7 text-ap-pill text-ink">{t('+ Add')}</Text>
             </Chip>
           }
         />
@@ -57,13 +59,13 @@ export function FieldScreen() {
 
       <Card className="mt-2 flex-row items-center p-2.5">
         <View className="flex-1 items-center">
-          <Text className="font-i8 text-ap-card text-ink">{`${field.trees} trees`}</Text>
-          <Text className="font-i5 text-ap-small text-muted">Tree count</Text>
+          <Text className="font-i8 text-ap-card text-ink">{t('{n} trees', { n: field.trees })}</Text>
+          <Text className="font-i5 text-ap-small text-muted">{t('Tree count')}</Text>
         </View>
         <View className="h-8 w-px bg-line" />
         <View className="flex-1 items-center">
           <Text className="font-i8 text-ap-card text-ink">{`${field.ha} ha`}</Text>
-          <Text className="font-i5 text-ap-small text-muted">Field size</Text>
+          <Text className="font-i5 text-ap-small text-muted">{t('Field size')}</Text>
         </View>
         <Pressable
           onPress={() => router.push('/farmer/quality')}
@@ -71,7 +73,7 @@ export function FieldScreen() {
         >
           <Star size={20} color={low ? colors.risk : colors.good} fill={low ? colors.risk : colors.good} />
           <View>
-            <Text className="font-i6 text-ap-small text-ink">Quality score</Text>
+            <Text className="font-i6 text-ap-small text-ink">{t('Quality score')}</Text>
             <Text className="font-i8 text-ap-card text-ink">
               {field.score}
               <Text className="font-i5 text-ap-small text-muted">{' / 100'}</Text>
@@ -94,8 +96,8 @@ export function FieldScreen() {
 
       <Pressable onPress={() => followUp[0] && selectTree(followUp[0].id)} className="mt-2 h-10 flex-row items-center rounded-xl bg-risk-soft px-3">
         <RefreshCw size={18} color={colors.risk} />
-        <Text className="ml-2.5 flex-1 font-i7 text-ap-body text-ink">{`${followUp.length} trees need follow up`}</Text>
-        <Text className="font-i7 text-ap-body text-risk">View</Text>
+        <Text className="ml-2.5 flex-1 font-i7 text-ap-body text-ink">{t('{n} trees need follow up', { n: followUp.length })}</Text>
+        <Text className="font-i7 text-ap-body text-risk">{t('View')}</Text>
         <ChevronRight size={16} color={colors.risk} />
       </Pressable>
 
@@ -107,25 +109,25 @@ export function FieldScreen() {
             </View>
             <View className="ml-2.5 flex-1">
               <View className="flex-row items-center justify-between">
-                <Text className="font-i8 text-ap-card text-ink">{`Tree #${tree.id}`}</Text>
-                {tree.level ? <Pill tone={tree.level === 'high' ? 'risk' : 'warn'}>{tree.level === 'high' ? 'High risk' : 'Medium risk'}</Pill> : null}
+                <Text className="font-i8 text-ap-card text-ink">{t('Tree #{id}', { id: tree.id })}</Text>
+                {tree.level ? <Pill tone={tree.level === 'high' ? 'risk' : 'warn'}>{t(tree.level === 'high' ? 'High risk' : 'Medium risk')}</Pill> : null}
               </View>
               <View className="mt-0.5 flex-row items-center gap-1.5">
                 <View className="h-2 w-2 rounded-full" style={{ backgroundColor: tree.status === 'diseased' ? colors.risk : tree.status === 'suspicious' ? colors.warn : colors.good }} />
-                <Text className="font-i6 text-ap-body text-ink">{tree.issue ?? (tree.status === 'healthy' ? 'Healthy' : 'Suspicious')}</Text>
+                <Text className="font-i6 text-ap-body text-ink">{t(tree.issue ?? (tree.status === 'healthy' ? 'Healthy' : 'Suspicious'))}</Text>
               </View>
             </View>
           </View>
           <View className="mt-2 flex-row items-center gap-1">
             <Calendar size={12} color={colors.muted} />
-            <Text className="flex-1 font-i5 text-ap-small text-muted">{`Last photo: ${tree.lastPhoto}`}</Text>
+            <Text className="flex-1 font-i5 text-ap-small text-muted">{t('Last photo: {when}', { when: t(tree.lastPhoto) })}</Text>
             <Droplet size={12} color={colors.accent} />
-            <Text className="font-i5 text-ap-small text-muted">{`Last spray: ${tree.lastSpray}`}</Text>
+            <Text className="font-i5 text-ap-small text-muted">{t('Last spray: {when}', { when: t(tree.lastSpray) })}</Text>
           </View>
           {tree.recheckDays ? (
             <Pressable onPress={() => openCamera(router, { fieldId: field.id, treeId: tree.id, mode: 'leaf' })} className="mt-2 h-9 flex-row items-center rounded-lg bg-accent-soft px-3">
               <Calendar size={16} color={colors.accent} />
-              <Text className="ml-2 flex-1 font-i6 text-ap-body text-accent">{`Re-check in ${tree.recheckDays} days`}</Text>
+              <Text className="ml-2 flex-1 font-i6 text-ap-body text-accent">{t('Re-check in {n} days', { n: tree.recheckDays })}</Text>
               <ChevronRight size={16} color={colors.accent} />
             </Pressable>
           ) : null}
@@ -136,14 +138,14 @@ export function FieldScreen() {
               className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-primary"
             >
               <Camera size={15} color="#fff" />
-              <Text className="font-i7 text-ap-pill text-white">Scan this tree</Text>
+              <Text className="font-i7 text-ap-pill text-white">{t('Scan this tree')}</Text>
             </Pressable>
             <Pressable
               onPress={() => router.push({ pathname: '/farmer/scan', params: { fieldId: field.id } })}
               accessibilityRole="button"
               className="h-9 flex-1 items-center justify-center rounded-full border border-ink"
             >
-              <Text className="font-i7 text-ap-pill text-ink">See all scans</Text>
+              <Text className="font-i7 text-ap-pill text-ink">{t('See all scans')}</Text>
             </Pressable>
           </View>
         </Card>

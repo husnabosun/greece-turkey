@@ -6,7 +6,7 @@ export default function FarmerLayout() {
   return (
     <PhoneFrame>
       <Stack screenOptions={{ headerShown: false, animation: 'fade', animationDuration: 120, contentStyle: { backgroundColor: '#FAFAF8' } }} />
-      <Toast />
+      <Toast translate />
       <NotificationBanners />
     </PhoneFrame>
   );

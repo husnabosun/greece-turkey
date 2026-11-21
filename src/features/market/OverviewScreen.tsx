@@ -5,6 +5,7 @@ import { Screen } from '@/components/Screen';
 import { Button, Card, Pill, SectionHeader } from '@/components/ui';
 import { factories, type Field } from '@/data/mock';
 import { compareToRange, euroPrice } from '@/lib/market';
+import { useT } from '@/state/i18n';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { FactoryLogo, factoryById, priceRange, Rating, useExchangeRange, useHasBanned } from './shared';
@@ -15,6 +16,7 @@ export function OverviewScreen() {
   const offers = useStore((s) => s.offers);
   const acceptOffer = useStore((s) => s.acceptOffer);
   const showToast = useStore((s) => s.showToast);
+  const t = useT();
 
   const open = offers.filter((o) => o.status === 'open');
   const best = open.reduce<(typeof open)[number] | null>((b, o) => (!b || o.pricePerKg > b.pricePerKg ? o : b), null);
@@ -25,27 +27,27 @@ export function OverviewScreen() {
         <View className="h-9 w-9 items-center justify-center rounded-full bg-white/15">
           <Plus size={20} color="#fff" />
         </View>
-        <Text className="ml-3 flex-1 font-i8 text-ap-card text-white">Sell your olives</Text>
+        <Text className="ml-3 flex-1 font-i8 text-ap-card text-white">{t('Sell your olives')}</Text>
         <View className="h-8 w-8 items-center justify-center rounded-full bg-white">
           <ChevronRight size={18} color={colors.ink} />
         </View>
       </Pressable>
 
-      <SectionHeader title="Best offer" />
+      <SectionHeader title={t('Best offer')} />
       {best ? <BestOffer offerId={best.id} onAccept={() => acceptOffer(best.id)} onCounter={() => showToast('Counter offer sent')} /> : (
         <Card className="mt-2 items-center p-4">
-          <Text className="font-i6 text-ap-body text-muted">No open offers right now.</Text>
+          <Text className="font-i6 text-ap-body text-muted">{t('No open offers right now.')}</Text>
         </Card>
       )}
 
-      <SectionHeader title="Your fields" />
+      <SectionHeader title={t('Your fields')} />
       <View className="mt-2 flex-row flex-wrap gap-2">
         {fields.map((f) => (
           <FieldPriceCard key={f.id} field={f} />
         ))}
       </View>
 
-      <SectionHeader title="Factories looking to buy" />
+      <SectionHeader title={t('Factories looking to buy')} />
       <View className="mt-2 gap-2">
         {factories
           .filter((f) => f.requests && f.kind === 'food-oil')
@@ -55,10 +57,10 @@ export function OverviewScreen() {
                 <FactoryLogo factory={f} />
                 <View className="ml-2.5 flex-1">
                   <Text className="font-i8 text-ap-card text-ink">{f.name}</Text>
-                  <Text className="font-i5 text-ap-body text-muted">{`Needs ${f.needsTons} t`}</Text>
+                  <Text className="font-i5 text-ap-body text-muted">{t('Needs {n} t', { n: f.needsTons ?? 0 })}</Text>
                 </View>
                 <View className="mr-2 items-center rounded-lg bg-good-soft px-2 py-1">
-                  <Text className="font-i5 text-[10px] text-good">Quality score</Text>
+                  <Text className="font-i5 text-[10px] text-good">{t('Quality score')}</Text>
                   <Text className="font-i8 text-ap-card text-good">{f.minScore}</Text>
                 </View>
                 <View className="mr-1 items-center rounded-lg bg-soft px-2 py-1">
@@ -78,6 +80,7 @@ function BestOffer({ offerId, onAccept, onCounter }: { offerId: string; onAccept
   const offer = useStore((s) => s.offers.find((o) => o.id === offerId))!;
   const factory = factoryById(offer.factoryId);
   const verdict = compareToRange(offer.pricePerKg, useExchangeRange().range);
+  const t = useT();
   return (
     <Card className="mt-2 p-3">
       <View className="flex-row items-center">
@@ -92,10 +95,10 @@ function BestOffer({ offerId, onAccept, onCounter }: { offerId: string; onAccept
         </Text>
       </View>
       <View className="mt-2 flex-row items-center justify-between">
-        {verdict ? <Pill tone={verdict.tone}>{verdict.label}</Pill> : <Pill tone="neutral">No exchange data</Pill>}
+        {verdict ? <Pill tone={verdict.tone}>{t(verdict.label)}</Pill> : <Pill tone="neutral">{t('No exchange data')}</Pill>}
         <View className="flex-row gap-2">
-          <Button compact label="Counter" variant="outline" className="h-9 px-4" onPress={onCounter} />
-          <Button compact label="Accept" className="h-9 px-4" onPress={onAccept} />
+          <Button compact label={t('Counter')} variant="outline" className="h-9 px-4" onPress={onCounter} />
+          <Button compact label={t('Accept')} className="h-9 px-4" onPress={onAccept} />
         </View>
       </View>
     </Card>
@@ -109,19 +112,20 @@ function FieldPriceCard({ field }: { field: Field }) {
   const openOffers = useStore((s) => s.offers.filter((o) => o.fieldId === field.id && o.status === 'open').length);
   const listing = useStore((s) => s.listings.find((l) => l.fieldId === field.id));
   const low = field.score < 70;
+  const t = useT();
 
   let action = (
     <Pressable onPress={() => router.push({ pathname: '/farmer/market/new', params: { fieldId: field.id } })} className="h-6 flex-row items-center">
-      <Text className="font-i7 text-ap-body text-ink">List now</Text>
+      <Text className="font-i7 text-ap-body text-ink">{t('List now')}</Text>
       <ChevronRight size={14} color={colors.ink} />
     </Pressable>
   );
   if (listing) {
-    action = <Text className="font-i7 text-ap-body text-good">{`Listed · ${listing.tons} t`}</Text>;
+    action = <Text className="font-i7 text-ap-body text-good">{t('Listed · {n} t', { n: listing.tons })}</Text>;
   } else if (openOffers > 0) {
     action = (
       <Pressable onPress={() => router.replace('/farmer/market/offers')} className="h-6 flex-row items-center">
-        <Text className="font-i7 text-ap-body text-accent">{`${openOffers} offers`}</Text>
+        <Text className="font-i7 text-ap-body text-accent">{t('{n} offers', { n: openOffers })}</Text>
         <ChevronRight size={14} color={colors.accent} />
       </Pressable>
     );
@@ -141,8 +145,8 @@ function FieldPriceCard({ field }: { field: Field }) {
       <Text className="mt-2 font-i8 text-ap-card text-ink">
         {range ? `${euroPrice(range.min)}–${euroPrice(range.max)}` : '–'}
       </Text>
-      <Text className="font-i5 text-[10px] text-muted">{range ? '/kg · exchange price range' : 'No exchange data'}</Text>
-      {hasBanned ? <Text className="font-i7 text-ap-small text-risk">1 issue: banned product</Text> : null}
+      <Text className="font-i5 text-[10px] text-muted">{t(range ? '/kg · exchange price range' : 'No exchange data')}</Text>
+      {hasBanned ? <Text className="font-i7 text-ap-small text-risk">{t('1 issue: banned product')}</Text> : null}
       <View className="mt-1">{action}</View>
     </Card>
   );

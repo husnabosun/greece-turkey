@@ -35,6 +35,8 @@ export interface Field {
   breakdown: Breakdown;
   /** Change since last month, and why. */
   trend: { pct: number; reason: string };
+  /** Quality score at the end of each earlier month, oldest first (up to 5). The current month is `score`. */
+  history?: number[];
   /** AI plan to raise the score. */
   plan: { text: string; points: number }[];
 }
@@ -207,9 +209,75 @@ export const exchangeRanges: Record<string, { min: number; max: number; avg: num
 };
 export const exchangeName = 'Local commodity exchange';
 
-export const farmer = { name: 'Mehmet', place: 'Germencik, Aydın' };
-/** Where a new field is placed until the farmer draws it: the middle of the three demo fields. */
-export const farmerLocation = { lat: 39.325, lon: 26.7 };
+/**
+ * The demo farmer. The farmer app shows a farmer in Türkiye, or one in Greece when the app is in Greek.
+ * Both have the same three fields (same ids, scores and records); only names, places, varieties and coordinates differ.
+ */
+export type Country = 'tr' | 'gr';
+
+export interface FarmerProfile {
+  country: Country;
+  name: string;
+  /** "Town, province" (Türkiye) or "town, regional unit" (Greece). */
+  place: string;
+  /** Where a new field is placed until the farmer draws it: the middle of the three demo fields. */
+  location: { lat: number; lon: number };
+  /** Region used by the Market filters. */
+  region: string;
+  /** Nearest place of the season risk table (src/data/seasonRisk.ts). */
+  riskPlace: string;
+  /** Variety choices when adding a field; the first is the default. */
+  varieties: string[];
+  /** The official spray record, shown as the third "Records" choice when adding a field. */
+  records: { label: string; note: string };
+  /** Per field id: what changes between the two countries. */
+  fields: Record<string, { name: string; variety: string; lat: number; lon: number }>;
+  /** Factories are shared demo data. In Greece their Turkish variety and region show as these. */
+  factoryVariety: Record<string, string>;
+  factoryRegion: Record<string, string>;
+}
+
+export const farmerProfiles: Record<Country, FarmerProfile> = {
+  tr: {
+    country: 'tr',
+    name: 'Mehmet',
+    place: 'Germencik, Aydın',
+    location: { lat: 39.325, lon: 26.7 },
+    region: 'Aydın',
+    riskPlace: 'Ayvalık',
+    varieties: ['Ayvalık', 'Memecik', 'Gemlik', 'Other'],
+    records: { label: 'B-Reçete', note: 'B-Reçete: the official pesticide prescription (Türkiye).' },
+    fields: {
+      north: { name: 'North grove', variety: 'Ayvalık', lat: 39.33, lon: 26.7 },
+      river: { name: 'River plot', variety: 'Ayvalık', lat: 39.3, lon: 26.72 },
+      hill: { name: 'Hill', variety: 'Memecik', lat: 39.345, lon: 26.68 },
+    },
+    factoryVariety: {},
+    factoryRegion: {},
+  },
+  gr: {
+    country: 'gr',
+    name: 'Γιώργος',
+    place: 'Messini, Messinia',
+    location: { lat: 37.06, lon: 21.99 },
+    region: 'Messinia',
+    riskPlace: 'Kalamata',
+    varieties: ['Koroneiki', 'Kalamon', 'Mastoidis', 'Other'],
+    records: { label: 'e-Prescription', note: 'e-Prescription: the official pesticide prescription from an agronomist (Greece).' },
+    fields: {
+      north: { name: 'Πάνω Λιόφυτο', variety: 'Koroneiki', lat: 37.08, lon: 21.98 },
+      river: { name: 'Ποτάμι', variety: 'Koroneiki', lat: 37.04, lon: 22.0 },
+      // Near the lignite power plant of Megalopoli, like Hill near a coal plant.
+      hill: { name: 'Λόφος', variety: 'Mastoidis', lat: 37.36, lon: 22.13 },
+    },
+    factoryVariety: { Ayvalık: 'Koroneiki', Memecik: 'Mastoidis' },
+    factoryRegion: { Aydın: 'Messinia', İzmir: 'Lakonia', Balıkesir: 'Messinia' },
+  },
+};
+
+/** The farmer in Türkiye. Use the store's `farmer` in screens: it follows the language. */
+export const farmer = farmerProfiles.tr;
+export const farmerLocation = farmerProfiles.tr.location;
 export const weather = { temp: 22, sky: 'Sunny', next: 'Rain tomorrow' };
 
 export const fields: Field[] = [
@@ -228,6 +296,7 @@ export const fields: Field[] = [
     pest: { name: 'Peacock spot', level: 'high' },
     harvest: { label: 'Safe to harvest', badge: '12 days', ready: false },
     breakdown: { tree: 72, spray: 40, harvest: 85, records: 90 },
+    history: [74, 78, 80, 79, 77],
     trend: { pct: -12, reason: 'Your score decreased because a banned product was detected in a recent record.' },
     plan: [
       { text: 'Remove banned products from your records and keep them off for 6 weeks.', points: 7 },
@@ -249,6 +318,7 @@ export const fields: Field[] = [
     pest: { name: 'Olive fly', level: 'medium' },
     harvest: { label: 'Ready to harvest', badge: 'Now', ready: true },
     breakdown: { tree: 88, spray: 85, harvest: 95, records: 80 },
+    history: [76, 78, 80, 81, 83],
     trend: { pct: 4, reason: 'Your score went up because you sent your fly-trap photos on time.' },
     plan: [
       { text: 'Send a fly-trap photo every week to keep your tree health high.', points: 2 },
@@ -270,6 +340,7 @@ export const fields: Field[] = [
     pest: { name: 'Olive fly', level: 'low' },
     harvest: { label: 'Safe to harvest', badge: '20 days', ready: false },
     breakdown: { tree: 80, spray: 78, harvest: 85, records: 75 },
+    history: [74, 76, 77, 78, 77],
     trend: { pct: 2, reason: 'Your score is steady. Ash from the coal plant is the main risk.' },
     plan: [
       { text: 'Wash the olives before delivery to remove ash.', points: 3 },
@@ -312,13 +383,13 @@ export const sprays: Spray[] = [
 
 export const tasks: Task[] = [
   {
-    id: 't1', fieldId: 'river', title: 'Send a photo of your fly trap', meta: 'River plot · due today', kind: 'photo', urgent: true,
+    id: 't1', fieldId: 'river', title: 'Send a photo of your fly trap', meta: 'due today', kind: 'photo', urgent: true,
     why: 'Fly numbers rose 60% nearby. Your photo shows if you need to act.', done: false,
   },
-  { id: 't2', fieldId: 'north', title: 'Did you spray this week?', meta: 'North grove · peacock spot risk was high', kind: 'spray', done: false },
-  { id: 't3', fieldId: 'north', title: 'Re-check Tree #23', meta: 'North grove · in 2 days', kind: 'recheck', treeId: 23, done: false },
-  { id: 't4', fieldId: 'hill', title: 'Wash olives after ash warning', meta: 'Hill', kind: 'plain', done: true },
-  { id: 't5', fieldId: 'river', title: 'Log harvest date', meta: 'River plot', kind: 'plain', done: true },
+  { id: 't2', fieldId: 'north', title: 'Did you spray this week?', meta: 'peacock spot risk was high', kind: 'spray', done: false },
+  { id: 't3', fieldId: 'north', title: 'Re-check Tree #23', meta: 'in 2 days', kind: 'recheck', treeId: 23, done: false },
+  { id: 't4', fieldId: 'hill', title: 'Wash olives after ash warning', meta: '', kind: 'plain', done: true },
+  { id: 't5', fieldId: 'river', title: 'Log harvest date', meta: '', kind: 'plain', done: true },
 ];
 
 export const offers: Offer[] = [
@@ -337,9 +408,20 @@ export const sales: Sale[] = [
 export const tonsAvailable = 2.5;
 export const marketTrend = { pct: 6, avgPrice: 0.95 };
 
-export const initialNotifications = [
-  { id: 'n1', emoji: '📸', title: 'Send a photo of your fly trap', body: 'Fly numbers rose 60% near River plot. Takes 10 seconds.', when: 'now' },
-  { id: 'n2', emoji: '💧', title: 'Did you spray this week?', body: 'Peacock spot risk was high in North grove. Tap Yes or No.', when: '1h ago' },
+/** An in-app banner. `href` is the screen it opens; This week when missing. */
+export interface AppNotification {
+  id: string;
+  emoji: string;
+  title: string;
+  body: string;
+  when: string;
+  href?: string;
+}
+
+/** The banners shown when the farmer app opens. `nameOf` gives the current field name (it changes with the country). */
+export const initialNotifications = (nameOf: (fieldId: string) => string): AppNotification[] => [
+  { id: 'n1', emoji: '📸', title: 'Send a photo of your fly trap', body: `Fly numbers rose 60% near ${nameOf('river')}. Takes 10 seconds.`, when: 'now' },
+  { id: 'n2', emoji: '💧', title: 'Did you spray this week?', body: `Peacock spot risk was high in ${nameOf('north')}. Tap Yes or No.`, when: '1h ago' },
 ];
 
 /** Points the Hill quality score loses if the location risk is ignored. */

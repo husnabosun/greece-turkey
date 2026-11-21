@@ -8,6 +8,7 @@ import type { Scan, ScanMode } from '@/data/mock';
 import { diagnose, type Diagnosis } from '@/lib/diagnosis';
 import { fruitToDiagnosis, leafToDiagnosis, trapToDiagnosis } from '@/lib/ai/mappers';
 import { diagnoseFruitAi, diagnoseLeafAi, diagnoseTrapAi } from '@/state/ai';
+import { useT } from '@/state/i18n';
 import { useStore } from '@/state/store';
 import { colors } from '@/theme/tokens';
 import { ScanPhoto } from './ScanPhoto';
@@ -28,6 +29,7 @@ const whenLabel = (d = new Date()) => `Today, ${String(d.getHours()).padStart(2,
 /** Shows the steps one by one for about 1.5 s, then replaces itself with the result. */
 export function AnalysingScreen() {
   const router = useRouter();
+  const t = useT();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ fieldId?: string; treeId?: string; mode?: string }>();
   const captureUri = useStore((s) => s.captureUri);
@@ -126,10 +128,10 @@ export function AnalysingScreen() {
 
       <View className="mt-6 flex-row items-center gap-2">
         <Sparkles size={18} color={colors.lime} />
-        <Text className="font-i8 text-ap-card text-white">Analysing your photo</Text>
+        <Text className="font-i8 text-ap-card text-white">{t('Analysing your photo')}</Text>
       </View>
-      <Text className="mt-1 font-i5 text-ap-body text-white/60">{waking ? 'Waking up the AI model…' : 'This takes a few seconds.'}</Text>
-      {waking ? <Text className="mt-1 px-4 text-center font-i5 text-ap-small text-white/50">It was asleep. The first photo can take up to a minute.</Text> : null}
+      <Text className="mt-1 font-i5 text-ap-body text-white/60">{t(waking ? 'Waking up the AI model…' : 'This takes a few seconds.')}</Text>
+      {waking ? <Text className="mt-1 px-4 text-center font-i5 text-ap-small text-white/50">{t('It was asleep. The first photo can take up to a minute.')}</Text> : null}
 
       <View className="mt-6 w-full gap-3">
         {STEPS[mode].map((label, i) => (
@@ -137,7 +139,7 @@ export function AnalysingScreen() {
             <View className="h-5 w-5 items-center justify-center rounded-full bg-lime">
               <Check size={12} color={colors.ink} strokeWidth={3} />
             </View>
-            <Text className="font-i6 text-ap-body text-white">{label}</Text>
+            <Text className="font-i6 text-ap-body text-white">{t(label)}</Text>
           </View>
         ))}
       </View>
