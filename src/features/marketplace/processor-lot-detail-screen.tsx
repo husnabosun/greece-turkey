@@ -54,6 +54,7 @@ type SprayRow = {
   product: string;
   appliedAt: string;
   euBanned: boolean;
+  euStatus: "banned" | "allowed" | "unknown";
 };
 
 type FactorTone = "good" | "warn" | "risk";
@@ -112,7 +113,7 @@ function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"p
     out.push({ id: "lab-suggested", label: t("badge.labSuggested") });
   }
   if (lot.hasBannedSpray) {
-    out.unshift({ id: "banned", label: t("noBannedProducts") });
+    out.unshift({ id: "banned", label: t("sprayNotApproved") });
   }
   return out;
 }
@@ -220,7 +221,7 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
         lot.fieldId
           ? supabase
               .from("logbook_entries")
-              .select("id, product_name, applied_at, eu_banned, kind")
+              .select("id, product_name, applied_at, eu_banned, eu_status, kind")
               .eq("field_id", lot.fieldId)
               .eq("kind", "spray")
               .order("applied_at", { ascending: false })
@@ -236,6 +237,7 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
         product: String(r.product_name ?? "—"),
         appliedAt: String(r.applied_at),
         euBanned: Boolean(r.eu_banned),
+        euStatus: (r.eu_banned ? "banned" : r.eu_status === "allowed" ? "allowed" : "unknown") as SprayRow["euStatus"],
       }));
       if (fromLog.length > 0) {
         setSprays(fromLog);
@@ -252,6 +254,7 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
               applied_at?: string;
               date?: string;
               eu_banned?: boolean;
+              eu_status?: string;
               banned?: boolean;
             };
             const product = s.product_name ?? s.product;
@@ -262,6 +265,11 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
               product,
               appliedAt,
               euBanned: Boolean(s.eu_banned ?? s.banned),
+              euStatus: (s.eu_banned ?? s.banned
+                ? "banned"
+                : s.eu_status === "allowed"
+                  ? "allowed"
+                  : "unknown") as SprayRow["euStatus"],
             };
           })
           .filter((x): x is SprayRow => x != null),
@@ -531,8 +539,12 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
                       {formatDateShort(s.appliedAt.slice(0, 10), locale)}
                     </p>
                   </div>
-                  <Pill tone={s.euBanned ? "risk" : "good"}>
-                    {s.euBanned ? t("sprayNotApproved") : t("sprayEuApproved")}
+                  <Pill tone={s.euBanned ? "risk" : s.euStatus === "allowed" ? "good" : "warn"}>
+                    {s.euBanned
+                      ? t("sprayNotApproved")
+                      : s.euStatus === "allowed"
+                        ? t("sprayEuApproved")
+                        : t("sprayEuUnknown")}
                   </Pill>
                 </div>
               ))

@@ -115,7 +115,7 @@ function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"p
     out.push({ id: "lab-suggested", label: t("labTestSuggested") });
   }
   if (lot.hasBannedSpray) {
-    out.unshift({ id: "banned", label: t("noBannedProducts") });
+    out.unshift({ id: "banned", label: t("sprayNotApproved") });
   }
   return out;
 }

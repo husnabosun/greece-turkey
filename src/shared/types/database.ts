@@ -133,6 +133,7 @@ export type LogbookEntry = {
   protection_days: number | null;
   targets: string[];
   eu_banned: boolean;
+  eu_status?: "banned" | "allowed" | "unknown";
   eu_hits: string[];
   applied_at: string;
   area_label: string | null;

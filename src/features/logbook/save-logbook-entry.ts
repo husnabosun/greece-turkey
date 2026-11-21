@@ -35,7 +35,7 @@ export async function saveLogbookEntry(draft: Draft): Promise<SaveResult> {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "needLogin" };
 
-  const check = euCheck(draft.substances);
+  const check = euCheck(draft.substances, draft.product);
   const appliedAt = appliedAtFromDate(draft.appliedOn);
   const phi =
     draft.preHarvestDays != null && Number.isFinite(draft.preHarvestDays)
@@ -53,6 +53,7 @@ export async function saveLogbookEntry(draft: Draft): Promise<SaveResult> {
       dose: draft.dose,
       licence: draft.licence,
       eu_banned: check.banned,
+      eu_status: check.status,
       eu_hits: check.hits,
       applied_at: appliedAt,
       pre_harvest_days: phi,
@@ -72,6 +73,7 @@ export async function saveLogbookEntry(draft: Draft): Promise<SaveResult> {
       product: draft.product.trim(),
       substances: draft.substances,
       banned: check.banned,
+      euStatus: check.status,
       hits: check.hits,
       at: row.applied_at,
       fieldId: draft.fieldId,

@@ -8,6 +8,8 @@ export type LogbookEntryView = {
   product: string;
   substances: string[];
   banned: boolean;
+  /** banned · allowed · unknown (not on any list: never shown as approved). */
+  euStatus: "banned" | "allowed" | "unknown";
   hits: string[];
   at: string;
   fieldId: string | null;
@@ -46,7 +48,7 @@ export function useFarmerLogbook() {
       const { data, error } = await supabase
         .from("logbook_entries")
         .select(
-          "id, field_id, product_name, active_substances, dose, licence, eu_banned, eu_hits, applied_at, pre_harvest_days, fields(name)",
+          "id, field_id, product_name, active_substances, dose, licence, eu_banned, eu_status, eu_hits, applied_at, pre_harvest_days, fields(name)",
         )
         .eq("farmer_id", user.id)
         .order("applied_at", { ascending: false });
@@ -64,6 +66,7 @@ export function useFarmerLogbook() {
           product: row.product_name,
           substances: row.active_substances ?? [],
           banned: row.eu_banned,
+          euStatus: row.eu_banned ? "banned" : row.eu_status === "allowed" ? "allowed" : "unknown",
           hits: row.eu_hits ?? [],
           at: row.applied_at,
           fieldId: row.field_id,

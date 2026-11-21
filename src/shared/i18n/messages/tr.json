@@ -497,7 +497,7 @@
     "ok": "AB OK",
     "savedLocal": "Bu cihazda yerel olarak kaydedildi.",
     "saved": "İlaçlama kaydedildi.",
-    "unknownSubstance": "Listede bulamadık — bir ziraat mühendisine danış.",
+    "unknownSubstance": "Bilinmeyen ürün: onaylı listede yok. Onaylı demeden önce bir ziraat mühendisine danış.",
     "appliedOn": "Tarih",
     "phiLabel": "Hasat bekleme (gün)",
     "phiDays": "PHI {n} g",
@@ -546,7 +546,8 @@
     "fromLabel": "Etiketten okundu",
     "bannedWarn": "{substance} AB'de onaylı değil. Alıcılar bunu görür.",
     "needProduct": "Ürün veya madde gir.",
-    "noField": "Tarla yok"
+    "noField": "Tarla yok",
+    "unknownPill": "Bilinmiyor"
   },
   "farmerQuality": {
     "title": "Kalite skoru",
@@ -1197,7 +1198,8 @@
     "cancelPickup": "Teslim almayı iptal et",
     "cancelPickupTitle": "Bu teslim alma iptal edilsin mi?",
     "cancelPickupBody": "Anlaşma iptal edilir ve parti diğer alıcılar için yeniden pazara çıkar.",
-    "cancelDone": "Teslim alma iptal edildi."
+    "cancelDone": "Teslim alma iptal edildi.",
+    "sprayEuUnknown": "Bilinmiyor — doğrulanmadı"
   },
   "riskThreats": {
     "peacockSpot": "Halkalı leke",

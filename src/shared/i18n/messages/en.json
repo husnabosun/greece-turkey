@@ -497,7 +497,7 @@
     "ok": "EU OK",
     "savedLocal": "Saved locally on this device.",
     "saved": "Spray saved.",
-    "unknownSubstance": "Not found in our list — check with an agronomist.",
+    "unknownSubstance": "Unknown product: not on the approved list. Check with an agronomist before calling it approved.",
     "appliedOn": "Date",
     "phiLabel": "Pre-harvest wait (days)",
     "phiDays": "PHI {n} d",
@@ -546,7 +546,8 @@
     "fromLabel": "Read from label",
     "bannedWarn": "{substance} is not approved in the EU. Buyers will see it.",
     "needProduct": "Enter a product or substance.",
-    "noField": "No field"
+    "noField": "No field",
+    "unknownPill": "Unknown"
   },
   "farmerQuality": {
     "title": "Quality score",
@@ -1197,7 +1198,8 @@
     "cancelPickup": "Cancel pickup",
     "cancelPickupTitle": "Cancel this pickup?",
     "cancelPickupBody": "The deal is cancelled and the lot goes back on the market for other buyers.",
-    "cancelDone": "Pickup cancelled."
+    "cancelDone": "Pickup cancelled.",
+    "sprayEuUnknown": "Unknown — not verified"
   },
   "riskThreats": {
     "peacockSpot": "Peacock spot",

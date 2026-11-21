@@ -58,7 +58,7 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
 
   async function onShare() {
     const lines = scoped.map((e) => {
-      const status = e.banned ? t("notAllowed") : t("allowed");
+      const status = e.banned ? t("notAllowed") : e.euStatus === "allowed" ? t("allowed") : t("unknownPill");
       return `${formatDay(e.at, locale)} · ${e.product} · ${status}`;
     });
     const text = [t("euRecord"), ...lines].filter(Boolean).join("\n");
@@ -314,8 +314,8 @@ function SprayCard({
           <p className="text-ap-body text-muted-foreground">{meta}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <Pill tone={entry.banned ? "risk" : "warn"}>
-            {entry.banned ? t("notAllowed") : entry.substances.length ? t("allowed") : t("allowed")}
+          <Pill tone={entry.banned ? "risk" : entry.euStatus === "allowed" ? "good" : "warn"}>
+            {entry.banned ? t("notAllowed") : entry.euStatus === "allowed" ? t("allowed") : t("unknownPill")}
           </Pill>
           <button
             type="button"
@@ -329,6 +329,10 @@ function SprayCard({
       {entry.banned ? (
         <div className="mt-2 rounded-lg bg-[#F8D3C8] p-2">
           <p className="text-ap-body text-risk">{t("bannedDetail", { substance })}</p>
+        </div>
+      ) : entry.euStatus !== "allowed" ? (
+        <div className="mt-2 rounded-lg bg-warn-soft px-2 py-1.5">
+          <p className="text-ap-body font-bold text-warn-text">{t("unknownSubstance")}</p>
         </div>
       ) : entry.substances.length > 0 ? (
         <div className="mt-2 rounded-lg bg-soft px-2 py-1.5">
@@ -378,7 +382,7 @@ function AddSpraySheet({
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const check = euCheck(list);
+  const check = euCheck(list, product);
 
   function save(e: React.FormEvent) {
     e.preventDefault();
@@ -560,9 +564,9 @@ function AddSpraySheet({
             <p className="text-ap-small font-semibold text-risk">{t("bannedWarn", { substance: check.hits.join(", ") })}</p>
           </div>
         ) : check.status === "unknown" ? (
-          <div className="mt-3 flex items-center gap-2 rounded-lg bg-soft p-2.5">
-            <TriangleAlert className="size-4 shrink-0 text-ap-accent" aria-hidden />
-            <p className="text-ap-small font-semibold text-ink">{t("unknownSubstance")}</p>
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-warn-soft p-2.5">
+            <TriangleAlert className="size-4 shrink-0 text-warn-text" aria-hidden />
+            <p className="text-ap-small font-semibold text-warn-text">{t("unknownSubstance")}</p>
           </div>
         ) : null}
 

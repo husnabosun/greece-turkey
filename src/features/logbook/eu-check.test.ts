@@ -33,3 +33,31 @@ describe("euCheck", () => {
     expect(r.status).toBe("unknown");
   });
 });
+
+describe("euCheck (night fixes)", () => {
+  const banned = (s: string[], p?: string) => euCheck(s, p).banned;
+  it("official Greek spellings and trade names", () => {
+    expect(banned(["χλωρπυριφός"])).toBe(true);
+    expect(banned(["Χλωρπυριφός-μεθύλ 22,5%"])).toBe(true);
+    expect(banned(["ιμιδακλοπρίδ"])).toBe(true);
+    expect(banned(["ντιμεθοέιτ"])).toBe(true);
+    expect(banned(["διμεθοάτ 40 EC"])).toBe(true);
+    expect(banned([], "Dursban 4E")).toBe(true);
+    expect(banned(["άγνωστο"], "Rogor")).toBe(true);
+    expect(banned(["imidakloprid"])).toBe(true);
+    expect(banned(["θειαμεθοξάμ"])).toBe(true);
+    expect(banned(["φωσμέτ"])).toBe(true);
+    expect(banned(["paraquat dichloride"])).toBe(true);
+  });
+  it("no false positives on short / approved inputs", () => {
+    expect(euCheck(["o"]).status).toBe("unknown");
+    expect(euCheck(["t"]).status).toBe("unknown");
+    expect(euCheck(["deltamethrin 2.5%"]).status).toBe("allowed");
+    expect(euCheck(["δελταμεθρίνη"]).status).toBe("allowed");
+    expect(euCheck(["χαλκός"]).status).toBe("allowed");
+    expect(euCheck(["spinosad"], "Spintor Fly").status).toBe("allowed");
+    expect(euCheck(["kaolin"]).banned).toBe(false);
+    expect(euCheck(["deltamethrin", "μυστικό"]).status).toBe("unknown");
+    expect(euCheck([]).status).toBe("unknown");
+  });
+});
