@@ -1,5 +1,6 @@
 "use client";
 
+import { errorCode } from "@/shared/lib/error-message";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import type { LabResult } from "@/shared/types/database";
@@ -78,12 +79,7 @@ const EMPTY: State = {
 };
 
 function rpcErrorMessage(err: { message?: string; code?: string } | null): string {
-  const raw = err?.message ?? "actionFailed";
-  if (raw.includes("offer_not_pending")) return "offerNotPending";
-  if (raw.includes("lot_not_listed")) return "lotAlreadySold";
-  if (raw.includes("forbidden")) return "forbidden";
-  if (raw.includes("offer_not_found")) return "notFound";
-  return raw;
+  return errorCode(err?.message ?? err?.code ?? "actionFailed");
 }
 
 /** Farmer market data: offers, buy requests, deliveries, per-field listing hints. */
@@ -391,33 +387,16 @@ export async function counterOffer(
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "needLogin" };
-
   if (offer.status !== "pending" || offer.lotStatus !== "listed") {
     return { ok: false, error: "offerNotPending" };
   }
-
-  const { error: updateError } = await supabase
-    .from("offers")
-    .update({ status: "countered" })
-    .eq("id", offer.id)
-    .eq("status", "pending");
-  if (updateError) return { ok: false, error: updateError.message };
-
-  const { error: insertError } = await supabase.from("offers").insert({
-    lot_id: offer.lotId,
-    farmer_id: user.id,
-    processor_id: offer.processorId,
-    initiated_by: "farmer",
-    status: "pending",
-    tons: offer.tons,
-    price_per_kg: newPrice,
-    counter_of: offer.id,
+  if (!Number.isFinite(newPrice) || newPrice < 0.05 || newPrice > 20) {
+    return { ok: false, error: "invalidPrice" };
+  }
+  // Atomic on the server: marks the bid countered and creates exactly one counter offer.
+  const { error } = await supabase.rpc("counter_offer", {
+    p_offer_id: offer.id,
+    p_price_per_kg: newPrice,
   });
-
-  return insertError ? { ok: false, error: insertError.message } : { ok: true };
+  return error ? { ok: false, error: rpcErrorMessage(error) } : { ok: true };
 }

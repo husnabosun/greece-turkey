@@ -33,9 +33,11 @@ import type { Field } from "@/shared/types/database";
 import { FIELD_DOTS, colors } from "@/shared/theme/tokens";
 import { threatLabel } from "@/features/weather-risk/threat-labels";
 import { cn } from "@/shared/lib/utils";
+import { useErrorMessage } from "@/shared/lib/error-message";
 
 export function FieldsScreen() {
   const t = useTranslations("farmerFields");
+  const errMsg = useErrorMessage();
   const tThreats = useTranslations("riskThreats");
   const locale = useLocale();
   const router = useRouter();
@@ -154,7 +156,7 @@ export function FieldsScreen() {
         irrigated: editIrrigated,
       });
       if (!res.ok) {
-        toast.error(res.error === "needName" ? t("needName") : res.error ?? t("saveFailed"));
+        toast.error(res.error === "needName" ? t("needName") : errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("updatedOk"));
@@ -171,7 +173,7 @@ export function FieldsScreen() {
     try {
       const res = await deleteFarmerField(activeRaw.id);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("deletedOk"));

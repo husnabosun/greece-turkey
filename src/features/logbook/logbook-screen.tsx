@@ -14,11 +14,13 @@ import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { cn } from "@/shared/lib/utils";
 import { colors, FIELD_DOTS } from "@/shared/theme/tokens";
+import { useErrorMessage } from "@/shared/lib/error-message";
 
 type Entry = LogbookEntryView;
 
 export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
   const t = useTranslations("farmerLogbook");
+  const errMsg = useErrorMessage();
   const locale = useLocale();
   const { fields, loading } = useFarmerFields();
   const { entries, setEntries, loading: entriesLoading } = useFarmerLogbook();
@@ -207,7 +209,7 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
                   try {
                     const res = await deleteLogbookEntry(deleteTarget.id);
                     if (!res.ok) {
-                      toast.error(res.error ?? t("saveFailed"));
+                      toast.error(errMsg(res.error, "saveFailed"));
                       return;
                     }
                     setEntries((prev) => prev.filter((e) => e.id !== deleteTarget.id));

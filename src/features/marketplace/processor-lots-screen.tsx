@@ -43,6 +43,7 @@ import {
   useProcessorMarket,
   type ProcessorLot,
 } from "./use-processor-market";
+import { useErrorMessage } from "@/shared/lib/error-message";
 
 type SortKey = "score" | "price" | "harvest" | "tons";
 type MobileView = "list" | "map";
@@ -121,6 +122,7 @@ function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"p
 
 export function ProcessorLotsScreen() {
   const t = useTranslations("processor");
+  const errMsg = useErrorMessage();
   const locale = useLocale();
   const router = useRouter();
   const varietyLabel = useVarietyLabel();
@@ -268,7 +270,7 @@ export function ProcessorLotsScreen() {
       deliveryInDays,
     });
     if (!res.ok) {
-      toast.error(res.error ?? t("saveFailed"));
+      toast.error(errMsg(res.error, "saveFailed"));
       return;
     }
     toast.success(t("offerSentDetail"));

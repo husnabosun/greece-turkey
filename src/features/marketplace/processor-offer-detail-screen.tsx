@@ -35,6 +35,7 @@ import {
   useProcessorMarket,
   type ProcessorOffer,
 } from "@/features/marketplace/use-processor-market";
+import { useErrorMessage } from "@/shared/lib/error-message";
 
 function offerQualityBadges(offer: ProcessorOffer, t: (key: string) => string): string[] {
   const lot = offer.lot;
@@ -56,6 +57,7 @@ async function withdrawProcessorOffer(offerId: string): Promise<{ ok: boolean; e
 
 export function ProcessorOfferDetailScreen({ id }: { id: string }) {
   const t = useTranslations("processor");
+  const errMsg = useErrorMessage();
   const locale = useLocale();
   const router = useRouter();
   const { offers, requests, loading, error, reload } = useProcessorMarket();
@@ -87,7 +89,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
     try {
       const res = await acceptIncomingOffer(offer.id, { scheduledFor: acceptDate });
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"), { id: toastId });
+        toast.error(errMsg(res.error, "saveFailed"), { id: toastId });
         return;
       }
       const dateLabel = new Date(`${acceptDate}T12:00:00`).toLocaleDateString(locale, {
@@ -110,7 +112,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
     try {
       const res = await rejectOffer(offer.id);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("rejectedOk"));
@@ -141,7 +143,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
     try {
       const res = await counterIncomingOffer(offer, next);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"), { id: toastId });
+        toast.error(errMsg(res.error, "saveFailed"), { id: toastId });
         return;
       }
       toast.success(t("counterSentDetail"), { id: toastId });
@@ -158,7 +160,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
     try {
       const res = await withdrawProcessorOffer(offer.id);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("withdrawnOk"));

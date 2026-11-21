@@ -45,6 +45,7 @@ import {
   useProcessorMarket,
   type ProcessorLot,
 } from "./use-processor-market";
+import { useErrorMessage } from "@/shared/lib/error-message";
 
 const DEMO_EXCHANGE = 0.8;
 
@@ -152,6 +153,7 @@ function FactorRow({
 
 export function ProcessorLotDetailScreen({ id }: { id: string }) {
   const t = useTranslations("processor");
+  const errMsg = useErrorMessage();
   const locale = useLocale();
   const wide = useWide();
   const { lots, offers, loading, reload } = useProcessorMarket();
@@ -308,7 +310,7 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
       deliveryInDays,
     });
     if (!res.ok) {
-      toast.error(res.error ?? t("saveFailed"));
+      toast.error(errMsg(res.error, "saveFailed"));
       return;
     }
     toast.success(t("offerSentDetail"));

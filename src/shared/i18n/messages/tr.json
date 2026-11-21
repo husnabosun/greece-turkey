@@ -20,7 +20,31 @@
   "errors": {
     "notFoundTitle": "Sayfa bulunamadı",
     "notFoundBody": "Bu bağlantı yok veya sayfa taşındı.",
-    "backHome": "Ana sayfaya dön"
+    "backHome": "Ana sayfaya dön",
+    "action": {
+      "actionFailed": "İşlem tamamlanamadı. Tekrar dene.",
+      "saveFailed": "Kaydedilemedi. Tekrar dene.",
+      "offerNotPending": "Bu teklif artık açık değil: bu arada yanıtlandı veya kapandı.",
+      "lotAlreadySold": "Bu parti artık mevcut değil.",
+      "requestClosed": "Bu talep kapandı veya doldu.",
+      "tonsExceedLot": "Ton miktarı parti miktarını aşıyor.",
+      "invalidWeight": "Kantar kilosu bu teslimat için makul aralığın dışında.",
+      "invalidPrice": "0,05 ile 20 €/kg arasında bir fiyat gir.",
+      "invalidTons": "0,1 ile 500 t arasında bir miktar gir.",
+      "labFailedBlocked": "Laboratuvar kontrolü başarısız, ödeme yapılamaz.",
+      "labResultRequired": "Laboratuvar sonucunu seç.",
+      "invalidStep": "Bu adım şu an yapılamaz. Sayfayı yenile.",
+      "invalidDate": "Bugünden itibaren 90 gün içinde bir tarih seç.",
+      "forbidden": "Bu işlem için yetkin yok.",
+      "notFound": "Bulunamadı. Silinmiş olabilir.",
+      "duplicate": "Bunun için zaten açık bir teklif var.",
+      "outOfRange": "Bir değer sınırların dışında.",
+      "needLogin": "Devam etmek için tekrar giriş yap.",
+      "network": "Bağlantı yok. Tekrar dene.",
+      "rateLimited": "Çok fazla deneme. Biraz bekle.",
+      "needName": "Bir ad gir.",
+      "unavailable": "Hizmet şu an kullanılamıyor."
+    }
   },
   "common": {
     "aiDemo": "Demo",
@@ -594,7 +618,7 @@
     "yourPricePerKg": "Fiyatın (€/kg)",
     "counterTotal": "{tons} = {total}",
     "labFailedTitle": "Laboratuvar partiyi reddetti",
-    "labFailedHint": "Yeniden müzakere gerekir — ödeme durduruldu.",
+    "labFailedHint": "Ödeme yapılmayacak. Fabrika partiyi sana iade edecek.",
     "weighedKg": "Tartıldı {kg} kg {delta}",
     "fieldSold": "Satıldı",
     "fieldInDelivery": "Teslimatta",
@@ -769,7 +793,12 @@
     "period4": "24 Kas–1 Ara",
     "useOil": "Yağ",
     "useDual": "Çift amaçlı",
-    "useTable": "Sofralık"
+    "useTable": "Sofralık",
+    "notPayable": "ödenmez",
+    "closedLabFailed": "Laboratuvarda reddedildi",
+    "closedLabFailedHint": "Fabrika partiyi ödemesiz iade etti. Sonuçlar hakkında onlarla konuş.",
+    "closedCancelled": "İptal edildi",
+    "closedCancelledHint": "Alıcı teslim almayı iptal etti. İlanın yeniden pazarda."
   },
   "processorNav": {
     "overview": "Özet",
@@ -1152,7 +1181,23 @@
     "withdrawOffer": "Teklifi geri çek",
     "withdrawOfferConfirm": "Emin misin? Üretici artık kabul edemeyecek.",
     "withdrawnOk": "Teklif geri çekildi.",
-    "reportShort": "Rapor"
+    "reportShort": "Rapor",
+    "weighOutOfRange": "Kilo, anlaşılan tonun %30–%200'ü arasında olmalı. Tartımı kontrol et.",
+    "weighNotNumber": "Sadece sayı gir, örn. 12.300 veya 12300.",
+    "weighReadback": "{kg} kg kaydedilecek (anlaşmaya göre {diff} kg) · ödeme {total}",
+    "weighUnusualConfirm": "Tartım anlaşılan miktardan %20'den fazla farklı. Onaylamak için tekrar dokun.",
+    "weighConfirmAction": "Evet, kaydet",
+    "labFailedPill": "Laboratuvarda başarısız",
+    "labFailedExplain": "Laboratuvar kontrolü başarısız. Ödeme yapılamaz: partiyi üreticiye iade et.",
+    "notPayable": "ödenmez",
+    "returnLot": "Partiyi iade et",
+    "returnLotTitle": "Partiyi üreticiye iade et",
+    "returnLotBody": "Teslimat ödemesiz kapanır ve üreticiye partinin laboratuvarda reddedildiği bildirilir.",
+    "returnDone": "Parti iade edildi. Üretici bilgilendirildi.",
+    "cancelPickup": "Teslim almayı iptal et",
+    "cancelPickupTitle": "Bu teslim alma iptal edilsin mi?",
+    "cancelPickupBody": "Anlaşma iptal edilir ve parti diğer alıcılar için yeniden pazara çıkar.",
+    "cancelDone": "Teslim alma iptal edildi."
   },
   "riskThreats": {
     "peacockSpot": "Halkalı leke",

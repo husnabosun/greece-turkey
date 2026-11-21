@@ -61,6 +61,7 @@ import {
   type ProcessorOffer,
 } from "./use-processor-market";
 import { useVarietyLabel } from "./processor-shared";
+import { useErrorMessage } from "@/shared/lib/error-message";
 
 function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"processor">>): LotBadge[] {
   const trust = trustBadges(
@@ -155,6 +156,7 @@ function SupplyWeekBars({
 
 export function ProcessorOverviewScreen() {
   const t = useTranslations("processor");
+  const errMsg = useErrorMessage();
   const tNav = useTranslations("processorNav");
   const locale = useLocale();
   const router = useRouter();
@@ -207,7 +209,7 @@ export function ProcessorOverviewScreen() {
     try {
       const res = await acceptIncomingOffer(acceptOffer.id, { scheduledFor: acceptDate });
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("acceptedScheduled", { date: acceptDate }));
@@ -236,7 +238,7 @@ export function ProcessorOverviewScreen() {
     try {
       const res = await counterIncomingOffer(offer, next);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("counterSentDetail"));
@@ -252,7 +254,7 @@ export function ProcessorOverviewScreen() {
     try {
       const res = await rejectOffer(offer.id);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("rejectedOk"));
@@ -313,7 +315,7 @@ export function ProcessorOverviewScreen() {
     try {
       const res = await scheduleDelivery(deliveryId, iso);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("deliveryScheduled", { date: iso }));

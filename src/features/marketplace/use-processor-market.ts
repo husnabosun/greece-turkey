@@ -1,5 +1,6 @@
 "use client";
 
+import { errorCode } from "@/shared/lib/error-message";
 import { useCallback, useEffect, useState } from "react";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { nextDeliveryStatus } from "@/features/marketplace/delivery-state";
@@ -455,13 +456,8 @@ export async function placeLotOffer(input: {
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
-function acceptRpcError(err: { message?: string } | null): string {
-  const raw = err?.message ?? "saveFailed";
-  if (raw.includes("offer_not_pending")) return "offerNotPending";
-  if (raw.includes("lot_not_listed")) return "lotAlreadySold";
-  if (raw.includes("forbidden")) return "forbidden";
-  if (raw.includes("offer_not_found")) return "notFound";
-  return raw;
+function acceptRpcError(err: { message?: string; code?: string } | null): string {
+  return errorCode(err?.message ?? err?.code ?? "saveFailed");
 }
 
 export async function acceptIncomingOffer(
@@ -524,28 +520,15 @@ export async function counterIncomingOffer(
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "needLogin" };
-
-  const { error: updateError } = await supabase
-    .from("offers")
-    .update({ status: "countered" })
-    .eq("id", offer.id);
-  if (updateError) return { ok: false, error: updateError.message };
-
-  const { error: insertError } = await supabase.from("offers").insert({
-    lot_id: offer.lotId,
-    farmer_id: offer.farmerId,
-    processor_id: user.id,
-    initiated_by: "processor",
-    status: "pending",
-    tons: offer.tons,
-    price_per_kg: newPrice,
-    counter_of: offer.id,
+  if (!Number.isFinite(newPrice) || newPrice < 0.05 || newPrice > 20) {
+    return { ok: false, error: "invalidPrice" };
+  }
+  // Atomic on the server: one counter per offer, only the receiving side may counter.
+  const { error } = await supabase.rpc("counter_offer", {
+    p_offer_id: offer.id,
+    p_price_per_kg: newPrice,
   });
-  return insertError ? { ok: false, error: insertError.message } : { ok: true };
+  return error ? { ok: false, error: acceptRpcError(error) } : { ok: true };
 }
 
 export async function advanceDelivery(
@@ -559,39 +542,28 @@ export async function advanceDelivery(
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
 
-  // Block payment (and any further advance) after a failed lab check.
-  const { data: existing } = await supabase
-    .from("deliveries")
-    .select("lab_result, quality_score_snapshot, lot_id")
-    .eq("id", deliveryId)
-    .maybeSingle();
-  if (existing?.lab_result === "failed") {
-    return { ok: false, error: "labFailedBlocked" };
-  }
+  // Server validates the acting processor, the step order, the weight range and the lab result.
+  const { error } = await supabase.rpc("advance_delivery", {
+    p_delivery_id: deliveryId,
+    p_next: next,
+    p_actual_kg: next === "weighed" ? (extras?.actualKg ?? null) : null,
+    p_lab_result: next === "lab_checked" ? (extras?.labResult ?? "passed") : null,
+  });
+  return error ? { ok: false, error: acceptRpcError(error) } : { ok: true };
+}
 
-  const patch: {
-    status: DeliveryStatus;
-    actual_kg?: number;
-    lab_result?: LabResult;
-    quality_score_snapshot?: number;
-  } = { status: next };
-  if (next === "weighed" && extras?.actualKg != null) patch.actual_kg = extras.actualKg;
-  if (next === "lab_checked") patch.lab_result = extras?.labResult ?? "passed";
-
-  // Persist lot score onto the delivery when first advancing, if still empty.
-  if (next === "weighed" || next === "lab_checked") {
-    if (existing && existing.quality_score_snapshot == null && existing.lot_id) {
-      const { data: lot } = await supabase
-        .from("lots")
-        .select("quality_score")
-        .eq("id", existing.lot_id)
-        .maybeSingle();
-      if (lot?.quality_score != null) patch.quality_score_snapshot = Number(lot.quality_score);
-    }
-  }
-
-  const { error } = await supabase.from("deliveries").update(patch).eq("id", deliveryId);
-  return error ? { ok: false, error: error.message } : { ok: true };
+/** Close a delivery: before weighing (lot goes back to market) or after a failed lab check (olives returned). */
+export async function cancelDelivery(
+  deliveryId: string,
+  reason?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  const { error } = await supabase.rpc("cancel_delivery", {
+    p_delivery_id: deliveryId,
+    p_reason: reason ?? null,
+  });
+  return error ? { ok: false, error: acceptRpcError(error) } : { ok: true };
 }
 
 export function lotPlaceLabel(

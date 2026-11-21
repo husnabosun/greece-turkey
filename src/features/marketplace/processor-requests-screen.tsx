@@ -52,6 +52,7 @@ import {
   type ProcessorRequest,
 } from "./use-processor-market";
 import { useVarietyLabel } from "./processor-shared";
+import { useErrorMessage } from "@/shared/lib/error-message";
 
 const SCORE_MIN = 50;
 const SCORE_MAX = 95;
@@ -831,6 +832,7 @@ function RequestMenu({
 }
 export function ProcessorRequestsScreen() {
   const t = useTranslations("processor");
+  const errMsg = useErrorMessage();
   const locale = useLocale();
   const varietyLabel = useVarietyLabel();
   const varietyOptions = useMemo(() => marketplaceVarietyOptions(locale), [locale]);
@@ -939,7 +941,7 @@ export function ProcessorRequestsScreen() {
     const res = editingId ? await updateBuyRequest(editingId, input) : await createBuyRequest(input);
     setSaving(false);
     if (!res.ok) {
-      toast.error(res.error ?? t("saveFailed"));
+      toast.error(errMsg(res.error, "saveFailed"));
       return;
     }
     closeForm();
@@ -953,7 +955,7 @@ export function ProcessorRequestsScreen() {
     try {
       const res = await deactivateBuyRequest(requestId);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("requestDeleted"));
@@ -969,7 +971,7 @@ export function ProcessorRequestsScreen() {
     try {
       const res = await acceptIncomingOffer(acceptOffer.id, { scheduledFor: acceptDate });
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("acceptedScheduled", { date: acceptDate }));
@@ -986,7 +988,7 @@ export function ProcessorRequestsScreen() {
     try {
       const res = await rejectOffer(offer.id);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("rejectedOk"));
@@ -1010,7 +1012,7 @@ export function ProcessorRequestsScreen() {
     try {
       const res = await counterIncomingOffer(offer, next);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("counterSentDetail"));
