@@ -134,7 +134,10 @@
     "saving": "Kaydediliyor…",
     "done": "Tamam — tarlalara gidelim.",
     "needLogin": "Giriş gerekli.",
-    "needSupabase": "Veritabanı bağlantısı yok."
+    "needSupabase": "Veritabanı bağlantısı yok.",
+    "lang_el": "Ελληνικά",
+    "lang_tr": "Türkçe",
+    "lang_en": "English"
   },
   "farmerNotifications": {
     "title": "Bildirimler",
@@ -509,7 +512,22 @@
     "imageTooSmall": "Fotoğraf çok küçük. Daha yakından, net bir fotoğraf çek.",
     "imageBadAspect": "Fotoğraf panorama ya da şerit. Yaprağın normal bir fotoğrafını çek.",
     "unavailableNow": "Analiz şu anda kullanılamıyor. Birkaç dakika sonra tekrar dene. Hiçbir şey kaydedilmedi.",
-    "rateLimited": "Kısa sürede çok fazla tarama. Bir dakika bekle."
+    "rateLimited": "Kısa sürede çok fazla tarama. Bir dakika bekle.",
+    "cameraEmpty": "Fotoğraf çekmek için dokun veya galeriden seç",
+    "notice_unavailable_title": "Yapay zekâ şu anda kullanılamıyor",
+    "notice_rateLimited_title": "Çok fazla tarama yapıldı",
+    "notice_notLeaf_title": "Zeytin yaprağı bulunamadı",
+    "notice_lowConfidence_title": "Fotoğraf yeterince net değil",
+    "retry": "Tekrar dene",
+    "newPhoto": "Yeni fotoğraf",
+    "needsRecheck": "Yeniden kontrol gerekli",
+    "emptyScansTitle": "Henüz tarama yok",
+    "emptyScansHint": "Sağlıklı olup olmadığını görmek için bir yaprağın fotoğrafını çek.",
+    "emptyDueTitle": "Hepsi kontrol edildi",
+    "showAllScans": "Tüm taramaları göster",
+    "notSaved": "Kaydedilmedi",
+    "taskShort": "Görev",
+    "listSummary": "{n} tarama{due, plural, =0 {} other { · # yeniden kontrol gerekli}}"
   },
   "farmerLogbook": {
     "title": "Defter",
@@ -574,7 +592,8 @@
     "bannedWarn": "{substance} AB'de onaylı değil. Alıcılar bunu görür.",
     "needProduct": "Ürün veya madde gir.",
     "noField": "Tarla yok",
-    "unknownPill": "Bilinmiyor"
+    "unknownPill": "Bilinmiyor",
+    "harvestNow": "Bugünden itibaren"
   },
   "farmerQuality": {
     "title": "Kalite skoru",
@@ -1275,7 +1294,8 @@
     "topAlert": "En yüksek risk",
     "emptyTab": "Bu kategoride kayıt yok.",
     "aiTitle": "YZ önerisi",
-    "aiBody": "Tarama ve ilaçlama ile YZ tarla bazlı öneri verir."
+    "aiBody": "Tarama ve ilaçlama ile YZ tarla bazlı öneri verir.",
+    "noLocation": "Bu tarlanın haritada konumu yok, bu yüzden hava durumu gösterilemiyor. Tarlalar bölümünden konum ekle."
   },
   "farmerTasks": {
     "title": "Bu hafta",
@@ -1322,6 +1342,7 @@
     "needTitle": "Başlık yaz.",
     "needLogin": "Giriş gerekli.",
     "needSupabase": "Veritabanı yok.",
-    "actionFailed": "Görev güncellenemedi."
+    "actionFailed": "Görev güncellenemedi.",
+    "toDo": "Yapılacaklar"
   }
 }

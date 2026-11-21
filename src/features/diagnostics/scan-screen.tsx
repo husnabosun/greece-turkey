@@ -16,8 +16,11 @@ import {
   History,
   Image as ImageIcon,
   Leaf,
-  ListFilter,
+  Loader2,
+  Plus,
   RefreshCw,
+  Tag,
+  TriangleAlert,
   Scissors,
   X,
   type LucideIcon,
@@ -30,12 +33,21 @@ import { scanNeedsRecheck, useFarmerScans } from "@/features/diagnostics/use-far
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { varietyAgronomyContext } from "@/features/fields/olive-varieties";
 import { completeTasksAfterScan } from "@/features/tasks/use-farmer-tasks";
-import { AiTag, ApButton, Chip, FieldChips, Pill, PrivacyLine, type PillTone } from "@/shared/components/brand";
+import { AiTag, ApButton, Chip, FieldChips, Pill, PrivacyLine, SectionHeader, type PillTone } from "@/shared/components/brand";
 import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 import { FIELD_DOTS } from "@/shared/theme/tokens";
 
 type View = "list" | "camera" | "result";
+
+/** Inline guidance shown on the review screen when the AI could not give a result. */
+type Notice = "unavailable" | "rateLimited" | "notLeaf" | "lowConfidence";
+const NOTICE_RETRY: Record<Notice, boolean> = {
+  unavailable: true,
+  rateLimited: true,
+  notLeaf: false,
+  lowConfidence: false,
+};
 
 type TFn = (key: string, values?: Record<string, string | number>) => string;
 
@@ -44,14 +56,6 @@ const LATIN = {
   mite: "Aculus olearius",
   fly: "Bactrocera oleae",
 } as const;
-
-const BOX: Record<PillTone, string> = {
-  good: "bg-good-soft",
-  warn: "bg-warn-soft",
-  risk: "bg-risk-soft",
-  accent: "bg-ap-accent-soft",
-  neutral: "bg-soft",
-};
 
 export function ScanScreen() {
   const t = useTranslations("farmerScan");
@@ -75,6 +79,7 @@ export function ScanScreen() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [analysing, setAnalysing] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const bootstrappedParams = useRef(false);
   const libraryRef = useRef<HTMLInputElement>(null);
   const shutterRef = useRef<HTMLInputElement>(null);
@@ -199,7 +204,10 @@ export function ScanScreen() {
     return [...map.values()];
   }, [scans, filter, onlyDue, viewFields, t]);
 
+  const dueCount = useMemo(() => scans.filter((s) => scanNeedsRecheck(s)).length, [scans]);
+
   function openCamera() {
+    setNotice(null);
     setPhotos([]);
     setAnalysing(false);
     setPicking(false);
@@ -224,6 +232,7 @@ export function ScanScreen() {
     try {
       const { compressImageFile } = await import("@/shared/lib/compress-image");
       const url = await compressImageFile(file);
+      setNotice(null);
       setPhotos((prev) => (prev.length >= 4 ? prev : [...prev, url]));
     } catch (err) {
       const code = err instanceof Error ? err.message : "";
@@ -236,6 +245,7 @@ export function ScanScreen() {
 
   function removePhoto(index: number) {
     if (analysing) return;
+    setNotice(null);
     setPhotos((prev) => prev.filter((_, i) => i !== index));
   }
 
@@ -249,6 +259,7 @@ export function ScanScreen() {
       return;
     }
     const primary = selected[0];
+    setNotice(null);
     setAnalysing(true);
     try {
       const toBase64 = (dataUrl: string) => (dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl);
@@ -283,7 +294,8 @@ export function ScanScreen() {
         throw new Error(t("needLogin"));
       }
       if (res.status === 429) {
-        throw new Error(t("rateLimited"));
+        setNotice("rateLimited");
+        return;
       }
       const json: unknown = await res.json().catch(() => null);
       if (!isRecord(json) || json.ok !== true) {
@@ -301,11 +313,11 @@ export function ScanScreen() {
       const payload = json.data;
       // AI temporarily unavailable (quota / timeout): no diagnosis at all, never a demo result (Ν4).
       if (isRecord(payload) && (payload.unavailable === true || payload.source === "demo")) {
-        toast.error(t("unavailableNow"), { id: "scan-unavailable", duration: 6000 });
+        setNotice("unavailable");
         return;
       }
       if (isRecord(payload) && payload.rejected === "not_leaf") {
-        toast.error(t("notLeaf"));
+        setNotice("notLeaf");
         return;
       }
 
@@ -326,7 +338,7 @@ export function ScanScreen() {
         presented.confidence != null &&
         presented.confidence < 0.8
       ) {
-        toast.message(t("lowConfidence"));
+        setNotice("lowConfidence");
         return;
       }
 
@@ -404,28 +416,32 @@ export function ScanScreen() {
   if (view === "camera") {
     const hint = mode === "fruit" ? t("hintFruit") : mode === "trap" ? t("hintTrap") : t("hintLeaf");
     return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-[#0B0B0B] text-white md:left-60">
+      <div className="fixed inset-0 z-50 flex flex-col bg-ink text-white md:left-60">
         <div className="flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <button
             type="button"
             aria-label={t("close")}
-            onClick={() => setView("list")}
-            className="flex size-10 items-center justify-center rounded-full bg-white/15"
+            onClick={() => {
+              setNotice(null);
+              setView("list");
+            }}
+            className="flex size-11 items-center justify-center rounded-full bg-white/15"
           >
             <X className="size-5" aria-hidden />
           </button>
           <button
             type="button"
             onClick={() => setPicking((v) => !v)}
-            className="inline-flex h-9 max-w-[220px] items-center gap-1.5 rounded-full bg-white/15 px-3.5 text-ap-body font-bold"
+            className="inline-flex h-11 max-w-[200px] items-center gap-1.5 rounded-full bg-white/15 px-4 text-ap-body font-bold"
           >
             <span className="truncate">{activeField ? activeField.name : t("noField")}</span>
             <ChevronDown className="size-3.5 shrink-0" aria-hidden />
           </button>
-          <span className="size-10" />
+          <span className="size-11" />
         </div>
 
-        <div className="mx-auto mt-3 flex h-9 w-fit rounded-full bg-white/15 p-1" role="tablist">
+        <div className="mx-auto mt-3 flex h-11 w-fit items-stretch rounded-full bg-white/15 p-1">
+          <div className="flex" role="tablist">
           {(["leaf", "fruit", "trap"] as const).map((id) => (
             <button
               key={id}
@@ -441,15 +457,18 @@ export function ScanScreen() {
               {t(id)}
             </button>
           ))}
+          </div>
+          <span className="mx-1 my-2 w-px bg-white/25" aria-hidden />
           <Link
             href="/farmer/logbook?add=1&label=1"
-            className="flex w-[72px] items-center justify-center rounded-full text-ap-pill text-white/80"
+            className="flex items-center justify-center gap-1 rounded-full px-3 text-ap-pill text-white/80"
           >
+            <Tag className="size-3.5" aria-hidden />
             {t("label")}
           </Link>
         </div>
 
-        <div className="relative mx-4 mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] bg-[#1B1B1B]">
+        <div className="relative mx-4 mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] bg-white/5">
           {photos.length > 0 ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -473,7 +492,20 @@ export function ScanScreen() {
             </div>
           ) : photos.length > 0 ? (
             <div className="relative z-10 mt-auto flex flex-col gap-3 bg-gradient-to-t from-black/80 via-black/45 to-transparent px-4 pt-16 pb-4">
-              <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {notice ? (
+                <div role="status" className="flex gap-3 rounded-2xl bg-card p-3 text-ink">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-warn-soft text-warn-text">
+                    <TriangleAlert className="size-[18px]" aria-hidden />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-ap-body font-extrabold">{t(`notice_${notice}_title`)}</p>
+                    <p className="mt-0.5 text-ap-small text-muted-foreground">
+                      {t(notice === "unavailable" ? "unavailableNow" : notice)}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+              <div className="flex gap-3 overflow-x-auto pt-3 pr-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {photos.map((src, i) => (
                   <div key={`${i}-${src.slice(0, 24)}`} className="relative shrink-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -489,9 +521,11 @@ export function ScanScreen() {
                       type="button"
                       aria-label={t("removePhoto")}
                       onClick={() => removePhoto(i)}
-                      className="absolute -top-1.5 -right-1.5 flex size-6 items-center justify-center rounded-full bg-[#E5473A] text-white"
+                      className="absolute -top-3.5 -right-3.5 flex size-11 items-center justify-center"
                     >
-                      <X className="size-3.5" aria-hidden />
+                      <span className="flex size-6 items-center justify-center rounded-full bg-risk text-white ring-2 ring-ink">
+                        <X className="size-3.5" aria-hidden />
+                      </span>
                     </button>
                   </div>
                 ))}
@@ -506,25 +540,43 @@ export function ScanScreen() {
                   </button>
                 ) : null}
               </div>
-              <p className="text-center text-ap-small font-semibold text-white/75">{t("reviewHint")}</p>
-              <button
-                type="button"
-                onClick={() => void analyse(photos)}
-                className="inline-flex h-12 w-full items-center justify-center rounded-full bg-white text-ap-btn text-ink"
-              >
-                {t("analyseNow")}
-              </button>
+              {notice ? null : (
+                <p className="text-center text-ap-small font-semibold text-white/75">{t("reviewHint")}</p>
+              )}
+              {notice && !NOTICE_RETRY[notice] ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotice(null);
+                    setPhotos([]);
+                    shutterRef.current?.click();
+                  }}
+                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-white text-ap-btn text-ink"
+                >
+                  <Camera className="size-[18px]" aria-hidden />
+                  {t("newPhoto")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void analyse(photos)}
+                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-white text-ap-btn text-ink"
+                >
+                  {notice ? <RefreshCw className="size-[18px]" aria-hidden /> : null}
+                  {notice ? t("retry") : t("analyseNow")}
+                </button>
+              )}
             </div>
           ) : (
             <div className="relative flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
-              <Camera className="size-8 text-[#8A8A8A]" aria-hidden />
-              <p className="text-ap-body font-semibold text-white/70">{t("cameraOff")}</p>
               <button
                 type="button"
-                onClick={() => libraryRef.current?.click()}
-                className="inline-flex h-11 items-center justify-center rounded-full bg-white px-6 text-ap-btn text-ink"
+                onClick={() => shutterRef.current?.click()}
+                className="relative flex aspect-square w-[min(62vw,240px)] flex-col items-center justify-center gap-2 rounded-3xl"
               >
-                {t("choosePhoto")}
+                <Corners />
+                <Leaf className="size-8 text-white/50" aria-hidden />
+                <span className="max-w-[160px] text-ap-body font-semibold text-white/75">{t("cameraEmpty")}</span>
               </button>
               <p className="pointer-events-none absolute bottom-4 left-1/2 max-w-[90%] -translate-x-1/2 rounded-full bg-black/50 px-3 py-1.5 text-center text-ap-body font-semibold text-white">
                 {hint}
@@ -648,25 +700,16 @@ export function ScanScreen() {
 
   return (
     <div className="relative w-full flex-1 pb-28">
-      <div className="flex items-center gap-3">
-        <h1 className="flex-1 text-ap-title text-ink">{t("yourScans")}</h1>
-        <button
-          type="button"
-          aria-label={t("filterDue")}
-          aria-pressed={onlyDue}
-          onClick={() => setOnlyDue((v) => !v)}
-          className={cn(
-            "flex size-10 items-center justify-center rounded-full border",
-            onlyDue ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
-          )}
-        >
-          <ListFilter className="size-[18px]" aria-hidden />
-        </button>
-      </div>
+      <h1 className="text-[20px] font-extrabold tracking-tight text-ink">{t("yourScans")}</h1>
+      {!scansLoading && scans.length > 0 ? (
+        <p className="text-ap-small text-muted-foreground">
+          {t("listSummary", { n: scans.length, due: dueCount })}
+        </p>
+      ) : null}
 
       <div className="mt-2.5">
         {fieldsLoading ? (
-          <div className="h-8 animate-pulse rounded-full bg-soft" />
+          <div className="h-11 animate-pulse rounded-full bg-soft" />
         ) : (
           <FieldChips
             fields={viewFields.map((f) => ({ id: f.id, name: f.name, color: f.color }))}
@@ -674,20 +717,69 @@ export function ScanScreen() {
             onSelect={setFilter}
             showAll
             allLabel={t("allCount", { n: scans.length })}
+            trailing={
+              <>
+                <Chip on={onlyDue} tone="black" onClick={() => setOnlyDue((v) => !v)}>
+                  <RefreshCw className={cn("size-3.5", onlyDue ? "text-white" : "text-ink")} aria-hidden />
+                  <span className={cn("text-ap-pill font-bold", onlyDue ? "text-white" : "text-ink")}>
+                    {t("filterDue")}
+                  </span>
+                </Chip>
+              </>
+            }
           />
         )}
       </div>
 
       {scansLoading ? (
-        <div className="mt-2 h-24 animate-pulse rounded-[18px] bg-soft" />
+        <div className="mt-3.5 flex flex-col gap-2" aria-hidden>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex h-[70px] items-center gap-2.5 rounded-2xl border border-line bg-card p-2.5">
+              <span className="size-12 shrink-0 animate-pulse rounded-[10px] bg-soft" />
+              <span className="flex flex-1 flex-col gap-1.5">
+                <span className="h-3.5 w-2/3 animate-pulse rounded-full bg-soft" />
+                <span className="h-3 w-1/3 animate-pulse rounded-full bg-soft" />
+              </span>
+            </div>
+          ))}
+        </div>
       ) : groups.length === 0 ? (
-        <div className="mt-2 rounded-[18px] border border-line bg-card p-5 text-center text-ap-body font-semibold text-muted-foreground">
-          {onlyDue ? t("emptyDue") : t("emptyScans")}
+        <div className="mt-10 flex flex-col items-center text-center">
+          <div className="flex size-14 items-center justify-center rounded-full bg-soft">
+            {onlyDue ? (
+              <Check className="size-6 text-muted-foreground" aria-hidden />
+            ) : (
+              <Leaf className="size-6 text-muted-foreground" aria-hidden />
+            )}
+          </div>
+          <p className="mt-3 text-ap-body font-semibold text-ink">
+            {onlyDue ? t("emptyDueTitle") : t("emptyScansTitle")}
+          </p>
+          <p className="mt-1 text-ap-small text-muted-foreground">{onlyDue ? t("emptyDue") : t("emptyScansHint")}</p>
+          <div className="mt-4">
+            {onlyDue ? (
+              <ApButton variant="outline" label={t("showAllScans")} onClick={() => setOnlyDue(false)} />
+            ) : (
+              <ApButton
+                label={t("newScan")}
+                icon={<Camera className="size-4" aria-hidden />}
+                onClick={openCamera}
+              />
+            )}
+          </div>
         </div>
       ) : (
         groups.map((group) => (
           <section key={group.id}>
-            <h2 className="mt-3.5 text-ap-card text-ink">{group.name}</h2>
+            <h2 className="mt-3.5 flex items-center gap-2 text-ap-card text-ink">
+              <span
+                className="size-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: viewFields.find((f) => f.id === group.id)?.color ?? "var(--line)" }}
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1 truncate">{group.name}</span>
+              <span className="shrink-0 text-ap-small font-semibold text-muted-foreground">{group.scans.length}</span>
+            </h2>
             {group.scans.map((scan) => (
               <button
                 key={scan.id}
@@ -696,7 +788,7 @@ export function ScanScreen() {
                   setActiveId(scan.id);
                   setView("result");
                 }}
-                className="mt-2 flex min-h-14 w-full items-center rounded-[18px] border border-line bg-card p-2.5 text-left"
+                className="mt-2 flex min-h-14 w-full items-center rounded-2xl border border-line bg-card p-2.5 text-left"
               >
                 {scan.preview ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -710,17 +802,23 @@ export function ScanScreen() {
                   <span className="block truncate text-ap-body font-extrabold text-ink">
                     {localizedScanTitle(scan.presented, t)}
                   </span>
-                  <span className="block text-ap-small text-muted-foreground">
-                    {scan.presented.confidence != null
-                      ? t("listMeta", {
-                          date: formatDay(scan.at, locale),
-                          n: Math.round(scan.presented.confidence * 100),
-                        })
-                      : formatDay(scan.at, locale)}
+                  <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <Pill tone={scan.presented.tone}>{t(scan.presented.pillKey)}</Pill>
+                    <span className="text-ap-small text-muted-foreground">
+                      {scan.presented.confidence != null
+                        ? t("listMeta", {
+                            date: formatDay(scan.at, locale),
+                            n: Math.round(scan.presented.confidence * 100),
+                          })
+                        : formatDay(scan.at, locale)}
+                    </span>
+                    {scanNeedsRecheck(scan) ? (
+                      <span className="inline-flex items-center gap-1 text-ap-small font-bold text-warn-text">
+                        <RefreshCw className="size-3" aria-hidden />
+                        {t("needsRecheck")}
+                      </span>
+                    ) : null}
                   </span>
-                </span>
-                <span className="flex shrink-0 items-center self-center">
-                  <Pill tone={scan.presented.tone}>{t(scan.presented.pillKey)}</Pill>
                 </span>
                 <ChevronRight className="ml-1 size-4 shrink-0 self-center text-muted-foreground" aria-hidden />
               </button>
@@ -732,7 +830,7 @@ export function ScanScreen() {
       <button
         type="button"
         onClick={openCamera}
-        className="fixed right-4 z-30 inline-flex h-12 items-center gap-2 rounded-full bg-primary px-5 text-ap-btn text-white shadow-[0_6px_16px_rgba(0,0,0,0.2)] bottom-[calc(5.25rem+env(safe-area-inset-bottom))] md:bottom-8"
+        className="fixed right-4 z-30 inline-flex h-12 items-center gap-2 rounded-full bg-ink px-5 text-ap-btn text-white shadow-[0_6px_16px_rgba(0,0,0,0.2)] bottom-[calc(5.25rem+env(safe-area-inset-bottom))] md:bottom-8"
       >
         <Camera className="size-[18px]" aria-hidden />
         {t("newScan")}
@@ -760,19 +858,22 @@ function ResultView({
   const parts = splitSummary(presented.summary.trim() || displayTitle);
   const actions = actionSet(presented.actionKind, t);
   const photoLabel = presented.mode === "fruit" ? t("fruitPhoto") : presented.mode === "trap" ? t("trapPhoto") : t("leafPhoto");
+  const [pendingTask, setPendingTask] = useState<string | null>(null);
   const meta = [scan.fieldName, formatWhen(scan.at, locale, (time) => t("todayAt", { time }))].filter(Boolean).join(" · ");
 
   async function createFollowUpTask(title: string) {
+    if (pendingTask) return;
     if (!scan.fieldId) {
       toast.message(t("needField"));
       return;
     }
+    setPendingTask(title);
     const { createFarmerTask } = await import("@/features/tasks/use-farmer-tasks");
     const result = await createFarmerTask({
       fieldId: scan.fieldId,
       title,
       kind: "recheck",
-    });
+    }).finally(() => setPendingTask(null));
     if (!result.ok) {
       toast.error(errMsg(result.error, "actionFailed"));
       return;
@@ -788,26 +889,22 @@ function ResultView({
           type="button"
           aria-label={t("back")}
           onClick={onBack}
-          className="flex size-10 shrink-0 items-center justify-center rounded-full border border-line bg-card"
+          className="flex size-11 shrink-0 items-center justify-center rounded-full border border-line bg-card"
         >
           <ChevronLeft className="size-5" aria-hidden />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-ap-title text-ink">{t("scanResult")}</h1>
-          <p className="text-ap-body text-muted-foreground">{meta}</p>
+          <h1 className="text-[20px] font-extrabold tracking-tight text-ink">{t("scanResult")}</h1>
+          <p className="truncate text-ap-small text-muted-foreground">{meta}</p>
         </div>
       </div>
 
-      <div className="relative mt-2.5 min-h-[280px] overflow-hidden rounded-[18px] bg-[#111] sm:min-h-[340px]">
+      <div className="relative mt-2.5 h-[clamp(180px,34vh,340px)] overflow-hidden rounded-[18px] bg-ink">
         {scan.preview ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={scan.preview}
-            alt={displayTitle}
-            className="mx-auto max-h-[55vh] min-h-[280px] w-full object-contain sm:min-h-[340px]"
-          />
+          <img src={scan.preview} alt={displayTitle} className="size-full object-contain" />
         ) : (
-          <div className="flex min-h-[280px] items-center justify-center">
+          <div className="flex h-full items-center justify-center">
             <Leaf className="size-10 text-muted-foreground" aria-hidden />
           </div>
         )}
@@ -817,11 +914,20 @@ function ResultView({
         </span>
       </div>
 
-      <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
+      <div
+        className={cn(
+          "mt-2 rounded-[18px] border p-3",
+          presented.tone === "risk"
+            ? "border-risk/35 bg-risk-soft/45"
+            : presented.tone === "good"
+              ? "border-good/30 bg-good-soft/40"
+              : "border-warn/40 bg-warn-soft/50",
+        )}
+      >
         <div className="flex items-start gap-3">
           <span
             className={cn(
-              "flex size-12 shrink-0 items-center justify-center rounded-2xl",
+              "flex size-12 shrink-0 items-center justify-center rounded-full",
               presented.tone === "good"
                 ? "bg-good-soft text-good"
                 : presented.tone === "risk"
@@ -843,7 +949,7 @@ function ResultView({
           </div>
         </div>
         {parts.detail || (parts.headline && parts.headline !== displayTitle) ? (
-          <div className={cn("mt-2 rounded-xl p-2.5", BOX[presented.tone])}>
+          <div className="mt-2 rounded-xl bg-card/80 p-2.5">
             {parts.headline && parts.headline !== displayTitle ? (
               <p className="text-ap-body font-bold text-ink">{parts.headline}</p>
             ) : null}
@@ -853,6 +959,7 @@ function ResultView({
         {presented.source || presented.confidence != null ? (
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
             {presented.source ? <AiTag source={presented.source} /> : null}
+            {presented.source === "demo" ? <Pill tone="neutral">{t("notSaved")}</Pill> : null}
             {presented.confidence != null ? (
               <span className="text-ap-small font-bold text-ink">
                 {t(
@@ -868,7 +975,7 @@ function ResultView({
           </div>
         ) : null}
         {presented.confidence != null ? (
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-soft">
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-card">
             <div
               className={cn(
                 "h-full rounded-full",
@@ -889,23 +996,35 @@ function ResultView({
         ) : null}
       </div>
 
-      <div className="mt-3.5 flex items-center justify-between gap-2">
-        <h2 className="text-ap-card text-ink">{t("whatNow")}</h2>
-        {presented.showNoChemicals ? <Pill tone="good">{t("noChemicals")}</Pill> : null}
-      </div>
-      <div className="mt-2 flex gap-2">
+      <SectionHeader
+        title={t("whatNow")}
+        className="items-center gap-2"
+        action={presented.showNoChemicals ? <Pill tone="good">{t("noChemicals")}</Pill> : undefined}
+      />
+      <div className="mt-2 flex flex-col gap-2">
         {actions.map((action) => (
           <button
             key={action.title}
             type="button"
+            disabled={pendingTask !== null}
             onClick={() => void createFollowUpTask(action.title)}
-            className="flex-1 rounded-[18px] border border-line bg-card p-2.5"
+            className="flex min-h-14 w-full items-center gap-3 rounded-2xl border border-line bg-card px-3 py-2.5 text-left disabled:opacity-60"
           >
-            <span className="mx-auto flex size-9 items-center justify-center rounded-full bg-good-soft">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-good-soft">
               <action.icon className={cn("size-[18px]", action.color)} aria-hidden />
             </span>
-            <span className="mt-1.5 block text-center text-ap-body font-bold text-ink">{action.title}</span>
-            <span className="block text-center text-ap-small text-muted-foreground">{action.sub}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-ap-body font-bold text-ink">{action.title}</span>
+              <span className="block text-ap-small text-muted-foreground">{action.sub}</span>
+            </span>
+            <span className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-soft px-2.5 text-ap-pill text-ink">
+              {pendingTask === action.title ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              ) : (
+                <Plus className="size-3.5" aria-hidden />
+              )}
+              {t("taskShort")}
+            </span>
           </button>
         ))}
       </div>
@@ -914,7 +1033,7 @@ function ResultView({
         <ApButton
           compact
           className="min-w-0 flex-1 px-3"
-          variant="primary"
+          variant="dark"
           label={t("recheck")}
           icon={<Camera className="size-4" aria-hidden />}
           onClick={onRecheck}
@@ -924,11 +1043,31 @@ function ResultView({
           className="min-w-0 flex-1 px-3"
           variant="outline"
           label={t("addTaskFromScan")}
-          icon={<ClipboardList className="size-4" aria-hidden />}
+          disabled={pendingTask !== null}
+          icon={
+            pendingTask === displayTitle ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+            ) : (
+              <ClipboardList className="size-4" aria-hidden />
+            )
+          }
           onClick={() => void createFollowUpTask(displayTitle)}
         />
       </div>
     </div>
+  );
+}
+
+/** Viewfinder corner brackets for the empty capture state. */
+function Corners() {
+  const base = "pointer-events-none absolute size-7 border-white/80";
+  return (
+    <>
+      <span className={cn(base, "top-0 left-0 rounded-tl-3xl border-t-[3px] border-l-[3px]")} aria-hidden />
+      <span className={cn(base, "top-0 right-0 rounded-tr-3xl border-t-[3px] border-r-[3px]")} aria-hidden />
+      <span className={cn(base, "bottom-0 left-0 rounded-bl-3xl border-b-[3px] border-l-[3px]")} aria-hidden />
+      <span className={cn(base, "right-0 bottom-0 rounded-br-3xl border-r-[3px] border-b-[3px]")} aria-hidden />
+    </>
   );
 }
 

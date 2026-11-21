@@ -134,7 +134,10 @@
     "saving": "Saving…",
     "done": "Done — let's go to fields.",
     "needLogin": "Sign-in required.",
-    "needSupabase": "Database connection missing."
+    "needSupabase": "Database connection missing.",
+    "lang_el": "Ελληνικά",
+    "lang_tr": "Türkçe",
+    "lang_en": "English"
   },
   "farmerNotifications": {
     "title": "Notifications",
@@ -509,7 +512,22 @@
     "imageTooSmall": "The photo is too small. Take a closer, sharper photo.",
     "imageBadAspect": "The photo is a panorama or strip. Take a normal photo of the leaf.",
     "unavailableNow": "Analysis isn't available right now. Try again in a few minutes. Nothing was saved.",
-    "rateLimited": "Too many scans in a short time. Wait a minute."
+    "rateLimited": "Too many scans in a short time. Wait a minute.",
+    "cameraEmpty": "Tap to take a photo or pick one from your gallery",
+    "notice_unavailable_title": "AI is not available right now",
+    "notice_rateLimited_title": "Too many scans at once",
+    "notice_notLeaf_title": "No olive leaf found",
+    "notice_lowConfidence_title": "The photo is not clear enough",
+    "retry": "Try again",
+    "newPhoto": "New photo",
+    "needsRecheck": "Needs recheck",
+    "emptyScansTitle": "No scans yet",
+    "emptyScansHint": "Take a photo of a leaf to see if it is healthy.",
+    "emptyDueTitle": "All checked",
+    "showAllScans": "Show all scans",
+    "notSaved": "Not saved",
+    "taskShort": "Task",
+    "listSummary": "{n, plural, one {# scan} other {# scans}}{due, plural, =0 {} other { · # need a recheck}}"
   },
   "farmerLogbook": {
     "title": "Logbook",
@@ -574,7 +592,8 @@
     "bannedWarn": "{substance} is not approved in the EU. Buyers will see it.",
     "needProduct": "Enter a product or substance.",
     "noField": "No field",
-    "unknownPill": "Unknown"
+    "unknownPill": "Unknown",
+    "harvestNow": "From today"
   },
   "farmerQuality": {
     "title": "Quality score",
@@ -1275,7 +1294,8 @@
     "topAlert": "Top alert",
     "emptyTab": "Nothing in this category.",
     "aiTitle": "AI advice",
-    "aiBody": "With scans and sprays, AI will tailor advice per field."
+    "aiBody": "With scans and sprays, AI will tailor advice per field.",
+    "noLocation": "This field has no map location, so we cannot show weather. Add a location in Fields."
   },
   "farmerTasks": {
     "title": "This week",
@@ -1322,6 +1342,7 @@
     "needTitle": "Enter a title.",
     "needLogin": "Sign in required.",
     "needSupabase": "Database not configured.",
-    "actionFailed": "Could not update the task."
+    "actionFailed": "Could not update the task.",
+    "toDo": "To do"
   }
 }

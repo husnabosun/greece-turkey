@@ -3,14 +3,13 @@
 import type { ReactNode } from "react";
 import { Camera, Check, Droplet, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import type { FarmerTask } from "@/features/tasks/use-farmer-tasks";
-import { colors } from "@/shared/theme/tokens";
 import { cn } from "@/shared/lib/utils";
 
 const ICON: Record<FarmerTask["kind"], { bg: string; node: ReactNode }> = {
-  photo: { bg: "bg-risk-soft", node: <Camera className="size-[18px]" style={{ color: colors.risk }} /> },
-  spray: { bg: "bg-warn-soft", node: <Droplet className="size-[18px]" style={{ color: "#A9831F" }} /> },
-  recheck: { bg: "bg-ap-accent-soft", node: <RefreshCw className="size-[18px]" style={{ color: colors.accent }} /> },
-  plain: { bg: "bg-good-soft", node: <Check className="size-[18px]" style={{ color: colors.good }} /> },
+  photo: { bg: "bg-risk-soft", node: <Camera className="size-[18px] text-risk" aria-hidden /> },
+  spray: { bg: "bg-warn-soft", node: <Droplet className="size-[18px] text-warn-text" aria-hidden /> },
+  recheck: { bg: "bg-ap-accent-soft", node: <RefreshCw className="size-[18px] text-ap-accent" aria-hidden /> },
+  plain: { bg: "bg-good-soft", node: <Check className="size-[18px] text-good" aria-hidden /> },
 };
 
 export type TaskCardLabels = {
@@ -53,7 +52,7 @@ export function TaskCard({
       className={cn(
         "relative rounded-[18px] border border-line bg-card transition-colors duration-150 hover:border-ink/20",
         compact ? "p-3" : "p-3.5",
-        task.urgent && "border-[#EDBBAA] bg-[#FDF5F1] hover:border-[#E09A84]",
+        task.urgent && "border-risk/35 bg-risk-soft/45 hover:border-risk/55",
       )}
     >
       <div className="flex items-start gap-2.5">
@@ -69,7 +68,7 @@ export function TaskCard({
               ) : null}
               {detail ? <p className="text-ap-small text-muted-foreground">{detail}</p> : null}
             </div>
-            <span className="absolute top-3 right-3 rounded-lg bg-good-soft px-2 py-0.5 text-ap-small font-extrabold text-good">
+            <span className="absolute top-3 right-3 rounded-full bg-good-soft px-2 py-0.5 text-ap-small font-extrabold text-good">
               +1
             </span>
           </div>
@@ -85,7 +84,7 @@ export function TaskCard({
       <div className="relative z-10 mt-3 flex items-end justify-between gap-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           {task.kind === "photo" ? (
-            <ActionBtn disabled={busy} onClick={onPhoto} icon={<Camera className="size-4" />}>
+            <ActionBtn disabled={busy} onClick={onPhoto} icon={<Camera className="size-4" aria-hidden />}>
               {labels.takePhoto}
             </ActionBtn>
           ) : null}
@@ -100,7 +99,7 @@ export function TaskCard({
             </>
           ) : null}
           {task.kind === "recheck" ? (
-            <ActionBtn disabled={busy} onClick={onRecheck} icon={<RefreshCw className="size-4" />}>
+            <ActionBtn disabled={busy} onClick={onRecheck} icon={<RefreshCw className="size-4" aria-hidden />}>
               {labels.recheckNow}
             </ActionBtn>
           ) : null}
@@ -124,10 +123,10 @@ export function TaskCard({
             onDismiss();
           }}
           className={cn(
-            "relative z-10 ml-auto flex size-10 shrink-0 touch-manipulation items-center justify-center rounded-full border border-transparent text-[#9A6B62] transition-colors duration-150",
-            "hover:border-[#EDBBAA] hover:bg-[#FDF5F1] hover:text-[#C44B3A]",
-            "active:scale-95 active:bg-[#F8E8E2]",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E09A84]/60",
+            "relative z-10 ml-auto flex size-11 shrink-0 touch-manipulation items-center justify-center rounded-full border border-transparent text-muted-foreground transition-colors duration-150",
+            "hover:border-risk/30 hover:bg-risk-soft hover:text-risk",
+            "active:scale-95 active:bg-risk-soft",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risk/50",
             "disabled:pointer-events-none disabled:opacity-40",
           )}
         >
@@ -163,12 +162,12 @@ function ActionBtn({
         onClick();
       }}
       className={cn(
-        "relative z-10 inline-flex min-h-10 min-w-[4.5rem] touch-manipulation items-center justify-center gap-1.5 rounded-full px-4 text-ap-pill font-bold select-none transition-all duration-150",
+        "relative z-10 inline-flex min-h-11 min-w-[4.5rem] touch-manipulation items-center justify-center gap-1.5 rounded-full px-4 text-ap-pill font-bold select-none transition-all duration-150",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/25",
         "active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50",
         outline
-          ? "border-2 border-ink/20 bg-white text-ink hover:border-ink/45 hover:bg-soft"
-          : "bg-ink text-white hover:bg-[#2A2A2A] hover:shadow-[0_2px_8px_rgba(0,0,0,0.18)]",
+          ? "border-2 border-ink/20 bg-card text-ink hover:border-ink/45 hover:bg-soft"
+          : "bg-ink text-white hover:bg-ink/90 hover:shadow-[0_2px_8px_rgba(0,0,0,0.18)]",
       )}
     >
       {icon}

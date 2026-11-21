@@ -2,21 +2,33 @@
 
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { ChevronRight, Info } from "lucide-react";
+import { Bug, CloudSun, MapPin, MapPinOff, ShieldCheck, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { riskLevelLabel, threatLabel, threatTip } from "@/features/weather-risk/threat-labels";
 import { LEVEL_RANK, type RiskLevel } from "@/features/weather-risk/risk/types";
 import { useFieldWeather } from "@/features/weather-risk/use-field-weather";
-import { PageHeader } from "@/shared/components/page-header";
-import { EmptyState } from "@/shared/components/empty-state";
 import { FieldChips, ApCard, Pill, type PillTone } from "@/shared/components/brand";
 import { FIELD_DOTS } from "@/shared/theme/tokens";
-import { Button } from "@/shared/components/ui/button";
 import { Link } from "@/shared/i18n/navigation";
-import { Skeleton } from "@/shared/components/ui/skeleton";
+import { cn } from "@/shared/lib/utils";
 
 const TABS = ["pests", "weather", "location"] as const;
 const PILL: Record<string, PillTone> = { High: "risk", Medium: "warn", Low: "good" };
+const TONE_BOX: Record<PillTone, string> = {
+  risk: "bg-risk-soft text-risk",
+  warn: "bg-warn-soft text-warn-text",
+  good: "bg-good-soft text-good",
+  accent: "bg-ap-accent-soft text-ap-accent",
+  neutral: "bg-soft text-ink",
+};
+const TONE_BAR: Record<PillTone, string> = {
+  risk: "bg-risk",
+  warn: "bg-warn",
+  good: "bg-good",
+  accent: "bg-ap-accent",
+  neutral: "bg-ink/25",
+};
+const TAB_ICON: Record<(typeof TABS)[number], LucideIcon> = { pests: Bug, weather: CloudSun, location: MapPin };
 
 type GroupedThreat = {
   threat: string;
@@ -40,6 +52,7 @@ export function AlertsScreen() {
     return { fieldId: primary.id, lat: primary.lat, lon: primary.lon };
   }, [primary]);
   const { risk, top, loading: weatherLoading } = useFieldWeather(point);
+  const noLocation = primary != null && point == null;
 
   const groups = useMemo(() => {
     if (!risk) return [] as GroupedThreat[];
@@ -94,21 +107,28 @@ export function AlertsScreen() {
   }
 
   return (
-    <div className="w-full flex-1 space-y-4">
-      <PageHeader title={t("title")} description={t("subtitle")} />
+    <div className="w-full flex-1 space-y-3">
+      <div>
+        <h1 className="text-[20px] font-extrabold tracking-tight text-ink">{t("title")}</h1>
+        <p className="text-ap-small text-muted-foreground">{t("subtitle")}</p>
+      </div>
 
-      {loading ? <Skeleton className="h-10 w-full rounded-full" /> : null}
+      {loading ? <div className="h-11 w-full animate-pulse rounded-full bg-soft" aria-hidden /> : null}
 
       {!loading && fields.length === 0 ? (
-        <EmptyState
-          title={t("noFields")}
-          description={t("noFieldsBody")}
-          action={
-            <Button asChild className="rounded-full">
-              <Link href="/farmer/fields">{t("ctaFields")}</Link>
-            </Button>
-          }
-        />
+        <div className="mt-10 flex flex-col items-center text-center">
+          <div className="flex size-14 items-center justify-center rounded-full bg-soft">
+            <MapPin className="size-6 text-muted-foreground" aria-hidden />
+          </div>
+          <p className="mt-3 text-ap-body font-semibold text-ink">{t("noFields")}</p>
+          <p className="mt-1 text-ap-small text-muted-foreground">{t("noFieldsBody")}</p>
+          <Link
+            href="/farmer/fields"
+            className="mt-4 inline-flex h-11 items-center justify-center rounded-full bg-ink px-5 text-ap-btn text-white hover:bg-ink/90"
+          >
+            {t("ctaFields")}
+          </Link>
+        </div>
       ) : null}
 
       {fields.length > 0 ? (
@@ -120,51 +140,92 @@ export function AlertsScreen() {
             tone="green"
           />
 
-          <div className="flex gap-2">
-            {TABS.map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setTab(key)}
-                className={`h-11 flex-1 rounded-full text-ap-pill font-bold ${
-                  tab === key ? "bg-ink text-white" : "border border-line bg-card text-ink"
-                }`}
-              >
-                {t(`tab.${key}`)}
-              </button>
-            ))}
-          </div>
+          {noLocation ? (
+            <ApCard className="flex items-start gap-3 border-warn/40 bg-warn-soft p-3">
+              <MapPinOff className="mt-0.5 size-5 shrink-0 text-warn-text" aria-hidden />
+              <p className="text-ap-body font-semibold text-warn-text">{t("noLocation")}</p>
+            </ApCard>
+          ) : null}
 
-          {weatherLoading ? <Skeleton className="h-28 w-full rounded-card" /> : null}
+          {weatherLoading ? <div className="h-28 w-full animate-pulse rounded-card bg-soft" aria-hidden /> : null}
 
           {top ? (
-            <ApCard className="p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-ap-small font-semibold text-muted-foreground">{t("topAlert")}</p>
-                  <p className="mt-1 text-ap-card text-ink">{threatLabel(top.threat, tThreats)}</p>
+            <ApCard
+              className={cn(
+                "p-4",
+                PILL[top.level] === "risk" && "border-risk/35 bg-risk-soft/45",
+                PILL[top.level] === "warn" && "border-warn/40 bg-warn-soft/50",
+              )}
+            >
+              <div className="flex items-start gap-3">
+                <span
+                  className={cn(
+                    "flex size-11 shrink-0 items-center justify-center rounded-full",
+                    TONE_BOX[PILL[top.level] ?? "neutral"],
+                  )}
+                >
+                  {PILL[top.level] === "good" ? (
+                    <ShieldCheck className="size-5" aria-hidden />
+                  ) : (
+                    <TriangleAlert className="size-5" aria-hidden />
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-ap-small font-bold tracking-wide text-muted-foreground uppercase">{t("topAlert")}</p>
+                    <Pill tone={PILL[top.level] ?? "neutral"}>{riskLevelLabel(top.level, tThreats)}</Pill>
+                  </div>
+                  <p className="mt-0.5 text-[17px] font-extrabold tracking-tight text-ink">{threatLabel(top.threat, tThreats)}</p>
                   <p className="mt-1 text-ap-body text-muted-foreground">
                     {threatTip(top.threat, tThreats) || riskLevelLabel(top.level, tThreats)}
                   </p>
                 </div>
-                <Pill tone={PILL[top.level] ?? "neutral"}>{riskLevelLabel(top.level, tThreats)}</Pill>
               </div>
             </ApCard>
           ) : null}
 
+          <div className="flex gap-2" role="tablist">
+            {TABS.map((key) => {
+              const Icon = TAB_ICON[key];
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === key}
+                  onClick={() => setTab(key)}
+                  className={cn(
+                    "inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full border px-2 text-ap-pill font-bold transition-colors",
+                    tab === key ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" aria-hidden />
+                  <span className="truncate">{t(`tab.${key}`)}</span>
+                </button>
+              );
+            })}
+          </div>
+
           <div className="space-y-2">
-            {groups.length === 0 && !weatherLoading ? (
-              <ApCard className="p-4 text-ap-body text-muted-foreground">{t("emptyTab")}</ApCard>
+            {groups.length === 0 && !weatherLoading && !noLocation ? (
+              <ApCard className="flex items-center gap-3 p-4">
+                <ShieldCheck className="size-5 shrink-0 text-good" aria-hidden />
+                <p className="text-ap-body font-semibold text-muted-foreground">{t("emptyTab")}</p>
+              </ApCard>
             ) : null}
-            {groups.map((g) => (
-              <ApCard key={g.threat} className="flex min-h-14 items-center gap-3 p-3">
-                <Info className="size-4 shrink-0 text-ap-accent" aria-hidden />
+            {groups.map((g) => {
+              const tone = PILL[g.level] ?? "neutral";
+              const Icon = TAB_ICON[tab];
+              return (
+              <ApCard key={g.threat} className="flex min-h-14 items-center gap-3 rounded-2xl px-3 py-3">
+                <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-full", TONE_BOX[tone])}>
+                  <Icon className="size-[18px]" aria-hidden />
+                </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-ap-body font-extrabold text-ink">{threatLabel(g.threat, tThreats)}</p>
-                  <p className="text-ap-small text-muted-foreground">
-                    {riskLevelLabel(g.level, tThreats)} · {formatDayRange(g.days)}
-                  </p>
-                  <div className="mt-1.5 flex gap-1">
+                  <p className="text-ap-small text-muted-foreground">{formatDayRange(g.days)}</p>
+                </div>
+                <div className="flex h-6 shrink-0 items-end gap-1" aria-hidden>
                     {g.days.slice(0, 3).map((d) => {
                       const day = Object.values(risk ?? {})
                         .flat()
@@ -174,18 +235,16 @@ export function AlertsScreen() {
                         <span
                           key={d}
                           title={d}
-                          className="inline-block w-2 rounded-sm bg-ink/25"
-                          style={{ height: `${Math.round(h * 0.22)}px` }}
-                          aria-hidden
+                          className={cn("inline-block w-1.5 rounded-sm", TONE_BAR[tone])}
+                          style={{ height: `${Math.round(h * 0.24)}px` }}
                         />
                       );
                     })}
-                  </div>
                 </div>
-                <Pill tone={PILL[g.level] ?? "neutral"}>{riskLevelLabel(g.level, tThreats)}</Pill>
-                <ChevronRight className="size-4 text-muted-foreground" aria-hidden />
+                <Pill tone={tone}>{riskLevelLabel(g.level, tThreats)}</Pill>
               </ApCard>
-            ))}
+              );
+            })}
           </div>
         </>
       ) : null}
