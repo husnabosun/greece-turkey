@@ -211,17 +211,25 @@ export function ScanScreen() {
       toast.error(t("maxPhotos"));
       return;
     }
-    // Allow large phone photos — we compress before upload (Σ4).
-    if (file.size > 12_000_000) {
-      toast.error(t("tooBig"));
+    if (file.type && !file.type.startsWith("image/")) {
+      toast.error(t("notImageFile"), { id: "scan-file" });
+      return;
+    }
+    // Large phone photos are resized in the browser before upload (Σ4).
+    if (file.size > 40_000_000) {
+      toast.error(t("tooBig"), { id: "scan-file" });
       return;
     }
     try {
       const { compressImageFile } = await import("@/shared/lib/compress-image");
       const url = await compressImageFile(file);
       setPhotos((prev) => (prev.length >= 4 ? prev : [...prev, url]));
-    } catch {
-      toast.error(t("failed"));
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "";
+      toast.error(
+        code === "tooSmall" ? t("imageTooSmall") : code === "badAspect" ? t("imageBadAspect") : t("notImageFile"),
+        { id: "scan-file" },
+      );
     }
   }
 
@@ -272,12 +280,28 @@ export function ScanScreen() {
       if (res.status === 401) {
         throw new Error(t("needLogin"));
       }
-      const json: unknown = await res.json();
+      if (res.status === 429) {
+        throw new Error(t("rateLimited"));
+      }
+      const json: unknown = await res.json().catch(() => null);
       if (!isRecord(json) || json.ok !== true) {
-        const message = isRecord(json) && typeof json.error === "string" ? json.error : t("failed");
-        throw new Error(message);
+        const code = isRecord(json) && typeof json.error === "string" ? json.error : "";
+        throw new Error(
+          code === "too_small"
+            ? t("imageTooSmall")
+            : code === "bad_aspect"
+              ? t("imageBadAspect")
+              : code === "not_image" || code === "invalid_request"
+                ? t("notImageFile")
+                : t("failed"),
+        );
       }
       const payload = json.data;
+      // AI temporarily unavailable (quota / timeout): no diagnosis at all, never a demo result (Ν4).
+      if (isRecord(payload) && (payload.unavailable === true || payload.source === "demo")) {
+        toast.error(t("unavailableNow"), { id: "scan-unavailable", duration: 6000 });
+        return;
+      }
       if (isRecord(payload) && payload.rejected === "not_leaf") {
         toast.error(t("notLeaf"));
         return;

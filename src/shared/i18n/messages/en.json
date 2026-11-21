@@ -482,7 +482,12 @@
     "needLogin": "Sign in to save scans.",
     "needSupabase": "Supabase is not configured.",
     "saveFailed": "Could not save the scan. Showing result on this device only.",
-    "saved": "Scan saved."
+    "saved": "Scan saved.",
+    "notImageFile": "That isn't a photo. Choose a JPG or PNG image.",
+    "imageTooSmall": "The photo is too small. Take a closer, sharper photo.",
+    "imageBadAspect": "The photo is a panorama or strip. Take a normal photo of the leaf.",
+    "unavailableNow": "Analysis isn't available right now. Try again in a few minutes. Nothing was saved.",
+    "rateLimited": "Too many scans in a short time. Wait a minute."
   },
   "farmerLogbook": {
     "title": "Logbook",

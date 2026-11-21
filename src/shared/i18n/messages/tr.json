@@ -482,7 +482,12 @@
     "needLogin": "Taramaları kaydetmek için giriş yap.",
     "needSupabase": "Supabase yapılandırılmamış.",
     "saveFailed": "Kayıt başarısız. Sonuç yalnızca bu cihazda.",
-    "saved": "Tarama kaydedildi."
+    "saved": "Tarama kaydedildi.",
+    "notImageFile": "Bu bir fotoğraf değil. JPG veya PNG bir görsel seç.",
+    "imageTooSmall": "Fotoğraf çok küçük. Daha yakından, net bir fotoğraf çek.",
+    "imageBadAspect": "Fotoğraf panorama ya da şerit. Yaprağın normal bir fotoğrafını çek.",
+    "unavailableNow": "Analiz şu anda kullanılamıyor. Birkaç dakika sonra tekrar dene. Hiçbir şey kaydedilmedi.",
+    "rateLimited": "Kısa sürede çok fazla tarama. Bir dakika bekle."
   },
   "farmerLogbook": {
     "title": "Defter",

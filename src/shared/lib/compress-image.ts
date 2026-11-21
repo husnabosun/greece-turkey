@@ -2,6 +2,10 @@
 
 const DEFAULT_MAX_SIDE = 1600;
 const DEFAULT_QUALITY = 0.85;
+/** Smaller photos carry too little detail for a diagnosis. */
+export const MIN_SIDE = 200;
+/** Panoramas / strips are not a leaf photo. */
+export const MAX_ASPECT = 4;
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -35,11 +39,17 @@ export async function compressImageFile(
 
   if (typeof document === "undefined") return original;
 
+  // A file the browser cannot decode is not a photo: never send it to the AI (Σ1/Ν4).
+  const img = await loadImage(original).catch(() => {
+    throw new Error("notImage");
+  });
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (!w || !h) throw new Error("notImage");
+  if (Math.min(w, h) < MIN_SIDE) throw new Error("tooSmall");
+  if (Math.max(w, h) / Math.min(w, h) > MAX_ASPECT) throw new Error("badAspect");
+
   try {
-    const img = await loadImage(original);
-    const w = img.naturalWidth || img.width;
-    const h = img.naturalHeight || img.height;
-    if (!w || !h) return original;
 
     const scale = Math.min(1, maxSide / Math.max(w, h));
     const tw = Math.max(1, Math.round(w * scale));

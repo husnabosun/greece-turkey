@@ -1,8 +1,5 @@
 import { ZodError } from "zod";
 import {
-  DEMO_FRUIT,
-  DEMO_LEAF,
-  DEMO_TRAP,
   diagnoseRequest,
   fruitResult,
   geminiJsonDetailed,
@@ -15,6 +12,7 @@ import { predictLeafModel } from "@/features/diagnostics/leaf-space";
 import { aiRateLimiter } from "@/shared/lib/api/rate-limit";
 import { fromZodError, jsonError, jsonOk } from "@/shared/lib/api/http";
 import { requireApiUser } from "@/shared/lib/api/require-user";
+import { checkImageBase64 } from "@/features/diagnostics/image-check";
 
 export const runtime = "nodejs";
 
@@ -28,13 +26,19 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
 
     if (!aiRateLimiter.allow(`diagnose:${auth.userId}`)) {
-      return jsonError("Rate limit exceeded", 429);
+      return jsonError("rate_limited", 429);
     }
 
     const body = diagnoseRequest.parse(await request.json());
     const images = body.imageBase64List?.length
       ? body.imageBase64List
       : [body.imageBase64];
+
+    // Reject corrupt / tiny / panorama files before spending any AI quota.
+    for (const img of images) {
+      const check = checkImageBase64(img);
+      if (!check.ok) return jsonError(check.code, 400);
+    }
 
     if (body.mode === "leaf") {
       const gate = await gateOliveLeaf(images[0]);
@@ -56,12 +60,13 @@ export async function POST(request: Request) {
           modelVersion: model.modelVersion,
         });
       }
+      // Model unavailable (quota / timeout): never return a made-up diagnosis.
+      console.warn("[diagnose] leaf model unavailable", model.reason);
       return jsonOk({
         mode: "leaf" as const,
-        result: DEMO_LEAF,
-        source: "demo" as const,
-        demoReason: model.reason,
-        demoDetail: model.detail,
+        unavailable: true as const,
+        source: "unavailable" as const,
+        reason: model.reason,
       });
     }
 
@@ -75,12 +80,11 @@ export async function POST(request: Request) {
         schema: fruitResult,
         imageBase64List: images,
       });
-      return jsonOk({
-        mode: "fruit" as const,
-        result: live.ok ? live.data : DEMO_FRUIT,
-        source: live.ok ? ("gemini" as const) : ("demo" as const),
-        ...(live.ok ? {} : { demoReason: live.reason, demoDetail: live.detail }),
-      });
+      if (!live.ok) {
+        console.warn("[diagnose] fruit model unavailable", live.reason);
+        return jsonOk({ mode: "fruit" as const, unavailable: true as const, source: "unavailable" as const, reason: live.reason });
+      }
+      return jsonOk({ mode: "fruit" as const, result: live.data, source: "gemini" as const });
     }
 
     const live = await geminiJsonDetailed({
@@ -88,14 +92,13 @@ export async function POST(request: Request) {
       schema: trapResult,
       imageBase64List: images,
     });
-    return jsonOk({
-      mode: "trap" as const,
-      result: live.ok ? live.data : DEMO_TRAP,
-      source: live.ok ? ("gemini" as const) : ("demo" as const),
-      ...(live.ok ? {} : { demoReason: live.reason, demoDetail: live.detail }),
-    });
+    if (!live.ok) {
+      console.warn("[diagnose] trap model unavailable", live.reason);
+      return jsonOk({ mode: "trap" as const, unavailable: true as const, source: "unavailable" as const, reason: live.reason });
+    }
+    return jsonOk({ mode: "trap" as const, result: live.data, source: "gemini" as const });
   } catch (err) {
     if (err instanceof ZodError) return fromZodError(err);
-    return jsonError("Diagnosis failed", 500);
+    return jsonError("diagnosis_failed", 500);
   }
 }
