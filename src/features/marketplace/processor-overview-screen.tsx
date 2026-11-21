@@ -90,15 +90,18 @@ function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"p
   return out;
 }
 
-function overviewGreeting(locale: string, company: string) {
-  const hour = new Date().getHours();
+/** `now` is null during SSR/hydration (server runs in UTC), so greeting and date render only on the client. */
+function overviewGreeting(locale: string, company: string, now: Date | null) {
+  const hour = now?.getHours() ?? 12;
   const hello =
     hour < 12 ? "greetingMorning" : hour < 18 ? "greetingAfternoon" : "greetingEvening";
-  const date = new Date().toLocaleDateString(locale, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  const date = now
+    ? now.toLocaleDateString(locale, {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      })
+    : "\u00a0";
   return { hello, company, date };
 }
 
@@ -185,7 +188,9 @@ export function ProcessorOverviewScreen() {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
   const [showAllSupply, setShowAllSupply] = useState(false);
-  const greet = overviewGreeting(locale, company);
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => setNow(new Date()), []);
+  const greet = overviewGreeting(locale, company, now);
   const weekDates = useMemo(() => nextSevenDays(), []);
 
   useEffect(() => {
