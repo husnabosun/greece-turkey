@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FieldWeather } from "@/features/weather-risk/weather";
-import { assessField, highestRisk, type FieldRisk } from "@/features/weather-risk/risk";
+import { assessField, highestRisk } from "@/features/weather-risk/risk";
 import { EMPTY_SIGNALS } from "@/features/weather-risk/risk/signals";
+import type { FieldSignals } from "@/features/weather-risk/risk/types";
 
 export type WeatherPoint = {
   fieldId: string;
@@ -13,23 +14,25 @@ export type WeatherPoint = {
 
 type State = {
   weather: FieldWeather | null;
-  risk: FieldRisk | null;
   loading: boolean;
   error: string | null;
 };
 
-/** Loads live Open-Meteo weather for a real field point. Pass `null` when the farmer has no field yet. */
-export function useFieldWeather(point: WeatherPoint | null) {
+/**
+ * Loads live Open-Meteo weather for a real field point. Pass `null` when the farmer has no field yet.
+ * `signals` (scans, sprays, variety of the field, see `useFieldSignals`) are added to the weather: when they change,
+ * the risk is recalculated without loading the weather again.
+ */
+export function useFieldWeather(point: WeatherPoint | null, signals: FieldSignals = EMPTY_SIGNALS) {
   const [state, setState] = useState<State>({
     weather: null,
-    risk: null,
     loading: Boolean(point),
     error: null,
   });
 
   useEffect(() => {
     if (!point) {
-      setState({ weather: null, risk: null, loading: false, error: null });
+      setState({ weather: null, loading: false, error: null });
       return;
     }
 
@@ -47,13 +50,11 @@ export function useFieldWeather(point: WeatherPoint | null) {
         const json = (await res.json()) as { ok: boolean; data?: FieldWeather; error?: string };
         if (!json.ok || !json.data) throw new Error(json.error ?? "Weather failed");
         if (cancelled) return;
-        const risk = assessField(json.data, EMPTY_SIGNALS, Date.now(), 3);
-        setState({ weather: json.data, risk, loading: false, error: null });
+        setState({ weather: json.data, loading: false, error: null });
       } catch (err) {
         if (!cancelled) {
           setState({
             weather: null,
-            risk: null,
             loading: false,
             error: err instanceof Error ? err.message : "Weather failed",
           });
@@ -66,6 +67,10 @@ export function useFieldWeather(point: WeatherPoint | null) {
     };
   }, [point]);
 
-  const top = state.risk ? highestRisk(state.risk, 3) : null;
-  return { ...state, top };
+  const risk = useMemo(
+    () => (state.weather ? assessField(state.weather, signals, Date.now(), 3) : null),
+    [state.weather, signals],
+  );
+  const top = risk ? highestRisk(risk, 3) : null;
+  return { ...state, risk, top };
 }

@@ -31,6 +31,7 @@ import { completeTask, dismissTask, useFarmerTasks } from "@/features/tasks/use-
 import { LEVEL_RANK, THREAT_BY_ID, type ThreatId } from "@/features/weather-risk/risk";
 import { riskLevelLabel, threatLabel, threatTip } from "@/features/weather-risk/threat-labels";
 import { useFieldRiskColors } from "@/features/weather-risk/use-field-risk-colors";
+import { useFieldSignals } from "@/features/weather-risk/use-field-signals";
 import { useFieldWeather } from "@/features/weather-risk/use-field-weather";
 import { LOCALES, type Locale } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
@@ -347,9 +348,10 @@ export function DashboardScreen() {
     return { fieldId: primary.id, lat: primary.lat, lon: primary.lon };
   }, [primary]);
 
-  const { weather, risk, top, loading: weatherLoading } = useFieldWeather(point);
+  const { signalsFor } = useFieldSignals(fields);
+  const { weather, risk, top, loading: weatherLoading } = useFieldWeather(point, primary ? signalsFor(primary.id) : undefined);
   const contentLoading = fieldsLoading || (point != null && weatherLoading);
-  const riskColors = useFieldRiskColors(fields);
+  const riskColors = useFieldRiskColors(fields, signalsFor);
 
   const elevated = top && top.level !== "Low" ? top : null;
   const level = elevated?.level ?? "Low";

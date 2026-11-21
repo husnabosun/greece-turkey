@@ -37,7 +37,7 @@ export function useFarmerScans() {
 
       const { data, error } = await supabase
         .from("scans")
-        .select("id, field_id, title, latin_name, diagnosis, confidence, source, captured_at, storage_path, fields(name)")
+        .select("id, field_id, title, latin_name, diagnosis, confidence, source, captured_at, storage_path, fly_count, fields(name)")
         .eq("farmer_id", user.id)
         .order("captured_at", { ascending: false });
 
@@ -71,6 +71,8 @@ export function useFarmerScans() {
           preview: (row.storage_path && urlByPath.get(row.storage_path)) || "",
           storagePath: row.storage_path,
           presented,
+          flyCount: row.fly_count,
+          diagnosis: row.diagnosis,
         };
       });
 

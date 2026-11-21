@@ -7,6 +7,7 @@ import { ChevronLeft, RefreshCw } from "lucide-react";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { refreshFieldQuality } from "@/features/quality/refresh-field-quality";
 import { useFieldQuality } from "@/features/quality/use-field-quality";
+import { useFieldSignals } from "@/features/weather-risk/use-field-signals";
 import { useFieldWeather } from "@/features/weather-risk/use-field-weather";
 import { EmptyState } from "@/shared/components/empty-state";
 import { ApCard, AIBox, FieldChips, Pill } from "@/shared/components/brand";
@@ -76,7 +77,8 @@ export function QualityScreen() {
     if (field?.lat == null || field?.lon == null) return null;
     return { fieldId: field.id, lat: field.lat, lon: field.lon };
   }, [field]);
-  const { top } = useFieldWeather(point);
+  const { signalsFor } = useFieldSignals(fields);
+  const { top } = useFieldWeather(point, field ? signalsFor(field.id) : undefined);
   const { current, previous, loading: scoreLoading, reload } = useFieldQuality(selectedId);
 
   const chipFields = fields.map((f, i) => ({

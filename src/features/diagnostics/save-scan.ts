@@ -87,6 +87,8 @@ export async function saveFarmerScan(input: SaveInput): Promise<SaveResult> {
       preview: input.dataUrl,
       storagePath: row.storage_path,
       presented: input.presented,
+      flyCount,
+      diagnosis,
     },
   };
 }

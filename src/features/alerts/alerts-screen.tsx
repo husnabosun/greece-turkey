@@ -6,6 +6,7 @@ import { Bug, CloudSun, MapPin, MapPinOff, ShieldCheck, TriangleAlert, type Luci
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { riskLevelLabel, threatLabel, threatTip } from "@/features/weather-risk/threat-labels";
 import { LEVEL_RANK, type RiskLevel } from "@/features/weather-risk/risk/types";
+import { useFieldSignals } from "@/features/weather-risk/use-field-signals";
 import { useFieldWeather } from "@/features/weather-risk/use-field-weather";
 import { FieldChips, ApCard, Pill, type PillTone } from "@/shared/components/brand";
 import { FIELD_DOTS } from "@/shared/theme/tokens";
@@ -51,7 +52,8 @@ export function AlertsScreen() {
     if (primary?.lat == null || primary?.lon == null) return null;
     return { fieldId: primary.id, lat: primary.lat, lon: primary.lon };
   }, [primary]);
-  const { risk, top, loading: weatherLoading } = useFieldWeather(point);
+  const { signalsFor } = useFieldSignals(fields);
+  const { risk, top, loading: weatherLoading } = useFieldWeather(point, primary ? signalsFor(primary.id) : undefined);
   const noLocation = primary != null && point == null;
 
   const groups = useMemo(() => {

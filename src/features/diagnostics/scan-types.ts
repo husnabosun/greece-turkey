@@ -39,6 +39,10 @@ export type SavedScan = {
   preview: string;
   storagePath: string | null;
   presented: Presented;
+  /** Flies counted on a trap photo (`scans.fly_count`). Feeds the risk engine. */
+  flyCount?: number | null;
+  /** Raw `scans.diagnosis` JSON, read by the risk signals when an old row has no title key. */
+  diagnosis?: unknown;
 };
 
 export type ScanDiagnosisJson = {

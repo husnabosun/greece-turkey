@@ -81,6 +81,8 @@ export async function saveLogbookEntry(draft: Draft): Promise<SaveResult> {
       licence: draft.licence,
       dose: draft.dose,
       preHarvestDays: row.pre_harvest_days,
+      targets: [],
+      protectionDays: null,
     },
   };
 }
