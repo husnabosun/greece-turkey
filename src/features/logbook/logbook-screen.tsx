@@ -6,18 +6,21 @@ import { Camera, ListFilter, Share2, TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { euCheck } from "@/features/logbook/eu-check";
-import { saveLogbookEntry } from "@/features/logbook/save-logbook-entry";
+import { deleteLogbookEntry, saveLogbookEntry } from "@/features/logbook/save-logbook-entry";
 import { safeHarvestDays, useFarmerLogbook, type LogbookEntryView } from "@/features/logbook/use-farmer-logbook";
-import { AiTag, FieldChips, Pill, PrivacyLine } from "@/shared/components/brand";
+import { BottomSheet } from "@/features/marketplace/processor-kit";
+import { AiTag, ApButton, FieldChips, Pill, PrivacyLine } from "@/shared/components/brand";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { cn } from "@/shared/lib/utils";
 import { colors, FIELD_DOTS } from "@/shared/theme/tokens";
+import { useErrorMessage } from "@/shared/lib/error-message";
 
 type Entry = LogbookEntryView;
 
 export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
   const t = useTranslations("farmerLogbook");
+  const errMsg = useErrorMessage();
   const locale = useLocale();
   const { fields, loading } = useFarmerFields();
   const { entries, setEntries, loading: entriesLoading } = useFarmerLogbook();
@@ -25,6 +28,8 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
   const [onlyIssues, setOnlyIssues] = useState(false);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Entry | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const viewFields = useMemo(
     () => fields.map((f, i) => ({ id: f.id, name: f.name, color: FIELD_DOTS[i % FIELD_DOTS.length] })),
@@ -53,7 +58,7 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
 
   async function onShare() {
     const lines = scoped.map((e) => {
-      const status = e.banned ? t("notAllowed") : t("allowed");
+      const status = e.banned ? t("notAllowed") : e.euStatus === "allowed" ? t("allowed") : t("unknownPill");
       return `${formatDay(e.at, locale)} · ${e.product} · ${status}`;
     });
     const text = [t("euRecord"), ...lines].filter(Boolean).join("\n");
@@ -69,7 +74,7 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
   }
 
   return (
-    <div className="relative w-full flex-1">
+    <div className="relative w-full flex-1 pb-28">
       <div className="flex items-center gap-3">
         <h1 className="flex-1 text-ap-title text-ink">{t("title")}</h1>
         <button
@@ -164,7 +169,11 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
                 />
               </div>
               <div className="min-w-0 flex-1 pb-1.5">
-                <SprayCard entry={entry} locale={locale} />
+                <SprayCard
+                  entry={entry}
+                  locale={locale}
+                  onDelete={() => setDeleteTarget(entry)}
+                />
               </div>
             </div>
           ))}
@@ -179,6 +188,56 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
         <Camera className="size-[18px]" aria-hidden />
         {t("addSpray")}
       </button>
+
+      <BottomSheet
+        open={deleteTarget != null}
+        onClose={() => {
+          if (!deleting) setDeleteTarget(null);
+        }}
+        title={t("deleteTitle")}
+        footer={
+          <div className="flex flex-col gap-2">
+            <ApButton
+              label={t("delete")}
+              variant="risk"
+              className="w-full"
+              disabled={deleting}
+              onClick={() => {
+                void (async () => {
+                  if (!deleteTarget) return;
+                  setDeleting(true);
+                  try {
+                    const res = await deleteLogbookEntry(deleteTarget.id);
+                    if (!res.ok) {
+                      toast.error(errMsg(res.error, "saveFailed"));
+                      return;
+                    }
+                    setEntries((prev) => prev.filter((e) => e.id !== deleteTarget.id));
+                    setDeleteTarget(null);
+                    toast.success(t("deleted"));
+                  } finally {
+                    setDeleting(false);
+                  }
+                })();
+              }}
+            />
+            <ApButton
+              label={t("cancel")}
+              variant="outline"
+              className="w-full"
+              disabled={deleting}
+              onClick={() => setDeleteTarget(null)}
+            />
+          </div>
+        }
+      >
+        {deleteTarget ? (
+          <div className="space-y-2">
+            <p className="text-ap-card font-extrabold text-ink">{deleteTarget.product}</p>
+            <p className="text-ap-small text-muted-foreground">{t("deleteConfirm")}</p>
+          </div>
+        ) : null}
+      </BottomSheet>
 
       {adding ? (
         <AddSpraySheet
@@ -198,6 +257,8 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
                   substances: draft.substances,
                   licence: draft.licence,
                   dose: draft.dose,
+                  appliedOn: draft.appliedOn,
+                  preHarvestDays: draft.preHarvestDays,
                   fieldId: selected.id,
                   fieldName: selected.name,
                 });
@@ -225,12 +286,21 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
   );
 }
 
-function SprayCard({ entry, locale }: { entry: Entry; locale: string }) {
+function SprayCard({
+  entry,
+  locale,
+  onDelete,
+}: {
+  entry: Entry;
+  locale: string;
+  onDelete: () => void;
+}) {
   const t = useTranslations("farmerLogbook");
   const meta = [
     formatDay(entry.at, locale),
     entry.fieldName,
     entry.banned ? null : entry.dose || (entry.substances.length ? entry.substances.join(", ") : null),
+    entry.preHarvestDays != null ? t("phiDays", { n: entry.preHarvestDays }) : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -243,11 +313,26 @@ function SprayCard({ entry, locale }: { entry: Entry; locale: string }) {
           <p className="text-ap-card text-ink">{entry.banned ? t("bannedUsed") : entry.product}</p>
           <p className="text-ap-body text-muted-foreground">{meta}</p>
         </div>
-        <Pill tone={entry.banned ? "risk" : "warn"}>{entry.banned ? t("notAllowed") : t("allowed")}</Pill>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Pill tone={entry.banned ? "risk" : entry.euStatus === "allowed" ? "good" : "warn"}>
+            {entry.banned ? t("notAllowed") : entry.euStatus === "allowed" ? t("allowed") : t("unknownPill")}
+          </Pill>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="text-ap-small font-bold text-muted-foreground underline"
+          >
+            {t("delete")}
+          </button>
+        </div>
       </div>
       {entry.banned ? (
         <div className="mt-2 rounded-lg bg-[#F8D3C8] p-2">
           <p className="text-ap-body text-risk">{t("bannedDetail", { substance })}</p>
+        </div>
+      ) : entry.euStatus !== "allowed" ? (
+        <div className="mt-2 rounded-lg bg-warn-soft px-2 py-1.5">
+          <p className="text-ap-body font-bold text-warn-text">{t("unknownSubstance")}</p>
         </div>
       ) : entry.substances.length > 0 ? (
         <div className="mt-2 rounded-lg bg-soft px-2 py-1.5">
@@ -259,6 +344,11 @@ function SprayCard({ entry, locale }: { entry: Entry; locale: string }) {
   );
 }
 
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function AddSpraySheet({
   fieldName,
   saving = false,
@@ -268,13 +358,22 @@ function AddSpraySheet({
   fieldName: string | null;
   saving?: boolean;
   onClose: () => void;
-  onSave: (draft: { product: string; substances: string[]; licence: string | null; dose: string | null }) => void;
+  onSave: (draft: {
+    product: string;
+    substances: string[];
+    licence: string | null;
+    dose: string | null;
+    appliedOn: string;
+    preHarvestDays: number | null;
+  }) => void;
 }) {
   const t = useTranslations("farmerLogbook");
   const [product, setProduct] = useState("");
   const [substances, setSubstances] = useState("");
   const [licence, setLicence] = useState<string | null>(null);
-  const [dose, setDose] = useState<string | null>(null);
+  const [dose, setDose] = useState("");
+  const [appliedOn, setAppliedOn] = useState(todayIso);
+  const [phiText, setPhiText] = useState("");
   const [fromLabel, setFromLabel] = useState(false);
   const [labelSource, setLabelSource] = useState<"gemini" | "demo" | null>(null);
   const [labelLoading, setLabelLoading] = useState(false);
@@ -283,7 +382,7 @@ function AddSpraySheet({
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const check = euCheck(list);
+  const check = euCheck(list, product);
 
   function save(e: React.FormEvent) {
     e.preventDefault();
@@ -292,11 +391,19 @@ function AddSpraySheet({
       toast.error(t("needProduct"));
       return;
     }
+    const phiRaw = phiText.trim();
+    const phi = phiRaw === "" ? null : Number(phiRaw.replace(",", "."));
+    if (phiRaw !== "" && (!Number.isFinite(phi) || (phi as number) < 0)) {
+      toast.error(t("invalidPhi"));
+      return;
+    }
     onSave({
       product: name,
       substances: list,
       licence: fromLabel ? licence : null,
-      dose: fromLabel ? dose : null,
+      dose: dose.trim() || null,
+      appliedOn,
+      preHarvestDays: phi == null ? null : Math.round(phi),
     });
   }
 
@@ -324,10 +431,17 @@ function AddSpraySheet({
       setProduct(label.productName);
       setSubstances(substancesFound.join(", "));
       setLicence(typeof label.licenceNumber === "string" ? label.licenceNumber : null);
-      setDose(typeof label.maxDosePerHa === "string" ? label.maxDosePerHa : null);
+      setDose(typeof label.maxDosePerHa === "string" ? label.maxDosePerHa : "");
+      if (typeof label.preHarvestDays === "number") {
+        setPhiText(String(label.preHarvestDays));
+      }
       setFromLabel(true);
       setLabelSource(json.data.source === "demo" ? "demo" : "gemini");
       const source = typeof json.data.source === "string" ? json.data.source : "gemini";
+      if (source === "demo") {
+        toast.message(t("labelDemoSkip"));
+        return;
+      }
       toast.success(t("labelOk", { source }));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("labelFail"));
@@ -381,7 +495,7 @@ function AddSpraySheet({
           <div className="flex items-center gap-2">
             <Label htmlFor="spray-product">{t("product")}</Label>
             {fromLabel ? (
-              <span className="inline-flex h-5 items-center rounded-full bg-good-soft px-2 text-[11px] font-bold text-good">
+              <span className="inline-flex h-5 items-center rounded-full bg-good-soft px-2 text-[12px] font-bold text-good">
                 {t("fromLabel")}
               </span>
             ) : null}
@@ -409,10 +523,50 @@ function AddSpraySheet({
           />
         </div>
 
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="spray-date">{t("appliedOn")}</Label>
+            <Input
+              id="spray-date"
+              type="date"
+              value={appliedOn}
+              onChange={(e) => setAppliedOn(e.target.value)}
+              className="rounded-xl"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="spray-phi">{t("phiLabel")}</Label>
+            <Input
+              id="spray-phi"
+              inputMode="numeric"
+              value={phiText}
+              onChange={(e) => setPhiText(e.target.value)}
+              placeholder="14"
+              className="rounded-xl"
+            />
+          </div>
+        </div>
+
+        <div className="mt-3 space-y-1.5">
+          <Label htmlFor="spray-dose">{t("dose")}</Label>
+          <Input
+            id="spray-dose"
+            value={dose}
+            onChange={(e) => setDose(e.target.value)}
+            placeholder="1,5 L/ha"
+            className="rounded-xl"
+          />
+        </div>
+
         {check.banned ? (
           <div className="mt-3 flex items-center gap-2 rounded-lg bg-risk-soft p-2.5">
             <TriangleAlert className="size-4 shrink-0 text-risk" aria-hidden />
             <p className="text-ap-small font-semibold text-risk">{t("bannedWarn", { substance: check.hits.join(", ") })}</p>
+          </div>
+        ) : check.status === "unknown" ? (
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-warn-soft p-2.5">
+            <TriangleAlert className="size-4 shrink-0 text-warn-text" aria-hidden />
+            <p className="text-ap-small font-semibold text-warn-text">{t("unknownSubstance")}</p>
           </div>
         ) : null}
 

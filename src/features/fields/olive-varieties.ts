@@ -270,16 +270,40 @@ export function resolveOliveVariety(input: string | null | undefined): OliveVari
   );
 }
 
-export function varietyLabel(v: OliveVariety, locale: string): string {
+function varietyName(v: OliveVariety, locale: string): string {
   if (locale.startsWith("el")) return v.name_el;
   if (locale.startsWith("tr")) return v.name_tr;
   return v.name_en;
 }
 
+/** Never surfaces a raw lowercase slug — title-cases unknown tokens. */
+function humanizeSlug(raw: string): string {
+  return raw
+    .split(/[-_/]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toLocaleUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+export function varietyLabel(v: OliveVariety, locale: string): string;
+export function varietyLabel(slug: string | null | undefined, locale: string): string;
+export function varietyLabel(
+  vOrSlug: OliveVariety | string | null | undefined,
+  locale: string,
+): string {
+  if (vOrSlug && typeof vOrSlug === "object" && "slug" in vOrSlug) {
+    return varietyName(vOrSlug, locale);
+  }
+  return varietyLabelFromStored(vOrSlug, locale);
+}
+
 export function varietyLabelFromStored(stored: string | null | undefined, locale: string): string {
   const v = resolveOliveVariety(stored);
-  if (v) return varietyLabel(v, locale);
-  return stored?.trim() || "—";
+  if (v) return varietyName(v, locale);
+  const raw = stored?.trim();
+  if (!raw) return "—";
+  if (/^[a-z0-9][a-z0-9/_-]*$/.test(raw)) return humanizeSlug(raw);
+  return raw;
 }
 
 /** Aegean mid-line: west → Greece, east → Türkiye. */
@@ -295,18 +319,26 @@ export type OliveCountryContext = {
 
 /**
  * Resolve market country for variety filtering.
- * Priority: field map longitude → profile.country → UI locale.
+ * Priority: profile.country → map longitude → UI locale.
+ * Longitude alone cannot separate Lesvos from Ayvalık (both ~26.5–27°E),
+ * so the ambiguous Aegean strip follows the UI locale.
  */
 export function resolveOliveCountry(opts: {
   locale: string;
   lon?: number | null;
   profileCountry?: OliveCountry | null;
 }): OliveCountryContext {
-  if (opts.lon != null && Number.isFinite(opts.lon)) {
-    return { country: opts.lon < AEGEAN_SPLIT_LON ? "GR" : "TR", source: "map" };
-  }
   if (opts.profileCountry === "GR" || opts.profileCountry === "TR") {
     return { country: opts.profileCountry, source: "profile" };
+  }
+  if (opts.lon != null && Number.isFinite(opts.lon)) {
+    if (opts.lon < AEGEAN_SPLIT_LON) return { country: "GR", source: "map" };
+    if (opts.lon > 28) return { country: "TR", source: "map" };
+    // 26–28°E: Greek islands and Turkish coast overlap — defer to locale.
+    return {
+      country: opts.locale.startsWith("tr") ? "TR" : "GR",
+      source: "map",
+    };
   }
   if (opts.locale.startsWith("tr")) return { country: "TR", source: "locale" };
   return { country: "GR", source: "locale" };
@@ -338,13 +370,24 @@ export function isVarietyAllowed(slug: string, country: OliveCountry): boolean {
   return v.origin_country === country || v.origin_country === "BOTH";
 }
 
-/** Single country group + optional «Other» — never shows the other country's list. */
+/** Single country group + optional «Other» — never shows the other country's list unless `showAll`. */
 export function varietiesGrouped(
   locale: string,
   lon?: number | null,
   profileCountry?: OliveCountry | null,
+  showAll = false,
 ): { origin: OliveOriginCountry; labelKey: "groupGreece" | "groupTurkey" | "groupOther"; items: OliveVariety[] }[] {
   const { country } = resolveOliveCountry({ locale, lon, profileCountry });
+  if (showAll) {
+    const gr = OLIVE_VARIETIES.filter((v) => v.origin_country === "GR");
+    const tr = OLIVE_VARIETIES.filter((v) => v.origin_country === "TR");
+    const both = OLIVE_VARIETIES.filter((v) => v.origin_country === "BOTH");
+    return [
+      { origin: "GR", labelKey: "groupGreece", items: gr },
+      { origin: "TR", labelKey: "groupTurkey", items: tr },
+      { origin: "BOTH", labelKey: "groupOther", items: both },
+    ];
+  }
   const local = OLIVE_VARIETIES.filter((v) => v.origin_country === country);
   const both = OLIVE_VARIETIES.filter((v) => v.origin_country === "BOTH");
   return [
@@ -407,7 +450,7 @@ export function marketplaceVarietyOptions(
     .filter((v) => includeOther || v.slug !== "other")
     .map((v) => ({
       value: v.slug,
-      label: varietyLabel(v, locale),
+      label: varietyName(v, locale),
       primary_use: v.primary_use,
       origin_country: v.origin_country,
       avg_oil_yield_min: v.avg_oil_yield_min,

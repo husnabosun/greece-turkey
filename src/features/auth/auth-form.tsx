@@ -64,10 +64,10 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [role, setRole] = useState<UserRole>("farmer");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [debugLine, setDebugLine] = useState<string | null>(null);
 
   async function onLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -77,9 +77,6 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
       return;
     }
     const { email: loginEmail, password: loginPassword } = credentialsFromForm(e.currentTarget);
-    setDebugLine(
-      t("loginDebug", { email: loginEmail || "(κενό)", length: loginPassword.length }),
-    );
     if (!loginEmail || !loginPassword) {
       toast.error(t("invalidCredentials"));
       return;
@@ -119,6 +116,10 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
       toast.error(t("companyRequired"));
       return;
     }
+    if (role === "processor" && !inviteCode.trim()) {
+      toast.error(t("inviteRequired"));
+      return;
+    }
     if (!regEmail || !regPassword) {
       toast.error(t("invalidCredentials"));
       return;
@@ -140,6 +141,7 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
         locale,
         display_name: regName || regEmail.split("@")[0],
         company_name: role === "processor" ? regCompany : null,
+        invite_code: role === "processor" ? inviteCode.trim() : null,
       }),
     });
     const registerJson = (await registerRes.json().catch(() => null)) as
@@ -186,7 +188,12 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
           </Tabs>
         ) : null}
 
-        <form onSubmit={mode === "login" ? onLogin : onRegister} className="space-y-3" autoComplete="on">
+        <form
+          onSubmit={mode === "login" ? onLogin : onRegister}
+          className="space-y-3"
+          autoComplete="on"
+          noValidate
+        >
           {mode === "register" ? (
             <>
               <div className="space-y-1.5">
@@ -199,16 +206,30 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
                 />
               </div>
               {role === "processor" ? (
-                <div className="space-y-1.5">
-                  <Label htmlFor="company">{t("companyName")}</Label>
-                  <Input
-                    id="company"
-                    name="company_name"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    required
-                  />
-                </div>
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="company">{t("companyName")}</Label>
+                    <Input
+                      id="company"
+                      name="company_name"
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="invite">{t("inviteCode")}</Label>
+                    <Input
+                      id="invite"
+                      name="invite_code"
+                      value={inviteCode}
+                      onChange={(e) => setInviteCode(e.target.value)}
+                      autoComplete="off"
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">{t("inviteHint")}</p>
+                  </div>
+                </>
               ) : null}
             </>
           ) : null}
@@ -254,11 +275,6 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
             </div>
           </div>
 
-          {debugLine ? (
-            <p className="rounded-md bg-muted px-3 py-2 font-mono text-xs text-muted-foreground">
-              {debugLine}
-            </p>
-          ) : null}
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? t("loading") : mode === "login" ? t("loginCta") : t("registerCta")}

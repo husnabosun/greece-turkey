@@ -12,6 +12,7 @@ const bodySchema = z.object({
   locale: z.enum(LOCALES).default("el"),
   display_name: z.string().trim().min(1).optional(),
   company_name: z.string().trim().optional().nullable(),
+  invite_code: z.string().trim().optional().nullable(),
 });
 
 /**
@@ -42,10 +43,19 @@ export async function POST(request: Request) {
   }
 
   const email = parsed.data.email.trim().toLowerCase();
-  const { password, role, locale, display_name, company_name } = parsed.data;
+  const { password, role, locale, display_name, company_name, invite_code } = parsed.data;
 
-  if (role === "processor" && !company_name?.trim()) {
-    return NextResponse.json({ error: "Company name is required for processors." }, { status: 400 });
+  if (role === "processor") {
+    if (!company_name?.trim()) {
+      return NextResponse.json({ error: "Company name is required for processors." }, { status: 400 });
+    }
+    const expected = getServerEnv().PROCESSOR_INVITE_CODE?.trim();
+    if (!expected || invite_code?.trim() !== expected) {
+      return NextResponse.json(
+        { error: "Processor registration requires a valid invite code." },
+        { status: 403 },
+      );
+    }
   }
 
   const admin = createClient<Database>(url, serviceKey, {
@@ -56,6 +66,8 @@ export async function POST(request: Request) {
     email,
     password,
     email_confirm: true,
+    // The DB trigger reads the role ONLY from app_metadata (service role), never from user_metadata.
+    app_metadata: { role },
     user_metadata: {
       role,
       locale,

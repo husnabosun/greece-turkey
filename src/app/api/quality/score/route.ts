@@ -1,6 +1,7 @@
 import { z, ZodError } from "zod";
 import { computeQualityScore, proofWeightFromLevel } from "@/features/quality/score-engine";
 import { fromZodError, jsonError, jsonOk } from "@/shared/lib/api/http";
+import { requireApiUser } from "@/shared/lib/api/require-user";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,9 @@ const bodySchema = z.object({
 /** Pure quality-score engine exposed for the app / jobs. */
 export async function POST(request: Request) {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
     const body = bodySchema.parse(await request.json());
     const result = computeQualityScore({
       ...body,

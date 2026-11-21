@@ -23,6 +23,8 @@ export const diagnoseRequest = z.object({
   /** Extra photos from the same capture session (max 3 more). */
   imageBase64List: z.array(image).max(4).optional(),
   mode: z.enum(["leaf", "fruit", "trap"]),
+  /** UI language — free-text parts of the answer (symptoms, notes) come back in it. */
+  language: z.enum(LANGUAGES).optional(),
   /** Optional field/weather context for better diagnosis. */
   context: z
     .object({
@@ -104,6 +106,14 @@ export const labelResult = z.object({
   cropsListed: z.array(z.string().max(60)).max(20),
   confidence,
 });
+
+/** Quick gate: is this an olive leaf photo? */
+export const leafGateResult = z.object({
+  isOliveLeaf: z.boolean(),
+  confidence,
+  reason: z.string().max(160).optional(),
+});
+export type LeafGateResult = z.infer<typeof leafGateResult>;
 
 export const FRUIT_DIAGNOSES = ["olive fly sting", "other damage", "healthy", "unclear"] as const;
 export const LEAF_LABELS = ["Healthy", "Olive Peacock Spot", "Aculus Olearius"] as const;

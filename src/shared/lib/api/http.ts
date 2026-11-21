@@ -13,7 +13,7 @@ export function jsonError(error: string, status = 400, details?: unknown) {
 }
 
 export function fromZodError(err: ZodError) {
-  return jsonError("Invalid request", 400, err.flatten());
+  return jsonError("invalid_request", 400, err.flatten());
 }
 
 export async function readJson<T>(request: Request): Promise<T> {

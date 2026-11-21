@@ -1,8 +1,11 @@
 "use client";
 
+import { errorCode } from "@/shared/lib/error-message";
 import { useCallback, useEffect, useState } from "react";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { nextDeliveryStatus } from "@/features/marketplace/delivery-state";
+import { formatDateRange, formatDateShort } from "@/features/marketplace/pricing";
+import { regionLabel } from "@/features/marketplace/regions";
 import {
   DEFAULT_DELIVERY_IN_DAYS,
   addDaysIso,
@@ -71,6 +74,7 @@ export type ProcessorDelivery = {
   pricePerKg: number;
   scheduledFor: string | null;
   actualKg: number | null;
+  labResult: LabResult | null;
   qualityScoreSnapshot: number | null;
   bannedFree: boolean | null;
   farmerName: string | null;
@@ -204,7 +208,7 @@ export function useProcessorMarket() {
         supabase
           .from("deliveries")
           .select(
-            "id, offer_id, lot_id, farmer_id, status, tons, price_per_kg, scheduled_for, actual_kg, quality_score_snapshot, banned_free",
+            "id, offer_id, lot_id, farmer_id, status, tons, price_per_kg, scheduled_for, actual_kg, lab_result, quality_score_snapshot, banned_free",
           )
           .eq("processor_id", user.id)
           .order("created_at", { ascending: false }),
@@ -300,6 +304,7 @@ export function useProcessorMarket() {
           pricePerKg: Number(row.price_per_kg),
           scheduledFor: row.scheduled_for,
           actualKg: row.actual_kg == null ? null : Number(row.actual_kg),
+          labResult: (row.lab_result as LabResult | null) ?? null,
           // Snapshot is often null on older rows — fall back to the lot score.
           qualityScoreSnapshot: snapshot ?? lot?.qualityScore ?? null,
           bannedFree: row.banned_free,
@@ -339,14 +344,16 @@ export function useProcessorMarket() {
   return { ...state, reload };
 }
 
-export async function createBuyRequest(input: {
+export type BuyRequestInput = {
   variety: string;
   tons: number;
   minScore: number;
   region: string | null;
   windowLabel: string;
   noBanned: boolean;
-}): Promise<{ ok: boolean; error?: string }> {
+};
+
+export async function createBuyRequest(input: BuyRequestInput): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
   const {
@@ -366,6 +373,54 @@ export async function createBuyRequest(input: {
     active: true,
   });
   return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+export async function updateBuyRequest(
+  id: string,
+  input: BuyRequestInput,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "needLogin" };
+
+  const { error } = await supabase
+    .from("buy_requests")
+    .update({
+      variety: input.variety,
+      tons: input.tons,
+      min_score: input.minScore,
+      region: input.region,
+      window_label: input.windowLabel,
+      no_banned: input.noBanned,
+    })
+    .eq("id", id)
+    .eq("processor_id", user.id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+export async function withdrawOffer(offerId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "needLogin" };
+
+  const { data, error } = await supabase
+    .from("offers")
+    .update({ status: "withdrawn" })
+    .eq("id", offerId)
+    .eq("status", "pending")
+    .eq("initiated_by", "processor")
+    .eq("processor_id", user.id)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "notFound" };
+  return { ok: true };
 }
 
 export async function placeLotOffer(input: {
@@ -401,6 +456,10 @@ export async function placeLotOffer(input: {
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
+function acceptRpcError(err: { message?: string; code?: string } | null): string {
+  return errorCode(err?.message ?? err?.code ?? "saveFailed");
+}
+
 export async function acceptIncomingOffer(
   offerId: string,
   opts?: { scheduledFor?: string; deliveryInDays?: number },
@@ -408,50 +467,23 @@ export async function acceptIncomingOffer(
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
 
-  const { data: offer, error: loadError } = await supabase
-    .from("offers")
-    .select("id, lot_id, farmer_id, processor_id, tons, price_per_kg, status, delivery_in_days")
-    .eq("id", offerId)
-    .maybeSingle();
-  if (loadError || !offer) return { ok: false, error: loadError?.message ?? "notFound" };
-
   const deliveryInDays =
     opts?.scheduledFor != null
       ? deliveryInDaysFromIso(opts.scheduledFor)
       : opts?.deliveryInDays != null && Number.isFinite(opts.deliveryInDays)
         ? Math.max(0, Math.round(opts.deliveryInDays))
-        : offer.delivery_in_days ?? DEFAULT_DELIVERY_IN_DAYS;
-  const scheduledFor = opts?.scheduledFor ?? addDaysIso(todayIsoDate(), deliveryInDays);
+        : undefined;
+  const scheduledFor =
+    opts?.scheduledFor ??
+    (deliveryInDays != null ? addDaysIso(todayIsoDate(), deliveryInDays) : undefined);
 
-  if (offer.status !== "accepted") {
-    const { error } = await supabase
-      .from("offers")
-      .update({ status: "accepted", delivery_in_days: deliveryInDays })
-      .eq("id", offerId);
-    if (error) return { ok: false, error: error.message };
-  }
+  const { error } = await supabase.rpc("accept_offer", {
+    p_offer_id: offerId,
+    p_scheduled_for: scheduledFor ?? null,
+    p_delivery_in_days: deliveryInDays ?? null,
+  });
 
-  const { data: existing } = await supabase
-    .from("deliveries")
-    .select("id, scheduled_for")
-    .eq("offer_id", offerId)
-    .maybeSingle();
-  if (!existing) {
-    const { error: deliveryError } = await supabase.from("deliveries").insert({
-      offer_id: offer.id,
-      lot_id: offer.lot_id,
-      farmer_id: offer.farmer_id,
-      processor_id: offer.processor_id,
-      tons: offer.tons,
-      price_per_kg: offer.price_per_kg,
-      status: "scheduled",
-      scheduled_for: scheduledFor,
-    });
-    if (deliveryError) return { ok: false, error: deliveryError.message };
-  } else if (!existing.scheduled_for) {
-    await supabase.from("deliveries").update({ scheduled_for: scheduledFor }).eq("id", existing.id);
-  }
-
+  if (error) return { ok: false, error: acceptRpcError(error) };
   return { ok: true };
 }
 
@@ -488,28 +520,15 @@ export async function counterIncomingOffer(
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "needLogin" };
-
-  const { error: updateError } = await supabase
-    .from("offers")
-    .update({ status: "countered" })
-    .eq("id", offer.id);
-  if (updateError) return { ok: false, error: updateError.message };
-
-  const { error: insertError } = await supabase.from("offers").insert({
-    lot_id: offer.lotId,
-    farmer_id: offer.farmerId,
-    processor_id: user.id,
-    initiated_by: "processor",
-    status: "pending",
-    tons: offer.tons,
-    price_per_kg: newPrice,
-    counter_of: offer.id,
+  if (!Number.isFinite(newPrice) || newPrice < 0.05 || newPrice > 20) {
+    return { ok: false, error: "invalidPrice" };
+  }
+  // Atomic on the server: one counter per offer, only the receiving side may counter.
+  const { error } = await supabase.rpc("counter_offer", {
+    p_offer_id: offer.id,
+    p_price_per_kg: newPrice,
   });
-  return insertError ? { ok: false, error: insertError.message } : { ok: true };
+  return error ? { ok: false, error: acceptRpcError(error) } : { ok: true };
 }
 
 export async function advanceDelivery(
@@ -523,55 +542,45 @@ export async function advanceDelivery(
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
 
-  const patch: {
-    status: DeliveryStatus;
-    actual_kg?: number;
-    lab_result?: LabResult;
-    quality_score_snapshot?: number;
-  } = { status: next };
-  if (next === "weighed" && extras?.actualKg != null) patch.actual_kg = extras.actualKg;
-  if (next === "lab_checked") patch.lab_result = extras?.labResult ?? "passed";
+  // Server validates the acting processor, the step order, the weight range and the lab result.
+  const { error } = await supabase.rpc("advance_delivery", {
+    p_delivery_id: deliveryId,
+    p_next: next,
+    p_actual_kg: next === "weighed" ? (extras?.actualKg ?? null) : null,
+    p_lab_result: next === "lab_checked" ? (extras?.labResult ?? "passed") : null,
+  });
+  return error ? { ok: false, error: acceptRpcError(error) } : { ok: true };
+}
 
-  // Persist lot score onto the delivery when first advancing, if still empty.
-  if (next === "weighed" || next === "lab_checked") {
-    const { data: delivery } = await supabase
-      .from("deliveries")
-      .select("quality_score_snapshot, lot_id")
-      .eq("id", deliveryId)
-      .maybeSingle();
-    if (delivery && delivery.quality_score_snapshot == null && delivery.lot_id) {
-      const { data: lot } = await supabase
-        .from("lots")
-        .select("quality_score")
-        .eq("id", delivery.lot_id)
-        .maybeSingle();
-      if (lot?.quality_score != null) patch.quality_score_snapshot = Number(lot.quality_score);
-    }
-  }
-
-  const { error } = await supabase.from("deliveries").update(patch).eq("id", deliveryId);
-  return error ? { ok: false, error: error.message } : { ok: true };
+/** Close a delivery: before weighing (lot goes back to market) or after a failed lab check (olives returned). */
+export async function cancelDelivery(
+  deliveryId: string,
+  reason?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  const { error } = await supabase.rpc("cancel_delivery", {
+    p_delivery_id: deliveryId,
+    p_reason: reason ?? null,
+  });
+  return error ? { ok: false, error: acceptRpcError(error) } : { ok: true };
 }
 
 export function lotPlaceLabel(
   lot: Pick<ProcessorLot, "town" | "region" | "farmerDisplayName">,
   anonymous: string,
   geocoded?: string | null,
+  locale = "el",
 ) {
   if (lot.farmerDisplayName) return lot.farmerDisplayName;
   if (geocoded?.trim()) return geocoded.trim();
-  if (lot.town) return `${lot.town}, ${lot.region}`;
-  return lot.region || anonymous;
+  const region = regionLabel(lot.region, locale);
+  if (lot.town) return `${lot.town}, ${region}`;
+  return region !== "—" ? region : anonymous;
 }
 
 export function harvestRangeLabel(start: string | null, end: string | null, locale = "el") {
   if (!start && !end) return "—";
-  const tag = locale.startsWith("el") ? "el-GR" : locale.startsWith("tr") ? "tr-TR" : "en-GB";
-  const fmt = (d: string) => {
-    const dt = new Date(`${d}T12:00:00`);
-    if (Number.isNaN(dt.getTime())) return d;
-    return dt.toLocaleDateString(tag, { day: "numeric", month: "short" });
-  };
-  if (start && end) return `${fmt(start)}–${fmt(end)}`;
-  return fmt(start ?? end!);
+  if (start && end) return formatDateRange(start, end, locale);
+  return formatDateShort(start ?? end!, locale);
 }

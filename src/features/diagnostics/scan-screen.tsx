@@ -1,5 +1,6 @@
 "use client";
 
+import { useErrorMessage } from "@/shared/lib/error-message";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
@@ -18,12 +19,12 @@ import {
   ListFilter,
   RefreshCw,
   Scissors,
-  User,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { saveFarmerScan } from "@/features/diagnostics/save-scan";
+import { localizedScanTitle } from "@/features/diagnostics/scan-title";
 import type { ActionKind, CaptureMode, PillKey, Presented, SavedScan } from "@/features/diagnostics/scan-types";
 import { scanNeedsRecheck, useFarmerScans } from "@/features/diagnostics/use-farmer-scans";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
@@ -69,6 +70,8 @@ export function ScanScreen() {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [treeId, setTreeId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  /** Demo / unsaved result shown once — never written to DB or history. */
+  const [ephemeralScan, setEphemeralScan] = useState<SavedScan | null>(null);
   const [photos, setPhotos] = useState<string[]>([]);
   const [analysing, setAnalysing] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -98,16 +101,26 @@ export function ScanScreen() {
     if (filter !== "all" && !viewFields.some((f) => f.id === filter)) setFilter("all");
   }, [filter, viewFields]);
 
-  /** Deep-link from a task: open camera with that field / mode / taskId. */
+  const syncingUrl = useRef(false);
+
+  /** Deep-link from a task / shareable scan URLs (?view=&id=). */
   useEffect(() => {
     if (bootstrappedParams.current) return;
+    if (fieldsLoading) return;
+
     const wantsCamera = searchParams.get("camera") === "1";
+    const qView = searchParams.get("view");
+    const qId = searchParams.get("id");
     const qField = searchParams.get("fieldId");
     const qMode = searchParams.get("mode");
     const qTask = searchParams.get("taskId");
     const qTree = searchParams.get("treeId");
-    if (!wantsCamera && !qField && !qMode && !qTask && !qTree) return;
-    if (fieldsLoading) return;
+
+    const hasDeepLink = wantsCamera || qView || qId || qField || qMode || qTask || qTree;
+    if (!hasDeepLink) {
+      bootstrappedParams.current = true;
+      return;
+    }
 
     bootstrappedParams.current = true;
     if (qField && viewFields.some((f) => f.id === qField)) {
@@ -117,17 +130,48 @@ export function ScanScreen() {
     if (qMode === "leaf" || qMode === "fruit" || qMode === "trap") setMode(qMode);
     if (qTask) setTaskId(qTask);
     if (qTree) setTreeId(qTree);
-    if (wantsCamera) {
+
+    if (qView === "result" && qId) {
+      setActiveId(qId);
+      setView("result");
+      return;
+    }
+    if (wantsCamera || qView === "camera") {
       setPhotos([]);
       setAnalysing(false);
       setPicking(false);
       setView("camera");
+      return;
     }
-    router.replace(pathname);
-  }, [searchParams, fieldsLoading, viewFields, router, pathname]);
+    if (qView === "list") setView("list");
+  }, [searchParams, fieldsLoading, viewFields]);
+
+  /** Keep URL in sync so refresh / back / share work (Σ5). */
+  useEffect(() => {
+    if (!bootstrappedParams.current) return;
+    if (syncingUrl.current) return;
+    const params = new URLSearchParams();
+    if (view === "camera") {
+      params.set("view", "camera");
+    } else if (view === "result" && activeId) {
+      params.set("view", "result");
+      params.set("id", activeId);
+    }
+    const next = params.toString() ? `${pathname}?${params}` : pathname;
+    const current = searchParams.toString() ? `${pathname}?${searchParams}` : pathname;
+    if (next === current) return;
+    syncingUrl.current = true;
+    router.replace(next);
+    queueMicrotask(() => {
+      syncingUrl.current = false;
+    });
+  }, [view, activeId, pathname, router, searchParams]);
 
   const activeField = viewFields.find((f) => f.id === fieldId) ?? null;
-  const active = scans.find((s) => s.id === activeId) ?? null;
+  const active =
+    (ephemeralScan && ephemeralScan.id === activeId ? ephemeralScan : null) ??
+    scans.find((s) => s.id === activeId) ??
+    null;
 
   useEffect(() => {
     if (!scansError) return;
@@ -162,22 +206,32 @@ export function ScanScreen() {
     setView("camera");
   }
 
-  function onFile(file: File | null) {
+  async function onFile(file: File | null) {
     if (!file || analysing) return;
     if (photos.length >= 4) {
       toast.error(t("maxPhotos"));
       return;
     }
-    if (file.size > 4_000_000) {
-      toast.error(t("tooBig"));
+    if (file.type && !file.type.startsWith("image/")) {
+      toast.error(t("notImageFile"), { id: "scan-file" });
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = String(reader.result);
+    // Large phone photos are resized in the browser before upload (Σ4).
+    if (file.size > 40_000_000) {
+      toast.error(t("tooBig"), { id: "scan-file" });
+      return;
+    }
+    try {
+      const { compressImageFile } = await import("@/shared/lib/compress-image");
+      const url = await compressImageFile(file);
       setPhotos((prev) => (prev.length >= 4 ? prev : [...prev, url]));
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "";
+      toast.error(
+        code === "tooSmall" ? t("imageTooSmall") : code === "badAspect" ? t("imageBadAspect") : t("notImageFile"),
+        { id: "scan-file" },
+      );
+    }
   }
 
   function removePhoto(index: number) {
@@ -216,17 +270,45 @@ export function ScanScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode,
+          language: locale === "tr" || locale === "en" ? locale : "el",
           imageBase64: toBase64(primary),
           imageBase64List: selected.map(toBase64),
           context,
         }),
       });
-      const json: unknown = await res.json();
+      if (res.status === 413) {
+        throw new Error(t("payloadTooLarge"));
+      }
+      if (res.status === 401) {
+        throw new Error(t("needLogin"));
+      }
+      if (res.status === 429) {
+        throw new Error(t("rateLimited"));
+      }
+      const json: unknown = await res.json().catch(() => null);
       if (!isRecord(json) || json.ok !== true) {
-        const message = isRecord(json) && typeof json.error === "string" ? json.error : t("failed");
-        throw new Error(message);
+        const code = isRecord(json) && typeof json.error === "string" ? json.error : "";
+        throw new Error(
+          code === "too_small"
+            ? t("imageTooSmall")
+            : code === "bad_aspect"
+              ? t("imageBadAspect")
+              : code === "not_image" || code === "invalid_request"
+                ? t("notImageFile")
+                : t("failed"),
+        );
       }
       const payload = json.data;
+      // AI temporarily unavailable (quota / timeout): no diagnosis at all, never a demo result (Ν4).
+      if (isRecord(payload) && (payload.unavailable === true || payload.source === "demo")) {
+        toast.error(t("unavailableNow"), { id: "scan-unavailable", duration: 6000 });
+        return;
+      }
+      if (isRecord(payload) && payload.rejected === "not_leaf") {
+        toast.error(t("notLeaf"));
+        return;
+      }
+
       const presented = buildPresented(payload, t);
       if (!presented) throw new Error(t("failed"));
 
@@ -236,6 +318,36 @@ export function ScanScreen() {
         (payload.source === "gemini" || payload.source === "demo" || payload.source === "model")
           ? payload.source
           : "demo";
+
+      // Low-confidence leaf results: ask for a better photo, do not save (Σ1/Σ2).
+      if (
+        mode === "leaf" &&
+        source !== "demo" &&
+        presented.confidence != null &&
+        presented.confidence < 0.8
+      ) {
+        toast.message(t("lowConfidence"));
+        return;
+      }
+
+      // Never persist demo / fallback results as real history or quality input.
+      if (source === "demo") {
+        toast.message(t("demoNotSaved"));
+        const local: SavedScan = {
+          id: crypto.randomUUID(),
+          fieldId: activeField.id,
+          fieldName: activeField.name,
+          at: new Date().toISOString(),
+          preview: primary,
+          storagePath: null,
+          presented,
+        };
+        setEphemeralScan(local);
+        setActiveId(local.id);
+        setPhotos([]);
+        setView("result");
+        return;
+      }
 
       const persisted = await saveFarmerScan({
         fieldId: activeField.id,
@@ -390,7 +502,7 @@ export function ScanScreen() {
                     className="flex size-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border border-dashed border-white/40 bg-white/10 text-white"
                   >
                     <ImageIcon className="size-4" aria-hidden />
-                    <span className="text-[10px] font-bold">{t("addPhoto")}</span>
+                    <span className="text-[12px] font-bold">{t("addPhoto")}</span>
                   </button>
                 ) : null}
               </div>
@@ -462,7 +574,7 @@ export function ScanScreen() {
           accept="image/*"
           className="hidden"
           onChange={(e) => {
-            onFile(e.target.files?.[0] ?? null);
+            void onFile(e.target.files?.[0] ?? null);
             e.target.value = "";
           }}
         />
@@ -472,7 +584,7 @@ export function ScanScreen() {
           accept="image/*"
           className="hidden"
           onChange={(e) => {
-            onFile(e.target.files?.[0] ?? null);
+            void onFile(e.target.files?.[0] ?? null);
             e.target.value = "";
           }}
         />
@@ -483,7 +595,7 @@ export function ScanScreen() {
           capture="environment"
           className="hidden"
           onChange={(e) => {
-            onFile(e.target.files?.[0] ?? null);
+            void onFile(e.target.files?.[0] ?? null);
             e.target.value = "";
           }}
         />
@@ -535,7 +647,7 @@ export function ScanScreen() {
   }
 
   return (
-    <div className="relative w-full flex-1">
+    <div className="relative w-full flex-1 pb-28">
       <div className="flex items-center gap-3">
         <h1 className="flex-1 text-ap-title text-ink">{t("yourScans")}</h1>
         <button
@@ -584,7 +696,7 @@ export function ScanScreen() {
                   setActiveId(scan.id);
                   setView("result");
                 }}
-                className="mt-2 flex w-full items-center rounded-[18px] border border-line bg-card p-2.5 text-left"
+                className="mt-2 flex min-h-14 w-full items-center rounded-[18px] border border-line bg-card p-2.5 text-left"
               >
                 {scan.preview ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -595,7 +707,9 @@ export function ScanScreen() {
                   </span>
                 )}
                 <span className="mr-2 ml-2.5 min-w-0 flex-1">
-                  <span className="block truncate text-ap-body font-extrabold text-ink">{scan.presented.title}</span>
+                  <span className="block truncate text-ap-body font-extrabold text-ink">
+                    {localizedScanTitle(scan.presented, t)}
+                  </span>
                   <span className="block text-ap-small text-muted-foreground">
                     {scan.presented.confidence != null
                       ? t("listMeta", {
@@ -605,8 +719,10 @@ export function ScanScreen() {
                       : formatDay(scan.at, locale)}
                   </span>
                 </span>
-                <Pill tone={scan.presented.tone}>{t(scan.presented.pillKey)}</Pill>
-                <ChevronRight className="ml-1 size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="flex shrink-0 items-center self-center">
+                  <Pill tone={scan.presented.tone}>{t(scan.presented.pillKey)}</Pill>
+                </span>
+                <ChevronRight className="ml-1 size-4 shrink-0 self-center text-muted-foreground" aria-hidden />
               </button>
             ))}
           </section>
@@ -637,11 +753,33 @@ function ResultView({
   onRecheck: () => void;
 }) {
   const t = useTranslations("farmerScan");
+  const errMsg = useErrorMessage();
+  const router = useRouter();
   const { presented } = scan;
-  const parts = splitSummary(presented.summary.trim() || presented.title);
+  const displayTitle = localizedScanTitle(presented, t);
+  const parts = splitSummary(presented.summary.trim() || displayTitle);
   const actions = actionSet(presented.actionKind, t);
   const photoLabel = presented.mode === "fruit" ? t("fruitPhoto") : presented.mode === "trap" ? t("trapPhoto") : t("leafPhoto");
   const meta = [scan.fieldName, formatWhen(scan.at, locale, (time) => t("todayAt", { time }))].filter(Boolean).join(" · ");
+
+  async function createFollowUpTask(title: string) {
+    if (!scan.fieldId) {
+      toast.message(t("needField"));
+      return;
+    }
+    const { createFarmerTask } = await import("@/features/tasks/use-farmer-tasks");
+    const result = await createFarmerTask({
+      fieldId: scan.fieldId,
+      title,
+      kind: "recheck",
+    });
+    if (!result.ok) {
+      toast.error(errMsg(result.error, "actionFailed"));
+      return;
+    }
+    toast.success(t("taskCreated"));
+    router.push("/farmer/tasks");
+  }
 
   return (
     <div className="w-full flex-1">
@@ -665,7 +803,7 @@ function ResultView({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={scan.preview}
-            alt={presented.title}
+            alt={displayTitle}
             className="mx-auto max-h-[55vh] min-h-[280px] w-full object-contain sm:min-h-[340px]"
           />
         ) : (
@@ -680,25 +818,68 @@ function ResultView({
       </div>
 
       <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1 pr-2">
-            <p className="text-ap-card text-ink">{presented.title}</p>
-            {presented.latin ? <p className="text-ap-body text-muted-foreground italic">{presented.latin}</p> : null}
+        <div className="flex items-start gap-3">
+          <span
+            className={cn(
+              "flex size-12 shrink-0 items-center justify-center rounded-2xl",
+              presented.tone === "good"
+                ? "bg-good-soft text-good"
+                : presented.tone === "risk"
+                  ? "bg-risk-soft text-risk"
+                  : "bg-warn-soft text-warn",
+            )}
+          >
+            {presented.tone === "good" ? (
+              <Check className="size-6" aria-hidden />
+            ) : presented.tone === "risk" ? (
+              <Bug className="size-6" aria-hidden />
+            ) : (
+              <Leaf className="size-6" aria-hidden />
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[22px] leading-tight font-extrabold tracking-tight text-ink">{displayTitle}</p>
+            {presented.latin ? <p className="mt-0.5 text-ap-body text-muted-foreground italic">{presented.latin}</p> : null}
           </div>
-          <Pill tone={presented.tone}>{t(presented.pillKey)}</Pill>
         </div>
-        <div className={cn("mt-2 rounded-xl p-2.5", BOX[presented.tone])}>
-          <p className="text-ap-body font-bold text-ink">{parts.headline}</p>
-          {parts.detail ? <p className="text-ap-body text-muted-foreground">{parts.detail}</p> : null}
-        </div>
+        {parts.detail || (parts.headline && parts.headline !== displayTitle) ? (
+          <div className={cn("mt-2 rounded-xl p-2.5", BOX[presented.tone])}>
+            {parts.headline && parts.headline !== displayTitle ? (
+              <p className="text-ap-body font-bold text-ink">{parts.headline}</p>
+            ) : null}
+            {parts.detail ? <p className="text-ap-body text-muted-foreground">{parts.detail}</p> : null}
+          </div>
+        ) : null}
         {presented.source || presented.confidence != null ? (
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
             {presented.source ? <AiTag source={presented.source} /> : null}
             {presented.confidence != null ? (
               <span className="text-ap-small font-bold text-ink">
-                {t("confidence", { n: Math.round(presented.confidence * 100) })}
+                {t(
+                  presented.confidence >= 0.85
+                    ? "confidenceSure"
+                    : presented.confidence >= 0.7
+                      ? "confidenceLikely"
+                      : "confidenceUnsure",
+                  { n: Math.round(presented.confidence * 100) },
+                )}
               </span>
             ) : null}
+          </div>
+        ) : null}
+        {presented.confidence != null ? (
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-soft">
+            <div
+              className={cn(
+                "h-full rounded-full",
+                presented.confidence >= 0.85
+                  ? "bg-good"
+                  : presented.confidence >= 0.7
+                    ? "bg-warn"
+                    : "bg-risk",
+              )}
+              style={{ width: `${Math.round(presented.confidence * 100)}%` }}
+            />
           </div>
         ) : null}
         {presented.source === "demo" ? (
@@ -717,7 +898,7 @@ function ResultView({
           <button
             key={action.title}
             type="button"
-            onClick={() => toast(action.title)}
+            onClick={() => void createFollowUpTask(action.title)}
             className="flex-1 rounded-[18px] border border-line bg-card p-2.5"
           >
             <span className="mx-auto flex size-9 items-center justify-center rounded-full bg-good-soft">
@@ -742,9 +923,9 @@ function ResultView({
           compact
           className="min-w-0 flex-1 px-3"
           variant="outline"
-          label={t("askAgronomist")}
-          icon={<User className="size-4" aria-hidden />}
-          onClick={() => toast(t("askSent"))}
+          label={t("addTaskFromScan")}
+          icon={<ClipboardList className="size-4" aria-hidden />}
+          onClick={() => void createFollowUpTask(displayTitle)}
         />
       </div>
     </div>
@@ -816,25 +997,82 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
     let latin: string | undefined;
     let tone: PillTone = "warn";
     let pillKey: PillKey = "watch";
+    const top3 = Array.isArray(result.top3) ? result.top3 : [];
+    const second = top3
+      .map((row) => (isRecord(row) ? row : null))
+      .find((row) => row && typeof row.label === "string" && row.label !== label);
+    const secondLabel = second && typeof second.label === "string" ? second.label : null;
+
+    // Never call a leaf "Healthy" below 0.7 — show Uncertain and surface 2nd guess (Σ2).
+    if (label === "Healthy" && confidence != null && confidence < 0.7) {
+      title = t("uncertain");
+      tone = "warn";
+      pillKey = "watch";
+      const alt =
+        secondLabel === "Olive Peacock Spot"
+          ? t("peacock")
+          : secondLabel === "Aculus Olearius"
+            ? t("budMite")
+            : secondLabel;
+      const summaryParts = [
+        t("uncertainHint"),
+        alt ? t("alsoPossible", { label: alt }) : null,
+        ...strings(result.symptoms),
+      ].filter(Boolean);
+      return {
+        mode: "leaf",
+        title,
+        titleKey: "uncertain",
+        latin: undefined,
+        summary: summaryParts.join(" "),
+        tone,
+        pillKey,
+        confidence,
+        source,
+        modelVersion,
+        demoReason,
+        actionKind: "care",
+        showNoChemicals: true,
+      };
+    }
+
+    let titleKey: Presented["titleKey"];
     if (label === "Healthy") {
       title = t("healthyLeaf");
+      titleKey = "healthyLeaf";
       tone = "good";
       pillKey = "healthy";
     } else if (label === "Olive Peacock Spot") {
       title = t("peacock");
+      titleKey = "peacock";
       latin = LATIN.peacock;
       tone = "risk";
       pillKey = "highRisk";
     } else if (label === "Aculus Olearius") {
       title = t("budMite");
+      titleKey = "budMite";
       latin = LATIN.mite;
     }
     const toneGood = tone === "good";
+    const altHint =
+      secondLabel && !toneGood
+        ? ` ${t("alsoPossible", {
+            label:
+              secondLabel === "Healthy"
+                ? t("healthyLeaf")
+                : secondLabel === "Olive Peacock Spot"
+                  ? t("peacock")
+                  : secondLabel === "Aculus Olearius"
+                    ? t("budMite")
+                    : secondLabel,
+          })}`
+        : "";
     return {
       mode: "leaf",
       title,
+      titleKey,
       latin,
-      summary: strings(result.symptoms).join(" "),
+      summary: `${strings(result.symptoms).join(" ")}${altHint}`.trim(),
       tone,
       pillKey,
       confidence,
@@ -849,27 +1087,33 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
   if (data.mode === "fruit" && typeof result.diagnosis === "string") {
     const dx = result.diagnosis;
     let title = dx;
+    let titleKey: Presented["titleKey"];
     let latin: string | undefined;
     let tone: PillTone = "warn";
     let pillKey: PillKey = "watch";
     if (dx === "healthy") {
       title = t("healthyFruit");
+      titleKey = "healthyFruit";
       tone = "good";
       pillKey = "healthy";
     } else if (dx === "olive fly sting") {
       title = t("oliveFly");
+      titleKey = "oliveFly";
       latin = LATIN.fly;
       tone = "risk";
       pillKey = "highRisk";
     } else if (dx === "other damage") {
       title = t("otherDamage");
+      titleKey = "otherDamage";
     } else if (dx === "unclear") {
       title = t("notClear");
+      titleKey = "notClear";
     }
     const toneGood = tone === "good";
     return {
       mode: "fruit",
       title,
+      titleKey,
       latin,
       summary: strings(result.symptoms).join(" "),
       tone,
@@ -889,6 +1133,7 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
     return {
       mode: "trap",
       title: t("trapTitle", { n }),
+      titleKey: "trapTitle",
       summary: typeof result.notes === "string" ? result.notes : "",
       tone,
       pillKey,

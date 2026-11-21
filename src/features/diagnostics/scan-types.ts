@@ -7,6 +7,17 @@ export type ActionKind = "care" | "healthy" | "trap";
 export type Presented = {
   mode: CaptureMode;
   title: string;
+  /** Stable `farmerScan` key so history renders in el/en/tr (C9). */
+  titleKey?:
+    | "healthyLeaf"
+    | "peacock"
+    | "budMite"
+    | "uncertain"
+    | "healthyFruit"
+    | "oliveFly"
+    | "otherDamage"
+    | "notClear"
+    | "trapTitle";
   latin?: string;
   summary: string;
   tone: PillTone;

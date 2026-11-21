@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import mapboxgl from "mapbox-gl";
-import { Crosshair, Minus, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Crosshair, Minus, Plus, X } from "lucide-react";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { SATELLITE_STYLE } from "@/features/fields/satellite-style";
 import { colors } from "@/shared/theme/tokens";
@@ -26,7 +26,9 @@ type Props = {
   token: string | undefined;
   points: LotMapPoint[];
   selectedId: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (id: string | null) => void;
+  /** Opens lot detail when the preview card is clicked. */
+  onOpenLot?: (id: string) => void;
   labels: {
     locate: string;
     zoomIn: string;
@@ -39,6 +41,10 @@ type Props = {
   className?: string;
   /** Hover/select preview card. Off on detail pages (avoids duplicating facts). */
   preview?: boolean;
+  /** When false: markers only — no preview card / open-lot link. Default true. */
+  popup?: boolean;
+  /** Fixed map height in px. When omitted, uses the responsive shell height. */
+  height?: number;
 };
 
 const GREECE_CENTER: [number, number] = [22.5, 38.2];
@@ -54,9 +60,12 @@ export function LotsMap({
   points,
   selectedId,
   onSelect,
+  onOpenLot,
   labels,
   className,
   preview: previewEnabled = true,
+  popup = true,
+  height,
 }: Props) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -65,11 +74,36 @@ export function LotsMap({
   const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
+  const [previewLockedHeight, setPreviewLockedHeight] = useState<number | null>(null);
+  const previewPanelRef = useRef<HTMLDivElement | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onOpenLotRef = useRef(onOpenLot);
+  onOpenLotRef.current = onOpenLot;
 
+  const showPopup = popup && previewEnabled;
   const preview =
-    previewEnabled && selectedId ? (points.find((p) => p.id === selectedId) ?? null) : null;
+    showPopup && selectedId ? (points.find((p) => p.id === selectedId) ?? null) : null;
+
+  useEffect(() => {
+    setPreviewCollapsed(false);
+    setPreviewLockedHeight(null);
+  }, [selectedId]);
+
+  function togglePreviewCollapsed() {
+    if (!previewCollapsed && previewPanelRef.current) {
+      setPreviewLockedHeight(previewPanelRef.current.offsetHeight);
+      setPreviewCollapsed(true);
+      return;
+    }
+    setPreviewCollapsed(false);
+    setPreviewLockedHeight(null);
+  }
+  const shellStyle = height != null ? { height, minHeight: height } : undefined;
+  const shellClass = height != null
+    ? cn("relative w-full overflow-hidden rounded-[18px] border border-line bg-ink", className)
+    : cn(MAP_SHELL, className);
 
   useEffect(() => {
     if (!token || !containerRef.current || mapRef.current) return;
@@ -193,8 +227,11 @@ export function LotsMap({
   if (!token) {
     return (
       <div
+        style={shellStyle}
         className={cn(
-          MAP_SHELL.replace("bg-ink", "bg-soft"),
+          height != null
+            ? "relative w-full overflow-hidden rounded-[18px] border border-line bg-soft"
+            : MAP_SHELL.replace("bg-ink", "bg-soft"),
           "flex items-center justify-center px-4 text-center text-[13px] font-semibold text-muted-foreground",
           className,
         )}
@@ -205,7 +242,7 @@ export function LotsMap({
   }
 
   return (
-    <div ref={shellRef} className={cn(MAP_SHELL, className)}>
+    <div ref={shellRef} style={shellStyle} className={shellClass}>
       <div ref={containerRef} className="absolute inset-0" />
       {failed ? (
         <div className="absolute inset-0 flex items-center justify-center bg-ink/70 px-4 text-center text-[13px] font-semibold text-white">
@@ -219,27 +256,91 @@ export function LotsMap({
       ) : null}
 
       {preview ? (
-        <div className="pointer-events-none absolute bottom-3 left-3 z-10 w-[min(340px,calc(100%-5.5rem))] rounded-[18px] border border-line bg-card/95 p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.28)] backdrop-blur-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[15px] leading-5 font-extrabold text-ink">{preview.title}</p>
-              <p className="mt-0.5 truncate text-[12px] leading-4 font-semibold text-muted-foreground">{preview.label}</p>
-              <p className="mt-1 text-[12px] leading-4 font-medium text-muted-foreground">{preview.subtitle}</p>
-              <p className="mt-0.5 text-[12px] leading-4 font-medium text-muted-foreground">
-                {preview.useLabel} · {preview.harvestLabel}
-              </p>
-            </div>
-            {preview.score != null ? (
-              <div className="flex shrink-0 flex-col items-center rounded-lg bg-good-soft px-2 py-1">
-                <span className="text-[9px] font-semibold text-good">{labels.qualityScore}</span>
-                <span className="text-[16px] leading-5 font-extrabold text-good">{preview.score}</span>
-              </div>
-            ) : null}
+        <div
+          ref={previewPanelRef}
+          style={previewCollapsed && previewLockedHeight ? { height: previewLockedHeight } : undefined}
+          className={cn(
+            "absolute bottom-3 left-3 z-10 flex max-h-[calc(100%-1.5rem)] overflow-hidden rounded-[18px] border border-line bg-card/95 shadow-[0_12px_32px_rgba(0,0,0,.28)] backdrop-blur-sm transition-[width] duration-200",
+            previewCollapsed ? "w-auto" : "w-[min(320px,calc(100%-5.5rem))]",
+          )}
+        >
+          <div
+            className={cn(
+              "flex min-w-0 flex-1 flex-col",
+              previewCollapsed && "items-center justify-center gap-2 px-2",
+            )}
+          >
+            {previewCollapsed ? (
+              <>
+                {preview.score != null ? (
+                  <span className="rounded-md bg-good-soft px-1.5 py-0.5 text-[12px] font-extrabold text-good">
+                    {preview.score}
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onSelectRef.current(null)}
+                  aria-label="Επαναφορά χάρτη"
+                  className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-card text-muted-foreground hover:bg-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+                >
+                  <X className="size-3.5" strokeWidth={2.5} />
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="flex shrink-0 items-center gap-1 p-2 pr-1.5">
+                  <p className="min-w-0 flex-1 truncate px-1 text-[14px] font-extrabold text-ink">{preview.title}</p>
+                  <button
+                    type="button"
+                    onClick={() => onSelectRef.current(null)}
+                    aria-label="Επαναφορά χάρτη"
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-card text-muted-foreground hover:bg-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+                  >
+                    <X className="size-3.5" strokeWidth={2.5} />
+                  </button>
+                </div>
+
+                <div className="min-h-0 overflow-y-auto px-3.5 pb-3.5">
+                  <div className="flex items-start justify-between gap-3 border-t border-line pt-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[12px] leading-4 font-semibold text-muted-foreground">{preview.label}</p>
+                      <p className="mt-1 text-[12px] leading-4 font-medium text-muted-foreground">{preview.subtitle}</p>
+                      <p className="mt-0.5 text-[12px] leading-4 font-medium text-muted-foreground">
+                        {preview.useLabel} · {preview.harvestLabel}
+                      </p>
+                    </div>
+                    {preview.score != null ? (
+                      <div className="flex shrink-0 flex-col items-center rounded-lg bg-good-soft px-2 py-1">
+                        <span className="text-[12px] font-semibold text-good">{labels.qualityScore}</span>
+                        <span className="text-[16px] leading-5 font-extrabold text-good">{preview.score}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-line pt-2.5">
+                    <p className="text-[14px] font-extrabold text-ink">{preview.priceLabel}</p>
+                    <button
+                      type="button"
+                      onClick={() => onOpenLotRef.current?.(preview.id)}
+                      className="inline-flex min-h-9 items-center rounded-full px-2.5 text-[12px] font-bold tracking-wide text-muted-foreground uppercase transition-colors hover:bg-ink hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+                      aria-label={`${labels.openLot}: ${preview.title}`}
+                    >
+                      {labels.openLot}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-          <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-line pt-2.5">
-            <p className="text-[14px] font-extrabold text-ink">{preview.priceLabel}</p>
-            <span className="text-[11px] font-bold tracking-wide text-muted-foreground uppercase">{labels.openLot}</span>
-          </div>
+
+          <button
+            type="button"
+            onClick={togglePreviewCollapsed}
+            aria-expanded={!previewCollapsed}
+            aria-label={previewCollapsed ? "Εμφάνιση υπομνήματος" : "Απόκρυψη υπομνήματος"}
+            className="flex w-10 shrink-0 items-center justify-center self-stretch border-l border-line bg-card/80 text-ink hover:bg-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink/30"
+          >
+            {previewCollapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+          </button>
         </div>
       ) : null}
 

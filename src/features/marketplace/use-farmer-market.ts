@@ -1,11 +1,14 @@
 "use client";
 
+import { errorCode } from "@/shared/lib/error-message";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
+import type { LabResult } from "@/shared/types/database";
 
 export type MarketOffer = {
   id: string;
   lotId: string;
+  lotStatus: string | null;
   processorId: string;
   processorName: string;
   /** processor = mill bid on your listing (Flow A). farmer = your offer to a mill request (Flow B). */
@@ -38,6 +41,9 @@ export type MarketDelivery = {
   tons: number;
   pricePerKg: number;
   scheduledFor: string | null;
+  actualKg: number | null;
+  labResult: LabResult | null;
+  qualityScoreSnapshot: number | null;
   fieldName: string | null;
   processorName: string | null;
   lotVariety: string | null;
@@ -47,7 +53,15 @@ export type FieldMarketCard = {
   fieldId: string;
   qualityScore: number | null;
   listedPrice: number | null;
+  listedTons: number | null;
+  listedLotId: string | null;
   offerCount: number;
+  /** Best active lot status for this field: listed | reserved | sold | null */
+  lotStatus: "listed" | "reserved" | "sold" | null;
+  /** Every open listing on this field (a field can carry more than one lot). */
+  listedLots: { id: string; pricePerKg: number | null; tons: number | null }[];
+  /** Tons still unsold on this field across open listings (null when nothing listed). */
+  soldOrReservedTons: number;
 };
 
 type State = {
@@ -55,6 +69,8 @@ type State = {
   requests: MarketRequest[];
   deliveries: MarketDelivery[];
   fieldCards: Record<string, FieldMarketCard>;
+  /** Farmer's country from profile (GR/TR) — used for region matching. */
+  farmerCountry: "GR" | "TR" | null;
   loading: boolean;
   error: string | null;
 };
@@ -64,9 +80,14 @@ const EMPTY: State = {
   requests: [],
   deliveries: [],
   fieldCards: {},
+  farmerCountry: null,
   loading: true,
   error: null,
 };
+
+function rpcErrorMessage(err: { message?: string; code?: string } | null): string {
+  return errorCode(err?.message ?? err?.code ?? "actionFailed");
+}
 
 /** Farmer market data: offers, buy requests, deliveries, per-field listing hints. */
 export function useFarmerMarket(fieldIds: string[]) {
@@ -91,11 +112,11 @@ export function useFarmerMarket(fieldIds: string[]) {
         return;
       }
 
-      const [offersRes, requestsRes, deliveriesRes, lotsRes, qualityRes] = await Promise.all([
+      const [offersRes, requestsRes, deliveriesRes, lotsRes, qualityRes, meRes] = await Promise.all([
         supabase
           .from("offers")
           .select(
-            "id, lot_id, processor_id, initiated_by, status, tons, price_per_kg, buy_request_id, lots(variety, field_id, fields(name))",
+            "id, lot_id, processor_id, initiated_by, status, tons, price_per_kg, buy_request_id, lots(status, variety, field_id, fields(name))",
           )
           .eq("farmer_id", user.id)
           .order("created_at", { ascending: false }),
@@ -109,14 +130,16 @@ export function useFarmerMarket(fieldIds: string[]) {
           .order("created_at", { ascending: false }),
         supabase
           .from("deliveries")
-          .select("id, status, tons, price_per_kg, scheduled_for, processor_id, lots(variety, fields(name))")
+          .select(
+            "id, status, tons, price_per_kg, scheduled_for, processor_id, actual_kg, lab_result, quality_score_snapshot, lots(variety, fields(name))",
+          )
           .eq("farmer_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
           .from("lots")
-          .select("id, field_id, price_per_kg, status")
+          .select("id, field_id, price_per_kg, tons, status")
           .eq("farmer_id", user.id)
-          .in("status", ["listed", "reserved"]),
+          .in("status", ["listed", "reserved", "sold"]),
         ids.length
           ? supabase
               .from("quality_scores")
@@ -124,7 +147,10 @@ export function useFarmerMarket(fieldIds: string[]) {
               .in("field_id", ids)
               .order("computed_at", { ascending: false })
           : Promise.resolve({ data: [] as { field_id: string; score: number }[] }),
+        supabase.from("profiles").select("country").eq("id", user.id).maybeSingle(),
       ]);
+      const meCountry = meRes.data?.country;
+      const farmerCountry = meCountry === "GR" || meCountry === "TR" ? meCountry : null;
 
       const processorIds = [
         ...new Set([
@@ -146,13 +172,19 @@ export function useFarmerMarket(fieldIds: string[]) {
 
       const offers: MarketOffer[] = (offersRes.data ?? []).map((row) => {
         const lot = row.lots as
-          | { variety?: string; field_id?: string; fields?: { name?: string } | { name?: string }[] }
+          | {
+              status?: string;
+              variety?: string;
+              field_id?: string;
+              fields?: { name?: string } | { name?: string }[];
+            }
           | null;
         const fieldsJoin = lot?.fields;
         const fieldName = Array.isArray(fieldsJoin) ? fieldsJoin[0]?.name : fieldsJoin?.name;
         return {
           id: row.id,
           lotId: row.lot_id,
+          lotStatus: lot?.status ?? null,
           processorId: row.processor_id,
           processorName: nameByProcessor.get(row.processor_id) ?? "Buyer",
           initiatedBy: row.initiated_by === "farmer" ? "farmer" : "processor",
@@ -191,6 +223,10 @@ export function useFarmerMarket(fieldIds: string[]) {
           tons: Number(row.tons),
           pricePerKg: Number(row.price_per_kg),
           scheduledFor: row.scheduled_for ?? null,
+          actualKg: row.actual_kg == null ? null : Number(row.actual_kg),
+          labResult: (row.lab_result as LabResult | null) ?? null,
+          qualityScoreSnapshot:
+            row.quality_score_snapshot == null ? null : Number(row.quality_score_snapshot),
           fieldName: fieldName ?? null,
           processorName: nameByProcessor.get(row.processor_id) ?? null,
           lotVariety: lot?.variety ?? null,
@@ -204,18 +240,46 @@ export function useFarmerMarket(fieldIds: string[]) {
 
       const offerCountByField = new Map<string, number>();
       for (const o of offers) {
-        // Only mill bids on your public listing (Flow A) count on field cards.
+        // Only open mill bids on still-listed lots count on field cards.
         if (o.initiatedBy !== "processor") continue;
-        if (o.status !== "pending" && o.status !== "countered") continue;
+        if (o.status !== "pending") continue;
+        if (o.lotStatus !== "listed") continue;
         if (!o.fieldId) continue;
         offerCountByField.set(o.fieldId, (offerCountByField.get(o.fieldId) ?? 0) + 1);
       }
 
       const listedPriceByField = new Map<string, number>();
+      const listedTonsByField = new Map<string, number>();
+      const listedLotIdByField = new Map<string, string>();
+      const lotStatusByField = new Map<string, "listed" | "reserved" | "sold">();
+      const statusRank = { sold: 3, reserved: 2, listed: 1 } as const;
+      const listedLotsByField = new Map<string, FieldMarketCard["listedLots"]>();
+      const committedTonsByField = new Map<string, number>();
       for (const lot of lotsRes.data ?? []) {
-        if (!lot.field_id || lot.price_per_kg == null) continue;
-        if (!listedPriceByField.has(lot.field_id)) {
-          listedPriceByField.set(lot.field_id, Number(lot.price_per_kg));
+        if (!lot.field_id) continue;
+        const st = lot.status as "listed" | "reserved" | "sold";
+        const prev = lotStatusByField.get(lot.field_id);
+        if (!prev || statusRank[st] > statusRank[prev]) {
+          lotStatusByField.set(lot.field_id, st);
+        }
+        if (lot.status === "listed") {
+          const arr = listedLotsByField.get(lot.field_id) ?? [];
+          arr.push({
+            id: lot.id,
+            pricePerKg: lot.price_per_kg == null ? null : Number(lot.price_per_kg),
+            tons: lot.tons == null ? null : Number(lot.tons),
+          });
+          listedLotsByField.set(lot.field_id, arr);
+        } else if (lot.tons != null) {
+          committedTonsByField.set(
+            lot.field_id,
+            (committedTonsByField.get(lot.field_id) ?? 0) + Number(lot.tons),
+          );
+        }
+        if (lot.status === "listed" && !listedLotIdByField.has(lot.field_id)) {
+          listedLotIdByField.set(lot.field_id, lot.id);
+          if (lot.price_per_kg != null) listedPriceByField.set(lot.field_id, Number(lot.price_per_kg));
+          if (lot.tons != null) listedTonsByField.set(lot.field_id, Number(lot.tons));
         }
       }
 
@@ -225,7 +289,12 @@ export function useFarmerMarket(fieldIds: string[]) {
           fieldId: id,
           qualityScore: latestQuality.get(id) ?? null,
           listedPrice: listedPriceByField.get(id) ?? null,
+          listedTons: listedTonsByField.get(id) ?? null,
+          listedLotId: listedLotIdByField.get(id) ?? null,
           offerCount: offerCountByField.get(id) ?? 0,
+          lotStatus: lotStatusByField.get(id) ?? null,
+          listedLots: listedLotsByField.get(id) ?? [],
+          soldOrReservedTons: committedTonsByField.get(id) ?? 0,
         };
       }
 
@@ -234,6 +303,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         requests,
         deliveries,
         fieldCards,
+        farmerCountry,
         loading: false,
         error: offersRes.error?.message || requestsRes.error?.message || null,
       });
@@ -253,64 +323,46 @@ export function useFarmerMarket(fieldIds: string[]) {
   return { ...state, reload };
 }
 
-export async function acceptOffer(offerId: string): Promise<{ ok: boolean; error?: string }> {
+export async function acceptOffer(
+  offerId: string,
+  opts?: { scheduledFor?: string },
+): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
 
-  const { data: offer, error: loadError } = await supabase
-    .from("offers")
-    .select("id, lot_id, farmer_id, processor_id, tons, price_per_kg, status, delivery_in_days")
-    .eq("id", offerId)
-    .maybeSingle();
-  if (loadError || !offer) return { ok: false, error: loadError?.message ?? "notFound" };
+  const { error } = await supabase.rpc("accept_offer", {
+    p_offer_id: offerId,
+    p_scheduled_for: opts?.scheduledFor ?? null,
+    p_delivery_in_days: null,
+  });
 
-  const deliveryInDays = offer.delivery_in_days ?? 2;
-  const today = new Date();
-  const y = today.getFullYear();
-  const m = String(today.getMonth() + 1).padStart(2, "0");
-  const d = String(today.getDate()).padStart(2, "0");
-  const base = new Date(`${y}-${m}-${d}T12:00:00`);
-  base.setDate(base.getDate() + deliveryInDays);
-  const scheduledFor = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(base.getDate()).padStart(2, "0")}`;
-
-  if (offer.status !== "accepted") {
-    const { error } = await supabase
-      .from("offers")
-      .update({ status: "accepted", delivery_in_days: deliveryInDays })
-      .eq("id", offerId);
-    if (error) return { ok: false, error: error.message };
-  }
-
-  // Safety net: trigger should insert delivery; if RLS blocked it, create here.
-  const { data: existing } = await supabase
-    .from("deliveries")
-    .select("id, scheduled_for")
-    .eq("offer_id", offerId)
-    .maybeSingle();
-  if (!existing) {
-    const { error: deliveryError } = await supabase.from("deliveries").insert({
-      offer_id: offer.id,
-      lot_id: offer.lot_id,
-      farmer_id: offer.farmer_id,
-      processor_id: offer.processor_id,
-      tons: offer.tons,
-      price_per_kg: offer.price_per_kg,
-      status: "scheduled",
-      scheduled_for: scheduledFor,
-    });
-    if (deliveryError) return { ok: false, error: deliveryError.message };
-  } else if (!existing.scheduled_for) {
-    await supabase.from("deliveries").update({ scheduled_for: scheduledFor }).eq("id", existing.id);
-  }
-
+  if (error) return { ok: false, error: rpcErrorMessage(error) };
   return { ok: true };
 }
 
 export async function withdrawOffer(offerId: string): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
+
+  const { data: offer } = await supabase
+    .from("offers")
+    .select("id, lot_id, initiated_by")
+    .eq("id", offerId)
+    .maybeSingle();
+
   const { error } = await supabase.from("offers").update({ status: "withdrawn" }).eq("id", offerId);
-  return error ? { ok: false, error: error.message } : { ok: true };
+  if (error) return { ok: false, error: error.message };
+
+  // Flow B draft lots left behind when withdrawing an offer to a mill request.
+  if (offer?.initiated_by === "farmer" && offer.lot_id) {
+    await supabase
+      .from("lots")
+      .update({ status: "withdrawn" })
+      .eq("id", offer.lot_id)
+      .eq("status", "draft");
+  }
+
+  return { ok: true };
 }
 
 export async function rejectIncomingBid(offerId: string): Promise<{ ok: boolean; error?: string }> {
@@ -320,34 +372,60 @@ export async function rejectIncomingBid(offerId: string): Promise<{ ok: boolean;
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
+/** Withdraw a still-listed public lot (Flow A). */
+export async function withdrawListedLot(lotId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+
+  const { error } = await supabase
+    .from("lots")
+    .update({ status: "withdrawn" })
+    .eq("id", lotId)
+    .eq("status", "listed");
+  if (error) return { ok: false, error: error.message };
+
+  await supabase
+    .from("offers")
+    .update({ status: "withdrawn" })
+    .eq("lot_id", lotId)
+    .eq("status", "pending");
+
+  return { ok: true };
+}
+
+/** Update price/tons on a still-listed public lot. */
+export async function updateListedLot(
+  lotId: string,
+  opts: { pricePerKg: number; tons: number },
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = tryCreateBrowserClient();
+  if (!supabase) return { ok: false, error: "needSupabase" };
+  if (!(opts.pricePerKg > 0) || !(opts.tons > 0)) return { ok: false, error: "invalidTons" };
+
+  const { error } = await supabase
+    .from("lots")
+    .update({ price_per_kg: opts.pricePerKg, tons: opts.tons })
+    .eq("id", lotId)
+    .eq("status", "listed");
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
 export async function counterOffer(
   offer: MarketOffer,
   newPrice: number,
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "needLogin" };
-
-  const { error: updateError } = await supabase
-    .from("offers")
-    .update({ status: "countered" })
-    .eq("id", offer.id);
-  if (updateError) return { ok: false, error: updateError.message };
-
-  const { error: insertError } = await supabase.from("offers").insert({
-    lot_id: offer.lotId,
-    farmer_id: user.id,
-    processor_id: offer.processorId,
-    initiated_by: "farmer",
-    status: "pending",
-    tons: offer.tons,
-    price_per_kg: newPrice,
-    counter_of: offer.id,
+  if (offer.status !== "pending" || offer.lotStatus !== "listed") {
+    return { ok: false, error: "offerNotPending" };
+  }
+  if (!Number.isFinite(newPrice) || newPrice < 0.05 || newPrice > 20) {
+    return { ok: false, error: "invalidPrice" };
+  }
+  // Atomic on the server: marks the bid countered and creates exactly one counter offer.
+  const { error } = await supabase.rpc("counter_offer", {
+    p_offer_id: offer.id,
+    p_price_per_kg: newPrice,
   });
-
-  return insertError ? { ok: false, error: insertError.message } : { ok: true };
+  return error ? { ok: false, error: rpcErrorMessage(error) } : { ok: true };
 }

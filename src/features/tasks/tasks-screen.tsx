@@ -10,9 +10,11 @@ import { AddTaskForm } from "@/features/tasks/add-task-form";
 import { TaskCard } from "@/features/tasks/task-card";
 import { completeTask, dismissTask, useFarmerTasks } from "@/features/tasks/use-farmer-tasks";
 import { Link, useRouter } from "@/shared/i18n/navigation";
+import { useErrorMessage } from "@/shared/lib/error-message";
 
 export function TasksScreen() {
   const t = useTranslations("farmerTasks");
+  const errMsg = useErrorMessage();
   const router = useRouter();
   const { fields } = useFarmerFields();
   const { tasks, loading, reload, markLocalDone, removeLocal, prependLocal } = useFarmerTasks();
@@ -30,7 +32,7 @@ export function TasksScreen() {
     try {
       const result = await completeTask(taskId);
       if (!result.ok) {
-        toast.error(result.error ?? t("actionFailed"));
+        toast.error(errMsg(result.error, "actionFailed"));
         await reload();
         return;
       }
@@ -46,7 +48,7 @@ export function TasksScreen() {
     try {
       const result = await dismissTask(taskId);
       if (!result.ok) {
-        toast.error(result.error ?? t("actionFailed"));
+        toast.error(errMsg(result.error, "actionFailed"));
         await reload();
         return;
       }

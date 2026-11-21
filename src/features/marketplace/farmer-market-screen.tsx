@@ -12,36 +12,57 @@ import {
   Search,
   SlidersHorizontal,
   TrendingUp,
-  Wallet,
 } from "lucide-react";
 import { StatusSteps } from "@/shared/components/brand";
+import { varietyLabel } from "@/features/fields/olive-varieties";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
-import { euroPrice, roundPrice } from "@/features/marketplace/pricing";
+import {
+  deliveryPayableAmount,
+  deliveryPayableKg,
+  deliveryStepIndex,
+} from "@/features/marketplace/delivery-state";
+import { BottomSheet, DayChipPicker } from "@/features/marketplace/processor-kit";
+import {
+  MARKET_LIMITS,
+  formatEuro,
+  formatEuroPerKg,
+  formatTons,
+  parseBounded,
+  parseLocaleNumber,
+  saleTotal,
+} from "@/features/marketplace/pricing";
+import { formatRequestWindow, isRequestWindowExpired } from "@/features/marketplace/request-window";
+import { regionForPoint, regionLabel, requestRegions } from "@/features/marketplace/regions";
+import {
+  DEFAULT_DELIVERY_IN_DAYS,
+  addDaysIso,
+  nextSevenDays,
+  todayIsoDate,
+} from "@/features/marketplace/schedule";
 import {
   acceptOffer,
   counterOffer,
   rejectIncomingBid,
+  updateListedLot,
   useFarmerMarket,
+  withdrawListedLot,
   withdrawOffer,
   type FieldMarketCard,
   type MarketDelivery,
   type MarketOffer,
+  type MarketRequest,
 } from "@/features/marketplace/use-farmer-market";
+import { ApButton } from "@/shared/components/brand";
 import { Link, useRouter } from "@/shared/i18n/navigation";
+import type { Field } from "@/shared/types/database";
 import { FIELD_DOTS } from "@/shared/theme/tokens";
 import { cn } from "@/shared/lib/utils";
+import { useBoundsMessage, useErrorMessage } from "@/shared/lib/error-message";
 
 type Tab = "overview" | "requests" | "offers" | "sales";
-type FilterKey = "fits" | "near" | "variety" | "region";
+type FilterKey = "fits" | "near" | string;
 
 const TABS: Tab[] = ["overview", "requests", "offers", "sales"];
-
-const DELIVERY_STEP: Record<string, number> = {
-  scheduled: 0,
-  weighed: 1,
-  lab_checked: 2,
-  paid: 3,
-};
 
 function isTab(value: string | undefined): value is Tab {
   return !!value && (TABS as string[]).includes(value);
@@ -54,15 +75,141 @@ function formatDeliveryDay(iso: string | null, locale: string) {
   return d.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
 }
 
-function nextStepHint(status: string, t: ReturnType<typeof useTranslations<"farmerMarket">>) {
-  if (status === "scheduled") return t("nextPickupHint");
-  if (status === "weighed") return t("nextLabHint");
-  if (status === "lab_checked") return t("nextPaidHint");
+function groupOffersByLot(
+  offers: MarketOffer[],
+  fieldCards: Record<string, FieldMarketCard>,
+) {
+  const map = new Map<
+    string,
+    {
+      lotId: string;
+      fieldName: string | null;
+      lotVariety: string | null;
+      tons: number;
+      askPrice: number | null;
+      offers: MarketOffer[];
+      bestId: string;
+    }
+  >();
+  for (const offer of offers) {
+    const cur = map.get(offer.lotId);
+    if (!cur) {
+      const ask =
+        offer.fieldId != null ? (fieldCards[offer.fieldId]?.listedPrice ?? null) : null;
+      map.set(offer.lotId, {
+        lotId: offer.lotId,
+        fieldName: offer.fieldName,
+        lotVariety: offer.lotVariety,
+        tons: offer.tons,
+        askPrice: ask,
+        offers: [offer],
+        bestId: offer.id,
+      });
+      continue;
+    }
+    cur.offers.push(offer);
+    const best = cur.offers.reduce((a, b) => (b.pricePerKg > a.pricePerKg ? b : a));
+    cur.bestId = best.id;
+    cur.tons = Math.max(cur.tons, offer.tons);
+  }
+  return [...map.values()].map((g) => ({
+    ...g,
+    offers: [...g.offers].sort((a, b) => b.pricePerKg - a.pricePerKg),
+  }));
+}
+
+function nextStepHint(
+  delivery: MarketDelivery,
+  t: ReturnType<typeof useTranslations<"farmerMarket">>,
+) {
+  if (delivery.labResult === "failed") return t("labFailedHint");
+  if (delivery.status === "scheduled") return t("nextPickupHint");
+  if (delivery.status === "weighed") return t("nextLabHint");
+  if (delivery.status === "lab_checked") return t("nextPaidHint");
   return t("deliveryNextHint");
+}
+
+function fieldVariety(f: Field): string | null {
+  return f.variety_slug ?? f.variety ?? null;
+}
+
+type MatchCtx = {
+  fieldCards: Record<string, FieldMarketCard>;
+  country: "GR" | "TR" | null;
+};
+
+function fieldRegion(field: Field, ctx: MatchCtx) {
+  return regionForPoint(field.lat, field.lon, ctx.country);
+}
+
+/** Region rule: request without a resolvable region = anywhere; otherwise the field must sit in one of them. */
+function regionOk(req: MarketRequest, field: Field, ctx: MatchCtx): boolean {
+  const wanted = requestRegions(req.region);
+  if (!wanted.length) return true;
+  const here = fieldRegion(field, ctx);
+  return here != null && wanted.includes(here);
+}
+
+function varietyOk(req: MarketRequest, field: Field): boolean {
+  const v = fieldVariety(field)?.toLowerCase();
+  return Boolean(v && req.variety && v === req.variety.toLowerCase());
+}
+
+function scoreOk(req: MarketRequest, field: Field, ctx: MatchCtx): boolean {
+  const score = ctx.fieldCards[field.id]?.qualityScore;
+  if (req.minScore <= 0) return true;
+  return score != null && score >= req.minScore;
+}
+
+/** A field whose harvest is already sold / in delivery (and has nothing else listed) can't sell again. */
+function availableOk(field: Field, ctx: MatchCtx): boolean {
+  const card = ctx.fieldCards[field.id];
+  if (!card) return true;
+  const committed = card.lotStatus === "sold" || card.lotStatus === "reserved";
+  return !committed || card.listedLots.length > 0;
+}
+
+function requestFitsField(req: MarketRequest, field: Field, ctx: MatchCtx): boolean {
+  if (req.tons - req.filledTons <= 0) return false;
+  return varietyOk(req, field) && regionOk(req, field, ctx) && scoreOk(req, field, ctx) && availableOk(field, ctx);
+}
+
+function bestFieldForRequest(fields: Field[], ctx: MatchCtx, req: MarketRequest): Field | undefined {
+  const fitting = fields.filter((f) => requestFitsField(req, f, ctx));
+  if (!fitting.length) return undefined;
+  return fitting.reduce((best, f) => {
+    const bestScore = ctx.fieldCards[best.id]?.qualityScore ?? -1;
+    const score = ctx.fieldCards[f.id]?.qualityScore ?? -1;
+    return score > bestScore ? f : best;
+  });
+}
+
+function requestMismatchReason(
+  req: MarketRequest,
+  fields: Field[],
+  ctx: MatchCtx,
+  locale: string,
+  t: ReturnType<typeof useTranslations<"farmerMarket">>,
+): string {
+  if (!fields.length) return t("needFieldFirst");
+  if (req.tons - req.filledTons <= 0) return t("requestFilled");
+  const withVariety = fields.filter((f) => varietyOk(req, f));
+  if (!withVariety.length) return t("needVariety", { variety: varietyLabel(req.variety, locale) });
+  const inRegion = withVariety.filter((f) => regionOk(req, f, ctx));
+  if (!inRegion.length) return t("needRegion", { region: regionLabel(req.region, locale) });
+  const withScore = inRegion.filter((f) => scoreOk(req, f, ctx));
+  if (!withScore.length) {
+    const unknown = inRegion.every((f) => ctx.fieldCards[f.id]?.qualityScore == null);
+    return unknown ? t("needScoreUnknown") : t("needScore", { score: req.minScore });
+  }
+  if (!withScore.some((f) => availableOk(f, ctx))) return t("needUnsoldField");
+  return t("cannotSellHere");
 }
 
 export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const t = useTranslations("farmerMarket");
+  const errMsg = useErrorMessage();
+  const boundsMsg = useBoundsMessage();
   const tFields = useTranslations("farmerFields");
   const locale = useLocale();
   const router = useRouter();
@@ -73,24 +220,47 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     requests,
     deliveries,
     fieldCards,
+    farmerCountry,
     loading: marketLoading,
     reload,
   } = useFarmerMarket(fieldIds);
+  const matchCtx = useMemo<MatchCtx>(
+    () => ({ fieldCards, country: farmerCountry }),
+    [fieldCards, farmerCountry],
+  );
   const [tab, setTab] = useState<Tab>(isTab(initialTab) ? initialTab : "overview");
   const [filters, setFilters] = useState<FilterKey[]>(["fits"]);
   const [busyOfferId, setBusyOfferId] = useState<string | null>(null);
+  const [acceptTarget, setAcceptTarget] = useState<MarketOffer | null>(null);
+  const [acceptDate, setAcceptDate] = useState(() =>
+    addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS),
+  );
+  const weekDates = useMemo(() => nextSevenDays(), []);
+  const [counterTarget, setCounterTarget] = useState<MarketOffer | null>(null);
+  const [counterPrice, setCounterPrice] = useState("");
+  const [rejectTarget, setRejectTarget] = useState<MarketOffer | null>(null);
+  const [withdrawTarget, setWithdrawTarget] = useState<MarketOffer | null>(null);
+  const [listingTarget, setListingTarget] = useState<{
+    field: Field;
+    card: FieldMarketCard;
+  } | null>(null);
+  const [listingPrice, setListingPrice] = useState("");
+  const [listingTons, setListingTons] = useState("");
+  const [listingBusy, setListingBusy] = useState(false);
 
   const steps = useMemo(
-    () => [t("stepAgreed"), t("stepPicked"), t("stepWeighed"), t("stepLab"), t("stepPaid")],
+    () => [t("stepScheduled"), t("stepWeighed"), t("stepLab"), t("stepPaid")],
     [t],
   );
 
-  // Flow A: mill bids on your public listing — farmer can Accept/Counter.
+  // Flow A: only pending mill bids on still-listed lots are actionable.
   const incomingBids = useMemo(
     () =>
       offers.filter(
         (o) =>
-          o.initiatedBy === "processor" && (o.status === "pending" || o.status === "countered"),
+          o.initiatedBy === "processor" &&
+          o.status === "pending" &&
+          o.lotStatus === "listed",
       ),
     [offers],
   );
@@ -108,28 +278,82 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     [deliveries],
   );
   const paidDeliveries = deliveries.filter((d) => d.status === "paid");
-  const paidSeason = paidDeliveries.reduce((sum, d) => sum + d.tons * 1000 * d.pricePerKg, 0);
-  const onTheWay = activeDeliveries.reduce((sum, d) => sum + d.tons * 1000 * d.pricePerKg, 0);
+  const paidSeason = paidDeliveries.reduce(
+    (sum, d) => sum + deliveryPayableAmount(d.tons, d.pricePerKg, d.actualKg),
+    0,
+  );
+  const onTheWay = activeDeliveries
+    .filter((d) => d.labResult !== "failed")
+    .reduce((sum, d) => sum + deliveryPayableAmount(d.tons, d.pricePerKg, d.actualKg), 0);
+  const closedDeliveries = deliveries.filter((d) => d.status === "cancelled");
+
+  const regionChips = useMemo(() => {
+    // One chip per resolved region (different spellings of the same place used to give duplicate chips).
+    const byLabel = new Map<string, string>();
+    for (const r of requests) {
+      const resolved = requestRegions(r.region);
+      const keys = resolved.length ? resolved : r.region?.trim() ? [r.region.trim()] : [];
+      for (const k of keys) {
+        const label = regionLabel(k, locale);
+        if (!byLabel.has(label)) byLabel.set(label, k);
+      }
+    }
+    return [...byLabel.values()].slice(0, 6);
+  }, [requests, locale]);
 
   const filterChips: { key: FilterKey; label: string }[] = [
     { key: "fits", label: t("fits") },
     { key: "near", label: t("near") },
-    { key: "variety", label: t("ayvalik") },
-    { key: "region", label: t("aydin") },
+    ...regionChips.map((r) => ({ key: `region:${r}`, label: regionLabel(r, locale) })),
   ];
 
-  async function onAccept(offer: MarketOffer) {
-    // Only mill bids (Flow A) can be accepted by the farmer.
+  const filteredRequests = useMemo(() => {
+    let list = requests.filter((req) => !isRequestWindowExpired(req.windowLabel));
+    if (filters.includes("fits")) {
+      list = list.filter((req) => bestFieldForRequest(fields, matchCtx, req) != null);
+    }
+    const regionFilters = filters
+      .filter((f) => f.startsWith("region:"))
+      .map((f) => f.slice("region:".length).toLowerCase());
+    if (regionFilters.length) {
+      list = list.filter((req) => {
+        const resolved = requestRegions(req.region).map((x) => x.toLowerCase());
+        return regionFilters.some(
+          (r) => resolved.includes(r) || (req.region ?? "").toLowerCase().includes(r),
+        );
+      });
+    }
+    if (filters.includes("near") && fields.some((f) => f.lat != null && f.lon != null)) {
+      // Near = at least one of my fields lies in the request's region.
+      list = list.filter((req) => fields.some((f) => regionOk(req, f, matchCtx)));
+    }
+    return list;
+  }, [requests, filters, fields, matchCtx]);
+
+  function openAccept(offer: MarketOffer) {
     if (offer.initiatedBy !== "processor") return;
+    setAcceptDate(addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
+    setAcceptTarget(offer);
+  }
+
+  async function confirmAccept() {
+    const offer = acceptTarget;
+    if (!offer || offer.initiatedBy !== "processor") return;
     setBusyOfferId(offer.id);
-    toast.message(t("accepting"));
+    const toastId = toast.loading(t("accepting"));
     try {
-      const result = await acceptOffer(offer.id);
+      const result = await acceptOffer(offer.id, { scheduledFor: acceptDate });
       if (!result.ok) {
-        toast.error(result.error ?? t("actionFailed"));
+        toast.error(errMsg(result.error, "actionFailed"), { id: toastId });
         return;
       }
-      toast.success(t("acceptedOkDetail"));
+      const dateLabel = new Date(`${acceptDate}T12:00:00`).toLocaleDateString(locale, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+      toast.success(t("acceptedScheduled", { date: dateLabel }), { id: toastId });
+      setAcceptTarget(null);
       setTab("sales");
       await reload();
     } finally {
@@ -137,67 +361,147 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     }
   }
 
-  async function onRejectBid(offer: MarketOffer) {
+  function onRejectBid(offer: MarketOffer) {
     if (offer.initiatedBy !== "processor") return;
-    if (!window.confirm(t("rejectBidConfirm"))) return;
-    setBusyOfferId(offer.id);
+    setRejectTarget(offer);
+  }
+
+  async function confirmRejectBid() {
+    if (!rejectTarget) return;
+    setBusyOfferId(rejectTarget.id);
     try {
-      const result = await rejectIncomingBid(offer.id);
+      const result = await rejectIncomingBid(rejectTarget.id);
       if (!result.ok) {
-        toast.error(result.error ?? t("actionFailed"));
+        toast.error(errMsg(result.error, "actionFailed"));
         return;
       }
       toast.success(t("rejectedBidOk"));
+      setRejectTarget(null);
       await reload();
     } finally {
       setBusyOfferId(null);
     }
   }
 
-  async function onWithdraw(offer: MarketOffer) {
+  function onWithdraw(offer: MarketOffer) {
     if (offer.initiatedBy !== "farmer") return;
-    if (!window.confirm(t("withdrawOfferConfirm"))) return;
-    setBusyOfferId(offer.id);
+    setWithdrawTarget(offer);
+  }
+
+  async function confirmWithdrawOffer() {
+    if (!withdrawTarget) return;
+    setBusyOfferId(withdrawTarget.id);
     try {
-      const result = await withdrawOffer(offer.id);
+      const result = await withdrawOffer(withdrawTarget.id);
       if (!result.ok) {
-        toast.error(result.error ?? t("actionFailed"));
+        toast.error(errMsg(result.error, "actionFailed"));
         return;
       }
       toast.success(t("withdrawnOk"));
+      setWithdrawTarget(null);
       await reload();
     } finally {
       setBusyOfferId(null);
     }
   }
 
-  async function onCounter(offer: MarketOffer) {
-    if (offer.initiatedBy !== "processor") return;
-    const suggested = roundPrice(offer.pricePerKg + 0.05);
-    const raw = window.prompt(t("counterPrompt"), String(suggested));
-    if (raw == null) {
-      toast.message(t("counterCancelled"));
+  function openListing(field: Field, card: FieldMarketCard) {
+    if (!card.listedLotId || card.lotStatus !== "listed") return;
+    setListingTarget({ field, card });
+    setListingPrice(
+      card.listedPrice != null ? card.listedPrice.toFixed(2).replace(".", ",") : "",
+    );
+    setListingTons(card.listedTons != null ? String(card.listedTons).replace(".", ",") : "");
+  }
+
+  async function confirmSaveListing() {
+    if (!listingTarget?.card.listedLotId) return;
+    const pc = parseBounded(listingPrice, MARKET_LIMITS.pricePerKg);
+    const tc = parseBounded(listingTons, MARKET_LIMITS.lotTons);
+    if (!pc.ok) {
+      toast.error(boundsMsg(pc, "price", locale));
       return;
     }
-    const price = Number(raw.replace(",", "."));
-    if (!Number.isFinite(price) || price <= 0) {
-      toast.error(t("invalidPrice"));
+    if (!tc.ok) {
+      toast.error(boundsMsg(tc, "tons", locale));
       return;
     }
-    setBusyOfferId(offer.id);
-    toast.message(t("countering"));
+    const price = pc.value;
+    const tons = tc.value;
+    setListingBusy(true);
     try {
-      const result = await counterOffer(offer, roundPrice(price));
+      const result = await updateListedLot(listingTarget.card.listedLotId, {
+        pricePerKg: price,
+        tons,
+      });
       if (!result.ok) {
-        toast.error(result.error ?? t("actionFailed"));
+        toast.error(result.error === "invalidTons" ? t("invalidTons") : (errMsg(result.error, "actionFailed")));
         return;
       }
-      toast.success(t("counteredOkDetail"));
+      toast.success(t("listingSavedOk"));
+      setListingTarget(null);
+      await reload();
+    } finally {
+      setListingBusy(false);
+    }
+  }
+
+  async function confirmWithdrawListing() {
+    if (!listingTarget?.card.listedLotId) return;
+    setListingBusy(true);
+    try {
+      const result = await withdrawListedLot(listingTarget.card.listedLotId);
+      if (!result.ok) {
+        toast.error(errMsg(result.error, "actionFailed"));
+        return;
+      }
+      toast.success(t("listingWithdrawnOk"));
+      setListingTarget(null);
+      await reload();
+    } finally {
+      setListingBusy(false);
+    }
+  }
+
+  function openCounter(offer: MarketOffer) {
+    if (offer.initiatedBy !== "processor" || offer.status !== "pending") return;
+    setCounterTarget(offer);
+    setCounterPrice((offer.pricePerKg + 0.01).toFixed(2).replace(".", ","));
+  }
+
+  async function confirmCounter() {
+    const offer = counterTarget;
+    if (!offer) return;
+    const pc = parseBounded(counterPrice, MARKET_LIMITS.pricePerKg);
+    if (!pc.ok) {
+      toast.error(boundsMsg(pc, "price", locale));
+      return;
+    }
+    const price = pc.value;
+    setBusyOfferId(offer.id);
+    const toastId = toast.loading(t("countering"));
+    try {
+      // Use the exact price the farmer typed — no silent 0.05 rounding.
+      const result = await counterOffer(offer, Math.round(price * 100) / 100);
+      if (!result.ok) {
+        toast.error(errMsg(result.error, "actionFailed"), { id: toastId });
+        return;
+      }
+      toast.success(t("counteredOkDetail"), { id: toastId });
+      setCounterTarget(null);
       await reload();
     } finally {
       setBusyOfferId(null);
     }
   }
+
+  const counterTotal =
+    counterTarget != null
+      ? (() => {
+          const pc = parseBounded(counterPrice, MARKET_LIMITS.pricePerKg);
+          return pc.ok ? saleTotal(counterTarget.tons, pc.value) : null;
+        })()
+      : null;
 
   return (
     <div className="w-full flex-1">
@@ -207,7 +511,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
           type="button"
           aria-label={t("search")}
           onClick={() => toast(t("searchSoon"))}
-          className="flex size-10 items-center justify-center rounded-full border border-line bg-card"
+          className="flex size-11 items-center justify-center rounded-full border border-line bg-card"
         >
           <Search className="size-[18px]" />
         </button>
@@ -215,7 +519,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
 
       <div
         role="tablist"
-        className="mt-3 flex h-10 gap-1 overflow-x-auto rounded-full bg-soft p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="mt-3 flex min-h-11 gap-1 overflow-x-auto rounded-full bg-soft p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {TABS.map((id) => {
           const on = tab === id;
@@ -227,13 +531,13 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               aria-selected={on}
               onClick={() => setTab(id)}
               className={cn(
-                "relative flex min-w-[72px] flex-1 items-center justify-center gap-1 rounded-full px-2 text-ap-pill font-bold whitespace-nowrap",
+                "relative flex min-h-11 min-w-[72px] flex-1 items-center justify-center gap-1 rounded-full px-2 text-ap-pill font-bold whitespace-nowrap",
                 on ? "bg-ink text-white" : "text-muted-foreground",
               )}
             >
               {t(id)}
               {id === "offers" && incomingBids.length > 0 ? (
-                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-risk px-1 text-[10px] leading-none font-bold text-white">
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-risk px-1 text-[12px] leading-none font-bold text-white">
                   {incomingBids.length}
                 </span>
               ) : null}
@@ -263,13 +567,14 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
             <OfferCard
               offer={bestOffer}
               busy={busyOfferId === bestOffer.id}
+              locale={locale}
               counter={t("counter")}
               accept={t("accept")}
               reject={t("reject")}
               perKg={t("perKg")}
               acceptClass="bg-ink"
-              onAccept={() => void onAccept(bestOffer)}
-              onCounter={() => void onCounter(bestOffer)}
+              onAccept={() => openAccept(bestOffer)}
+              onCounter={() => openCounter(bestOffer)}
               onReject={() => void onRejectBid(bestOffer)}
             />
           ) : (
@@ -299,6 +604,8 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
             <div className="mt-2 grid grid-cols-2 gap-2">
               {fields.map((field, i) => {
                 const card = fieldCards[field.id];
+                const listed = card?.listedLots ?? [];
+                const committed = card?.lotStatus === "sold" || card?.lotStatus === "reserved";
                 return (
                   <div key={field.id} className="rounded-[18px] border border-line bg-card p-3">
                     <div className="flex items-start justify-between gap-1">
@@ -313,22 +620,58 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                         {card?.qualityScore ?? "—"}
                       </span>
                     </div>
-                    <p className="mt-2 text-ap-card text-ink">
-                      {card?.listedPrice != null ? euroPrice(card.listedPrice) : "—"}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">{t("perKg")}</p>
-                    {card && card.offerCount > 0 ? (
-                      <p className="mt-1 text-ap-small font-semibold text-good">
-                        {t("offersCount", { n: card.offerCount })}
+                    {committed ? (
+                      <p className="mt-2 text-ap-small font-bold text-ap-accent">
+                        {card?.lotStatus === "sold" ? t("fieldSold") : t("fieldInDelivery")}
                       </p>
                     ) : null}
-                    <Link
-                      href={`/farmer/market/new?field=${field.id}`}
-                      className="mt-1 inline-flex h-6 items-center text-ap-body font-bold text-ink"
-                    >
-                      {t("listNow")}
-                      <ChevronRight className="size-3.5" />
-                    </Link>
+                    {listed.length > 0 && card ? (
+                      <>
+                        <p className="mt-2 text-ap-small font-bold text-good">{t("fieldListed")}</p>
+                        {listed.map((lot) => (
+                          <div key={lot.id}>
+                            <p className="mt-1 text-ap-card text-ink">
+                              {lot.pricePerKg != null ? formatEuroPerKg(lot.pricePerKg, locale) : "—"}
+                              {lot.tons != null ? ` · ${formatTons(lot.tons, locale)}` : ""}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openListing(field, {
+                                  ...card,
+                                  lotStatus: "listed",
+                                  listedLotId: lot.id,
+                                  listedPrice: lot.pricePerKg,
+                                  listedTons: lot.tons,
+                                })
+                              }
+                              className="inline-flex min-h-11 items-center text-ap-body font-bold text-ink"
+                            >
+                              {t("manageListing")}
+                              <ChevronRight className="size-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                        {card.offerCount > 0 ? (
+                          <p className="mt-1 text-ap-small font-semibold text-good">
+                            {t("offersCount", { n: card.offerCount })}
+                          </p>
+                        ) : null}
+                      </>
+                    ) : !committed ? (
+                      <>
+                        <p className="mt-2 text-ap-small font-semibold text-muted-foreground">
+                          {t("fieldNotListed")}
+                        </p>
+                        <Link
+                          href={`/farmer/market/new?field=${field.id}`}
+                          className="mt-1 inline-flex min-h-11 items-center text-ap-body font-bold text-ink"
+                        >
+                          {t("listNow")}
+                          <ChevronRight className="size-3.5" />
+                        </Link>
+                      </>
+                    ) : null}
                   </div>
                 );
               })}
@@ -345,20 +688,30 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               {requests.slice(0, 3).map((req) => (
                 <RequestCard
                   key={req.id}
-                  millName={req.processorName}
-                  variety={req.variety}
-                  tons={req.tons}
-                  filledTons={req.filledTons}
-                  minScore={req.minScore}
-                  region={req.region}
-                  windowLabel={req.windowLabel}
+                  req={req}
+                  locale={locale}
+                  fitField={bestFieldForRequest(fields, matchCtx, req)}
+                  fitScore={
+                    (() => {
+                      const f = bestFieldForRequest(fields, matchCtx, req);
+                      return f ? fieldCards[f.id]?.qualityScore ?? null : null;
+                    })()
+                  }
+                  mismatch={requestMismatchReason(req, fields, matchCtx, locale, t)}
                   offerLabel={t("offer")}
                   canSellLabel={t("canSellHere")}
-                  filledOf={t("filledOf", { filled: req.filledTons, total: req.tons })}
+                  filledOf={t("filledOf", {
+                    filled: formatTons(req.filledTons, locale).replace(" t", ""),
+                    total: formatTons(req.tons, locale).replace(" t", ""),
+                  })}
                   onOffer={() => {
-                    const field = bestFieldForRequest(fields, fieldCards, req.minScore);
+                    const field = bestFieldForRequest(fields, matchCtx, req);
+                    if (!field) {
+                      toast.message(requestMismatchReason(req, fields, matchCtx, locale, t));
+                      return;
+                    }
                     const qs = new URLSearchParams();
-                    if (field) qs.set("field", field);
+                    qs.set("field", field.id);
                     qs.set("factory", req.processorId);
                     qs.set("request", req.id);
                     router.push(`/farmer/market/new?${qs.toString()}`);
@@ -393,7 +746,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                     setFilters((prev) => (on ? prev.filter((k) => k !== chip.key) : [...prev, chip.key]))
                   }
                   className={cn(
-                    "inline-flex h-[30px] shrink-0 items-center gap-1 rounded-full border px-3 text-ap-pill font-bold",
+                    "inline-flex h-11 shrink-0 items-center gap-1 rounded-full border px-3 text-ap-pill font-bold",
                     on ? "border-good bg-good-soft text-good" : "border-line bg-card text-ink",
                   )}
                 >
@@ -406,34 +759,44 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               type="button"
               aria-label={t("filters")}
               onClick={() => setFilters([])}
-              className="flex size-[30px] shrink-0 items-center justify-center rounded-full border border-line bg-card"
+              className="flex size-11 shrink-0 items-center justify-center rounded-full border border-line bg-card"
             >
               <SlidersHorizontal className="size-3.5" />
             </button>
           </div>
 
-          {requests.length === 0 ? (
+          {filteredRequests.length === 0 ? (
             <div className="rounded-[18px] border border-line bg-card px-4 py-10 text-center text-ap-body font-semibold text-muted-foreground">
               {t("noBuyerRequests")}
             </div>
           ) : (
-            requests.map((req) => (
+            filteredRequests.map((req) => (
               <RequestCard
                 key={req.id}
-                millName={req.processorName}
-                variety={req.variety}
-                tons={req.tons}
-                filledTons={req.filledTons}
-                minScore={req.minScore}
-                region={req.region}
-                windowLabel={req.windowLabel}
+                req={req}
+                locale={locale}
+                fitField={bestFieldForRequest(fields, matchCtx, req)}
+                fitScore={
+                  (() => {
+                    const f = bestFieldForRequest(fields, matchCtx, req);
+                    return f ? fieldCards[f.id]?.qualityScore ?? null : null;
+                  })()
+                }
+                mismatch={requestMismatchReason(req, fields, matchCtx, locale, t)}
                 offerLabel={t("offer")}
                 canSellLabel={t("canSellHere")}
-                filledOf={t("filledOf", { filled: req.filledTons, total: req.tons })}
+                filledOf={t("filledOf", {
+                  filled: formatTons(req.filledTons, locale).replace(" t", ""),
+                  total: formatTons(req.tons, locale).replace(" t", ""),
+                })}
                 onOffer={() => {
-                  const field = bestFieldForRequest(fields, fieldCards, req.minScore);
+                  const field = bestFieldForRequest(fields, matchCtx, req);
+                  if (!field) {
+                    toast.message(requestMismatchReason(req, fields, matchCtx, locale, t));
+                    return;
+                  }
                   const qs = new URLSearchParams();
-                  if (field) qs.set("field", field);
+                  qs.set("field", field.id);
                   qs.set("factory", req.processorId);
                   qs.set("request", req.id);
                   router.push(`/farmer/market/new?${qs.toString()}`);
@@ -447,24 +810,30 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
       {tab === "offers" ? (
         <div className="mt-4 space-y-3">
           {marketLoading ? (
-            <div className="rounded-[18px] border border-line bg-card p-4 text-ap-small font-semibold text-muted-foreground">
-              {t("loadingMarket")}
+            <div className="space-y-2">
+              <div className="h-24 animate-pulse rounded-[18px] bg-soft" />
+              <div className="h-24 animate-pulse rounded-[18px] bg-soft" />
+            </div>
+          ) : incomingBids.length === 0 && sentOffers.length === 0 && activeDeliveries.length === 0 ? (
+            <div className="rounded-[18px] border border-line bg-card p-4 text-center">
+              <p className="text-ap-body font-semibold text-ink">{t("noIncomingOffersTitle")}</p>
+              <p className="mt-1 text-ap-small text-muted-foreground">{t("noOffersAnyHint")}</p>
+              <Link
+                href="/farmer/market/new"
+                className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-5 text-ap-btn font-bold text-white"
+              >
+                {t("listNow")}
+              </Link>
             </div>
           ) : null}
 
-          <SectionTitle>{t("activeDeliveriesTitle")}</SectionTitle>
+          {!marketLoading && activeDeliveries.length > 0 ? (
+            <>
+              <SectionTitle>{t("activeDeliveriesTitle")}</SectionTitle>
           <p className="text-ap-small text-muted-foreground">
             {t("activeDeliveriesHint", { count: activeDeliveries.length })}
           </p>
-          {activeDeliveries.length === 0 ? (
-            <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
-              <p className="text-ap-small font-semibold text-ink">{t("noActiveSalesTitle")}</p>
-              <p className="mt-1 text-ap-small text-muted-foreground">{t("noActiveSales")}</p>
-              <div className="mt-3 opacity-40">
-                <StatusSteps steps={steps} current={-1} />
-              </div>
-            </div>
-          ) : (
+          {(
             <div className="mt-2 space-y-2">
               {activeDeliveries.map((d) => (
                 <ActiveDeliveryCard
@@ -475,53 +844,95 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   youllGet={t("youllGet")}
                   inProgress={t("inProgress")}
                   unscheduled={t("unscheduledShort")}
-                  nextHint={nextStepHint(d.status, t)}
+                  nextHint={nextStepHint(d, t)}
                   pickupOn={t("pickupOn")}
-                  tonsLabel={t("tonsShort", { n: d.tons })}
+                  tonsLabel={formatTons(d.tons, locale)}
                   labPending={t("labPending")}
                   labPendingHint={t("labPendingHint")}
+                  labFailed={t("labFailedTitle")}
+                  labFailedHint={t("labFailedHint")}
+                  weighedLabel={t("weighedKg")}
+                  notPayable={t("notPayable")}
                 />
               ))}
             </div>
           )}
 
-          <SectionTitle>{t("offersForField")}</SectionTitle>
+            </>
+          ) : null}
+
+          {!marketLoading && incomingBids.length > 0 ? (
+            <>
+              <SectionTitle>{t("offersForField")}</SectionTitle>
           <p className="text-ap-small text-muted-foreground">{t("incomingBidsHint")}</p>
-          {incomingBids.length === 0 ? (
-            <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
-              <p className="text-ap-small font-semibold text-ink">{t("noIncomingOffersTitle")}</p>
-              <p className="mt-1 text-ap-small text-muted-foreground">{t("noIncomingOffers")}</p>
-            </div>
-          ) : (
-            incomingBids.map((offer) => (
-              <OfferCard
-                key={offer.id}
-                offer={offer}
-                busy={busyOfferId === offer.id}
-                counter={t("counter")}
-                accept={t("accept")}
-                reject={t("reject")}
-                perKg={t("perKg")}
-                acceptClass="bg-good"
-                onAccept={() => void onAccept(offer)}
-                onCounter={() => void onCounter(offer)}
-                onReject={() => void onRejectBid(offer)}
-              />
+          {(
+            groupOffersByLot(incomingBids, fieldCards).map((group) => (
+              <div key={group.lotId} className="mt-2 rounded-[18px] border border-line bg-card p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-ap-card text-ink">
+                      {group.fieldName ?? group.lotVariety ?? "—"}
+                    </p>
+                    <p className="text-ap-small text-muted-foreground">
+                      {formatTons(group.tons, locale)}
+                      {group.askPrice != null
+                        ? ` · ${t("asking", { price: formatEuroPerKg(group.askPrice, locale) })}`
+                        : null}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-soft px-2.5 py-1 text-ap-small font-bold text-ink">
+                    {t("bidsCount", { n: group.offers.length })}
+                  </span>
+                </div>
+                {group.offers.map((offer) => {
+                  const isBest = offer.id === group.bestId;
+                  const delta =
+                    group.askPrice != null ? offer.pricePerKg - group.askPrice : null;
+                  return (
+                    <OfferCard
+                      key={offer.id}
+                      offer={offer}
+                      busy={busyOfferId === offer.id}
+                      locale={locale}
+                      counter={t("counter")}
+                      accept={t("accept")}
+                      reject={t("reject")}
+                      perKg={t("perKg")}
+                      acceptClass="bg-good"
+                      bestLabel={isBest ? t("bestBid") : null}
+                      deltaLabel={
+                        delta == null
+                          ? null
+                          : delta === 0
+                            ? t("deltaZero")
+                            : t(delta > 0 ? "deltaUp" : "deltaDown", {
+                                price: formatEuroPerKg(Math.abs(delta), locale),
+                              })
+                      }
+                      nested
+                      onAccept={() => openAccept(offer)}
+                      onCounter={() => openCounter(offer)}
+                      onReject={() => void onRejectBid(offer)}
+                    />
+                  );
+                })}
+              </div>
             ))
           )}
 
-          <SectionTitle>{t("yourSentOffers")}</SectionTitle>
+            </>
+          ) : null}
+
+          {!marketLoading && sentOffers.length > 0 ? (
+            <>
+              <SectionTitle>{t("yourSentOffers")}</SectionTitle>
           <p className="text-ap-small text-muted-foreground">{t("sentOffersHint")}</p>
-          {sentOffers.length === 0 ? (
-            <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
-              <p className="text-ap-small font-semibold text-ink">{t("noSentOffersTitle")}</p>
-              <p className="mt-1 text-ap-small text-muted-foreground">{t("noSentOffers")}</p>
-            </div>
-          ) : (
+          {(
             sentOffers.map((offer) => (
               <SentOfferCard
                 key={offer.id}
                 offer={offer}
+                locale={locale}
                 perKg={t("perKg")}
                 waiting={t("waitingMill")}
                 withdraw={t("withdraw")}
@@ -530,43 +941,41 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               />
             ))
           )}
+            </>
+          ) : null}
         </div>
       ) : null}
 
       {tab === "sales" ? (
         <div className="mt-4">
-          <div className="flex items-center rounded-[18px] border border-line bg-card p-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-ap-body text-muted-foreground">{t("paidSeason")}</p>
-              <p className="text-ap-title text-ink">{euroPrice(paidSeason)}</p>
+          {marketLoading ? (
+            <div className="h-20 animate-pulse rounded-[18px] bg-soft" />
+          ) : (
+            <div className="grid grid-cols-2 gap-2 rounded-[18px] border border-line bg-card p-3">
+              <div className="min-w-0">
+                <p className="text-ap-body text-muted-foreground">{t("paidSeason")}</p>
+                <p className="text-ap-title text-ink">{formatEuro(paidSeason, locale)}</p>
+              </div>
+              <div className="min-w-0 text-right">
+                <p className="text-ap-body text-muted-foreground">{t("onTheWay")}</p>
+                <p className="text-ap-title text-good">{formatEuro(onTheWay, locale)}</p>
+              </div>
             </div>
-            <div className="mx-3 h-9 w-px bg-line" />
-            <div className="min-w-0 flex-1">
-              <p className="text-ap-body text-muted-foreground">{t("onTheWay")}</p>
-              <p className="text-ap-title text-good">{euroPrice(onTheWay)}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => toast(t("walletSoon"))}
-              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-ink px-3 text-ap-btn font-bold text-ink"
-            >
-              <Wallet className="size-4" />
-              {t("wallet")}
-            </button>
-          </div>
+          )}
 
           <SectionTitle>{t("inProgress")}</SectionTitle>
           <p className="text-ap-small text-muted-foreground">
             {t("activeDeliveriesHint", { count: activeDeliveries.length })}
           </p>
-          {activeDeliveries.length === 0 ? (
+          {!marketLoading && activeDeliveries.length === 0 ? (
             <div className="mt-2 rounded-[18px] border border-line bg-card p-4">
               <p className="text-center text-ap-body font-semibold text-muted-foreground">{t("nothingOnTheWay")}</p>
               <div className="mt-4 opacity-40">
                 <StatusSteps steps={steps} current={-1} />
               </div>
             </div>
-          ) : (
+          ) : null}
+          {activeDeliveries.length > 0 ? (
             <div className="mt-2 space-y-2">
               {activeDeliveries.map((d) => (
                 <ActiveDeliveryCard
@@ -577,15 +986,41 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   youllGet={t("youllGet")}
                   inProgress={t("inProgress")}
                   unscheduled={t("unscheduledShort")}
-                  nextHint={nextStepHint(d.status, t)}
+                  nextHint={nextStepHint(d, t)}
                   pickupOn={t("pickupOn")}
-                  tonsLabel={t("tonsShort", { n: d.tons })}
+                  tonsLabel={formatTons(d.tons, locale)}
                   labPending={t("labPending")}
                   labPendingHint={t("labPendingHint")}
+                  labFailed={t("labFailedTitle")}
+                  labFailedHint={t("labFailedHint")}
+                  weighedLabel={t("weighedKg")}
+                  notPayable={t("notPayable")}
                 />
               ))}
             </div>
-          )}
+          ) : null}
+          {closedDeliveries.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              {closedDeliveries.map((d) => (
+                <div key={d.id} className="rounded-[18px] border border-line bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-ap-card font-extrabold text-ink">{d.fieldName ?? "—"}</p>
+                      <p className="text-ap-body text-muted-foreground">
+                        {d.processorName ?? "—"} · {formatTons(d.tons, locale)}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-risk-soft px-2.5 py-1 text-ap-small font-bold text-risk">
+                      {d.labResult === "failed" ? t("closedLabFailed") : t("closedCancelled")}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-ap-small text-muted-foreground">
+                    {d.labResult === "failed" ? t("closedLabFailedHint") : t("closedCancelledHint")}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           <div className="mt-4 flex items-baseline justify-between">
             <h2 className="text-[17px] font-extrabold text-ink">{t("completed")}</h2>
@@ -600,7 +1035,8 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                 <div key={d.id} className="rounded-[18px] border border-line bg-card p-3">
                   <p className="text-ap-card font-extrabold text-ink">{d.fieldName ?? "—"}</p>
                   <p className="text-ap-body text-muted-foreground">
-                    {euroPrice(d.tons * 1000 * d.pricePerKg)} · {d.processorName ?? "—"}
+                    {formatEuro(deliveryPayableAmount(d.tons, d.pricePerKg, d.actualKg), locale)} ·{" "}
+                    {d.processorName ?? "—"}
                   </p>
                 </div>
               ))}
@@ -608,6 +1044,197 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
           )}
         </div>
       ) : null}
+
+      <BottomSheet
+        open={acceptTarget != null}
+        onClose={() => setAcceptTarget(null)}
+        title={t("confirmSaleTitle")}
+        actionLabel={t("confirmSale")}
+        onAction={() => confirmAccept()}
+      >
+        {acceptTarget ? (
+          <div className="space-y-3">
+            <p className="text-ap-body text-muted-foreground">{acceptTarget.processorName}</p>
+            <p className="text-ap-card font-extrabold text-ink">
+              {formatTons(acceptTarget.tons, locale)} × {formatEuroPerKg(acceptTarget.pricePerKg, locale)}
+            </p>
+            <p className="text-[22px] font-extrabold text-ink">
+              {formatEuro(acceptTarget.tons * 1000 * acceptTarget.pricePerKg, locale)}
+            </p>
+            <DayChipPicker
+              label={t("arriveOn")}
+              days={weekDates}
+              value={acceptDate}
+              onChange={setAcceptDate}
+              formatDay={(iso) =>
+                new Date(`${iso}T12:00:00`).toLocaleDateString(locale, {
+                  weekday: "short",
+                  day: "numeric",
+                })
+              }
+              todayLabel={t("todayShort")}
+            />
+            <p className="text-ap-small text-muted-foreground">{t("confirmSaleHint")}</p>
+          </div>
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet
+        open={counterTarget != null}
+        onClose={() => setCounterTarget(null)}
+        title={t("counter")}
+        actionLabel={t("sendCounter")}
+        onAction={() => confirmCounter()}
+      >
+        {counterTarget ? (
+          <div className="space-y-3">
+            <p className="text-ap-body text-muted-foreground">
+              {counterTarget.processorName} · {formatTons(counterTarget.tons, locale)}
+            </p>
+            <label className="block">
+              <span className="text-ap-small font-bold text-muted-foreground">{t("yourPricePerKg")}</span>
+              <div className="mt-1 flex items-center gap-2">
+                <button
+                  type="button"
+                  className="flex size-11 items-center justify-center rounded-full border border-line"
+                  onClick={() => {
+                    const n = parseLocaleNumber(counterPrice) ?? 0;
+                    const next = Math.max(MARKET_LIMITS.pricePerKg.min, Math.round((n - 0.01) * 100) / 100);
+                    setCounterPrice(next.toFixed(2).replace(".", ","));
+                  }}
+                >
+                  −
+                </button>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={counterPrice}
+                  onChange={(e) => setCounterPrice(e.target.value)}
+                  className="h-11 flex-1 rounded-xl border border-line bg-card px-3 text-center text-ap-card font-extrabold text-ink"
+                />
+                <button
+                  type="button"
+                  className="flex size-11 items-center justify-center rounded-full border border-line"
+                  onClick={() => {
+                    const n = parseLocaleNumber(counterPrice) ?? 0;
+                    const next = Math.min(MARKET_LIMITS.pricePerKg.max, Math.round((n + 0.01) * 100) / 100);
+                    setCounterPrice(next.toFixed(2).replace(".", ","));
+                  }}
+                >
+                  +
+                </button>
+              </div>
+            </label>
+            {(() => {
+              const pc = parseBounded(counterPrice, MARKET_LIMITS.pricePerKg);
+              return counterPrice.trim() && !pc.ok ? (
+                <p className="text-ap-small font-semibold text-risk" role="alert">
+                  {boundsMsg(pc, "price", locale)}
+                </p>
+              ) : null;
+            })()}
+            {counterTotal != null ? (
+              <p className="text-ap-body font-semibold text-ink">
+                {t("counterTotal", {
+                  tons: formatTons(counterTarget.tons, locale),
+                  total: formatEuro(counterTotal, locale),
+                })}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet
+        open={rejectTarget != null}
+        onClose={() => setRejectTarget(null)}
+        title={t("reject")}
+        actionLabel={t("reject")}
+        onAction={() => confirmRejectBid()}
+      >
+        {rejectTarget ? (
+          <div className="space-y-2">
+            <p className="text-ap-body text-muted-foreground">{rejectTarget.processorName}</p>
+            <p className="text-ap-card font-extrabold text-ink">
+              {formatTons(rejectTarget.tons, locale)} × {formatEuroPerKg(rejectTarget.pricePerKg, locale)}
+            </p>
+            <p className="text-ap-small text-muted-foreground">{t("rejectBidConfirm")}</p>
+          </div>
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet
+        open={withdrawTarget != null}
+        onClose={() => setWithdrawTarget(null)}
+        title={t("withdraw")}
+        actionLabel={t("withdraw")}
+        onAction={() => confirmWithdrawOffer()}
+      >
+        {withdrawTarget ? (
+          <div className="space-y-2">
+            <p className="text-ap-body text-muted-foreground">{withdrawTarget.processorName}</p>
+            <p className="text-ap-card font-extrabold text-ink">
+              {formatTons(withdrawTarget.tons, locale)} × {formatEuroPerKg(withdrawTarget.pricePerKg, locale)}
+            </p>
+            <p className="text-ap-small text-muted-foreground">{t("withdrawOfferConfirm")}</p>
+          </div>
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet
+        open={listingTarget != null}
+        onClose={() => {
+          if (!listingBusy) setListingTarget(null);
+        }}
+        title={t("myListing")}
+        footer={
+          listingTarget ? (
+            <div className="flex flex-col gap-2">
+              <ApButton
+                label={t("saveListing")}
+                variant="dark"
+                className="w-full"
+                disabled={listingBusy}
+                onClick={() => void confirmSaveListing()}
+              />
+              <ApButton
+                label={t("withdrawListing")}
+                variant="risk"
+                className="w-full"
+                disabled={listingBusy}
+                onClick={() => void confirmWithdrawListing()}
+              />
+            </div>
+          ) : null
+        }
+      >
+        {listingTarget ? (
+          <div className="space-y-3">
+            <p className="text-ap-body font-semibold text-ink">{listingTarget.field.name}</p>
+            <p className="text-ap-small text-muted-foreground">{t("withdrawListingConfirm")}</p>
+            <label className="block">
+              <span className="text-ap-small font-bold text-muted-foreground">{t("yourPrice")}</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={listingPrice}
+                onChange={(e) => setListingPrice(e.target.value)}
+                className="mt-1 h-11 w-full rounded-xl border border-line bg-card px-3 text-ap-card font-extrabold text-ink"
+              />
+            </label>
+            <label className="block">
+              <span className="text-ap-small font-bold text-muted-foreground">{t("tons")}</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={listingTons}
+                onChange={(e) => setListingTons(e.target.value)}
+                className="mt-1 h-11 w-full rounded-xl border border-line bg-card px-3 text-ap-card font-extrabold text-ink"
+              />
+            </label>
+          </div>
+        ) : null}
+      </BottomSheet>
     </div>
   );
 }
@@ -628,6 +1255,10 @@ function ActiveDeliveryCard({
   tonsLabel,
   labPending,
   labPendingHint,
+  labFailed,
+  labFailedHint,
+  weighedLabel,
+  notPayable,
 }: {
   delivery: MarketDelivery;
   steps: string[];
@@ -640,37 +1271,78 @@ function ActiveDeliveryCard({
   tonsLabel: string;
   labPending: string;
   labPendingHint: string;
+  labFailed: string;
+  labFailedHint: string;
+  weighedLabel: string;
+  notPayable: string;
 }) {
   const when = formatDeliveryDay(delivery.scheduledFor, locale);
+  const payableKg = deliveryPayableKg(delivery.tons, delivery.actualKg);
+  const amount = deliveryPayableAmount(delivery.tons, delivery.pricePerKg, delivery.actualKg);
+  const contractedKg = delivery.tons * 1000;
+  const delta = delivery.actualKg != null ? delivery.actualKg - contractedKg : null;
   const meta = [
     when ? `${pickupOn} ${when}` : unscheduled,
     tonsLabel,
-    delivery.lotVariety,
+    delivery.lotVariety ? varietyLabel(delivery.lotVariety, locale) : null,
   ]
     .filter(Boolean)
     .join(" · ");
+  const failed = delivery.labResult === "failed";
+  const step = deliveryStepIndex(delivery.status as "scheduled" | "weighed" | "lab_checked" | "paid");
+  const stepCaptions = [
+    when,
+    delivery.actualKg != null ? `${new Intl.NumberFormat(locale).format(payableKg)} kg` : null,
+    delivery.labResult === "passed" ? "✓" : delivery.labResult === "failed" ? "✗" : null,
+    delivery.status === "paid" ? formatEuro(amount, locale) : null,
+  ];
 
   return (
-    <div className="rounded-[18px] border border-line bg-card p-3">
+    <div className={cn("rounded-[18px] border bg-card p-3", failed ? "border-risk" : "border-line")}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-bold tracking-[1px] text-ap-accent uppercase">{inProgress}</p>
+          <p className="text-ap-small font-bold text-ap-accent">{inProgress}</p>
           <p className="text-ap-card text-ink">{delivery.fieldName ?? "—"}</p>
           <p className="text-ap-body text-muted-foreground">{delivery.processorName ?? "—"}</p>
           <p className="mt-1 text-ap-small font-semibold text-ink">{meta}</p>
+          {delivery.actualKg != null ? (
+            <p className="mt-1 text-ap-small text-muted-foreground">
+              {weighedLabel
+                .replace("{kg}", new Intl.NumberFormat(locale).format(payableKg))
+                .replace(
+                  "{delta}",
+                  delta == null
+                    ? ""
+                    : `(${delta >= 0 ? "+" : "−"}${new Intl.NumberFormat(locale).format(Math.abs(delta))} kg)`,
+                )}
+            </p>
+          ) : null}
         </div>
         <div className="text-right">
-          <p className="text-[22px] font-extrabold text-ink">
-            {euroPrice(delivery.tons * 1000 * delivery.pricePerKg)}
+          <p className={cn("text-[22px] font-extrabold", failed ? "text-muted-foreground line-through" : "text-ink")}>
+            {formatEuro(amount, locale)}
           </p>
-          <p className="text-ap-small text-muted-foreground">{youllGet}</p>
+          <p className="text-ap-small text-muted-foreground">{failed ? notPayable : youllGet}</p>
         </div>
       </div>
       <div className="mt-3">
-        <StatusSteps steps={steps} current={DELIVERY_STEP[delivery.status] ?? 0} />
+        <StatusSteps
+          steps={steps}
+          current={failed ? 2 : step < 0 ? 0 : step}
+          failedAt={failed ? 2 : undefined}
+          captions={stepCaptions}
+        />
       </div>
-      <p className="mt-2 text-ap-small font-semibold text-muted-foreground">{nextHint}</p>
-      {delivery.status === "scheduled" || delivery.status === "weighed" ? (
+      {failed ? null : <p className="mt-2 text-ap-small font-semibold text-muted-foreground">{nextHint}</p>}
+      {failed ? (
+        <div className="mt-2 flex items-center gap-2.5 rounded-xl bg-risk/10 p-2.5">
+          <FlaskConical className="size-5 shrink-0 text-risk" />
+          <div>
+            <p className="text-ap-body font-bold text-risk">{labFailed}</p>
+            <p className="text-ap-small text-muted-foreground">{labFailedHint}</p>
+          </div>
+        </div>
+      ) : delivery.status === "weighed" ? (
         <div className="mt-2 flex items-center gap-2.5 rounded-xl bg-ap-accent-soft p-2.5">
           <FlaskConical className="size-5 shrink-0 text-ap-accent" />
           <div>
@@ -683,51 +1355,34 @@ function ActiveDeliveryCard({
   );
 }
 
-function bestFieldForRequest(
-  fields: { id: string }[],
-  fieldCards: Record<string, FieldMarketCard>,
-  minScore: number,
-): string | undefined {
-  if (!fields.length) return undefined;
-  const fitting = fields.filter((f) => (fieldCards[f.id]?.qualityScore ?? 0) >= minScore);
-  const pool = fitting.length ? fitting : fields;
-  return pool.reduce((best, f) => {
-    const bestScore = fieldCards[best.id]?.qualityScore ?? -1;
-    const score = fieldCards[f.id]?.qualityScore ?? -1;
-    return score > bestScore ? f : best;
-  }).id;
-}
-
 function RequestCard({
-  millName,
-  variety,
-  tons,
-  minScore,
-  region,
-  windowLabel,
+  req,
+  locale,
+  fitField,
+  fitScore,
+  mismatch,
   offerLabel,
   canSellLabel,
   filledOf,
   onOffer,
 }: {
-  millName: string;
-  variety: string;
-  tons: number;
-  filledTons: number;
-  minScore: number;
-  region: string | null;
-  windowLabel: string | null;
+  req: MarketRequest;
+  locale: string;
+  fitField: Field | undefined;
+  fitScore: number | null;
+  mismatch: string;
   offerLabel: string;
   canSellLabel: string;
   filledOf: string;
   onOffer: () => void;
 }) {
-  const initials = millName
+  const initials = req.processorName
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
+  const fits = fitField != null;
 
   return (
     <div className="rounded-[18px] border border-line bg-card p-3">
@@ -736,29 +1391,46 @@ function RequestCard({
           {initials || "Μ"}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-ap-card font-extrabold text-ink">{millName}</p>
+          <p className="truncate text-ap-card font-extrabold text-ink">{req.processorName}</p>
           <p className="text-ap-small text-muted-foreground">
-            {variety} · {tons} t
-            {region ? ` · ${region}` : ""}
-            {windowLabel ? ` · ${windowLabel}` : ""}
+            {varietyLabel(req.variety, locale)} · {formatTons(req.tons, locale)}
+            {req.region ? ` · ${regionLabel(req.region, locale)}` : ""}
+            {req.windowLabel
+              ? ` · ${formatRequestWindow(req.windowLabel, locale) ?? req.windowLabel}`
+              : ""}
           </p>
         </div>
         <p className="shrink-0 text-ap-small font-bold text-muted-foreground">
-          {minScore}+
+          {req.minScore}+
         </p>
       </div>
       <p className="mt-2 text-ap-small text-muted-foreground">{filledOf}</p>
-      <div className="mt-2 flex items-center gap-2.5 rounded-xl bg-soft p-2.5">
+      <div
+        className={cn(
+          "mt-2 flex items-center gap-2.5 rounded-xl p-2.5",
+          fits ? "bg-good-soft" : "bg-risk-soft/60",
+        )}
+      >
         <div className="min-w-0 flex-1">
-          <p className="text-ap-body font-bold text-ink">{canSellLabel}</p>
-          <p className="text-ap-small text-muted-foreground">
-            {variety} · min score {minScore}
+          <p className={cn("text-ap-body font-bold", fits ? "text-good" : "text-risk")}>
+            {fits ? `✓ ${canSellLabel}` : `✗ ${mismatch}`}
           </p>
+          {fits && fitField ? (
+            <p className="text-ap-small text-muted-foreground">
+              {fitField.name}
+              {fitScore != null ? ` (${fitScore})` : ""}
+            </p>
+          ) : (
+            <p className="text-ap-small text-muted-foreground">
+              {varietyLabel(req.variety, locale)} · {req.minScore}+
+            </p>
+          )}
         </div>
         <button
           type="button"
           onClick={onOffer}
-          className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full bg-ink px-4 text-ap-btn font-bold text-white"
+          disabled={!fits}
+          className="inline-flex h-11 shrink-0 items-center gap-1 rounded-full bg-ink px-4 text-ap-btn font-bold text-white disabled:opacity-40"
         >
           {offerLabel}
           <ArrowRight className="size-3.5" />
@@ -771,42 +1443,67 @@ function RequestCard({
 function OfferCard({
   offer,
   busy,
+  locale,
   counter,
   accept,
   reject,
   perKg,
   acceptClass,
+  bestLabel,
+  deltaLabel,
+  nested,
   onAccept,
   onCounter,
   onReject,
 }: {
   offer: MarketOffer;
   busy: boolean;
+  locale: string;
   counter: string;
   accept: string;
   reject: string;
   perKg: string;
   acceptClass: string;
+  bestLabel?: string | null;
+  deltaLabel?: string | null;
+  nested?: boolean;
   onAccept: () => void;
   onCounter: () => void;
   onReject: () => void;
 }) {
   return (
-    <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
+    <div
+      className={cn(
+        nested
+          ? "mt-2 rounded-2xl border border-line/80 bg-soft/40 p-3"
+          : "mt-2 rounded-[18px] border border-line bg-card p-3",
+      )}
+    >
       <div className="flex items-center gap-2.5">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-soft text-ap-body font-extrabold text-ink">
           {offer.processorName.slice(0, 2).toUpperCase()}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-ap-card text-ink">{offer.processorName}</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="truncate text-ap-card text-ink">{offer.processorName}</p>
+            {bestLabel ? (
+              <span className="rounded-md bg-good-soft px-1.5 py-0.5 text-[12px] font-bold text-good">
+                {bestLabel}
+              </span>
+            ) : null}
+          </div>
           <p className="text-ap-small text-muted-foreground">
-            {offer.fieldName ?? offer.lotVariety ?? "—"} · {offer.tons} t
+            {offer.fieldName ?? offer.lotVariety ?? "—"} · {formatTons(offer.tons, locale)}
           </p>
         </div>
         <p className="text-[22px] font-extrabold text-ink">
-          {euroPrice(offer.pricePerKg)}
+          {formatEuro(offer.pricePerKg, locale)}
           <span className="text-ap-small font-medium text-muted-foreground"> {perKg}</span>
         </p>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-ap-small text-muted-foreground">
+        {deltaLabel ? <span>{deltaLabel}</span> : null}
+        <span>≈ {formatEuro(offer.tons * 1000 * offer.pricePerKg, locale)}</span>
       </div>
       {busy ? (
         <p className="mt-2 text-ap-small font-semibold text-muted-foreground">…</p>
@@ -816,15 +1513,15 @@ function OfferCard({
           type="button"
           disabled={busy}
           onClick={onReject}
-          className="h-9 rounded-full border border-line bg-card px-4 text-ap-pill font-bold text-muted-foreground disabled:opacity-50"
+          className="h-11 rounded-full border border-line bg-card px-4 text-ap-pill font-bold text-muted-foreground disabled:opacity-50"
         >
           {busy ? "…" : reject}
         </button>
         <button
           type="button"
-          disabled={busy || offer.status === "countered"}
+          disabled={busy}
           onClick={onCounter}
-          className="h-9 rounded-full border border-ink bg-card px-4 text-ap-pill font-bold text-ink disabled:opacity-50"
+          className="h-11 rounded-full border border-ink bg-card px-4 text-ap-pill font-bold text-ink disabled:opacity-50"
         >
           {busy ? "…" : counter}
         </button>
@@ -832,7 +1529,7 @@ function OfferCard({
           type="button"
           disabled={busy}
           onClick={onAccept}
-          className={cn("h-9 rounded-full px-4 text-ap-pill font-bold text-white disabled:opacity-50", acceptClass)}
+          className={cn("h-11 rounded-full px-4 text-ap-pill font-bold text-white disabled:opacity-50", acceptClass)}
         >
           {busy ? "…" : accept}
         </button>
@@ -844,6 +1541,7 @@ function OfferCard({
 /** Flow B outbound — waiting for the mill; farmer can withdraw a mistaken offer. */
 function SentOfferCard({
   offer,
+  locale,
   perKg,
   waiting,
   withdraw,
@@ -851,6 +1549,7 @@ function SentOfferCard({
   onWithdraw,
 }: {
   offer: MarketOffer;
+  locale: string;
   perKg: string;
   waiting: string;
   withdraw: string;
@@ -866,11 +1565,11 @@ function SentOfferCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-ap-card text-ink">{offer.processorName}</p>
           <p className="text-ap-small text-muted-foreground">
-            {offer.fieldName ?? offer.lotVariety ?? "—"} · {offer.tons} t
+            {offer.fieldName ?? offer.lotVariety ?? "—"} · {formatTons(offer.tons, locale)}
           </p>
         </div>
         <p className="text-[22px] font-extrabold text-ink">
-          {euroPrice(offer.pricePerKg)}
+          {formatEuro(offer.pricePerKg, locale)}
           <span className="text-ap-small font-medium text-muted-foreground"> {perKg}</span>
         </p>
       </div>
@@ -880,7 +1579,7 @@ function SentOfferCard({
           type="button"
           disabled={busy}
           onClick={onWithdraw}
-          className="h-8 rounded-full border border-line px-3 text-ap-pill font-bold text-muted-foreground disabled:opacity-50"
+          className="h-11 rounded-full border border-line px-3 text-ap-pill font-bold text-muted-foreground disabled:opacity-50"
         >
           {busy ? "…" : withdraw}
         </button>

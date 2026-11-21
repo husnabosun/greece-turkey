@@ -1,8 +1,5 @@
 import { ZodError } from "zod";
 import {
-  DEMO_FRUIT,
-  DEMO_LEAF,
-  DEMO_TRAP,
   diagnoseRequest,
   fruitResult,
   geminiJsonDetailed,
@@ -10,24 +7,27 @@ import {
   TRAP_PROMPT,
   trapResult,
 } from "@/features/diagnostics";
+import { gateOliveLeaf } from "@/features/diagnostics/leaf-gate";
 import { predictLeafModel } from "@/features/diagnostics/leaf-space";
 import { aiRateLimiter } from "@/shared/lib/api/rate-limit";
 import { fromZodError, jsonError, jsonOk } from "@/shared/lib/api/http";
+import { requireApiUser } from "@/shared/lib/api/require-user";
+import { checkImageBase64 } from "@/features/diagnostics/image-check";
+import { LANGUAGE_NAME } from "@/features/diagnostics/schemas";
 
 export const runtime = "nodejs";
 
-function clientKey(request: Request): string {
-  return request.headers.get("x-device-id") ?? request.headers.get("x-forwarded-for") ?? "anon";
-}
-
 /**
- * Leaf → own TFLite model on Hugging Face Space (no Gemini).
+ * Leaf → olive-leaf gate (Gemini) then TFLite model on Hugging Face Space.
  * Fruit / trap → Gemini with demo fallback (credits permitting).
  */
 export async function POST(request: Request) {
   try {
-    if (!aiRateLimiter.allow(`diagnose:${clientKey(request)}`)) {
-      return jsonError("Rate limit exceeded", 429);
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
+    if (!aiRateLimiter.allow(`diagnose:${auth.userId}`)) {
+      return jsonError("rate_limited", 429);
     }
 
     const body = diagnoseRequest.parse(await request.json());
@@ -35,7 +35,23 @@ export async function POST(request: Request) {
       ? body.imageBase64List
       : [body.imageBase64];
 
+    // Reject corrupt / tiny / panorama files before spending any AI quota.
+    for (const img of images) {
+      const check = checkImageBase64(img);
+      if (!check.ok) return jsonError(check.code, 400);
+    }
+
     if (body.mode === "leaf") {
+      const gate = await gateOliveLeaf(images[0]);
+      if (gate.ok && !gate.pass) {
+        return jsonOk({
+          mode: "leaf" as const,
+          rejected: "not_leaf" as const,
+          gate: gate.data,
+          source: "gate" as const,
+        });
+      }
+
       const model = await predictLeafModel(images[0]);
       if (model.ok) {
         return jsonOk({
@@ -45,18 +61,21 @@ export async function POST(request: Request) {
           modelVersion: model.modelVersion,
         });
       }
+      // Model unavailable (quota / timeout): never return a made-up diagnosis.
+      console.warn("[diagnose] leaf model unavailable", model.reason);
       return jsonOk({
         mode: "leaf" as const,
-        result: DEMO_LEAF,
-        source: "demo" as const,
-        demoReason: model.reason,
-        demoDetail: model.detail,
+        unavailable: true as const,
+        source: "unavailable" as const,
+        reason: model.reason,
       });
     }
 
-    const contextLine = body.context
-      ? `\nField context: ${JSON.stringify(body.context)}`
-      : "";
+    const contextLine =
+      (body.context ? `\nField context: ${JSON.stringify(body.context)}` : "") +
+      (body.language
+        ? `\nWrite every free-text field (symptoms, notes) in ${LANGUAGE_NAME[body.language]}. Keep the enum values (diagnosis) in English exactly as listed.`
+        : "");
 
     if (body.mode === "fruit") {
       const live = await geminiJsonDetailed({
@@ -64,12 +83,11 @@ export async function POST(request: Request) {
         schema: fruitResult,
         imageBase64List: images,
       });
-      return jsonOk({
-        mode: "fruit" as const,
-        result: live.ok ? live.data : DEMO_FRUIT,
-        source: live.ok ? ("gemini" as const) : ("demo" as const),
-        ...(live.ok ? {} : { demoReason: live.reason, demoDetail: live.detail }),
-      });
+      if (!live.ok) {
+        console.warn("[diagnose] fruit model unavailable", live.reason);
+        return jsonOk({ mode: "fruit" as const, unavailable: true as const, source: "unavailable" as const, reason: live.reason });
+      }
+      return jsonOk({ mode: "fruit" as const, result: live.data, source: "gemini" as const });
     }
 
     const live = await geminiJsonDetailed({
@@ -77,14 +95,13 @@ export async function POST(request: Request) {
       schema: trapResult,
       imageBase64List: images,
     });
-    return jsonOk({
-      mode: "trap" as const,
-      result: live.ok ? live.data : DEMO_TRAP,
-      source: live.ok ? ("gemini" as const) : ("demo" as const),
-      ...(live.ok ? {} : { demoReason: live.reason, demoDetail: live.detail }),
-    });
+    if (!live.ok) {
+      console.warn("[diagnose] trap model unavailable", live.reason);
+      return jsonOk({ mode: "trap" as const, unavailable: true as const, source: "unavailable" as const, reason: live.reason });
+    }
+    return jsonOk({ mode: "trap" as const, result: live.data, source: "gemini" as const });
   } catch (err) {
     if (err instanceof ZodError) return fromZodError(err);
-    return jsonError("Diagnosis failed", 500);
+    return jsonError("diagnosis_failed", 500);
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import {
 import { ApCard } from "@/shared/components/brand";
 import { useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
+import { parseTreeCount, useErrorMessage } from "@/shared/lib/error-message";
 
 const FieldMapEditor = dynamic(() => import("./field-map-editor").then((m) => m.FieldMapEditor), {
   ssr: false,
@@ -40,6 +41,7 @@ const TREES_PER_HA = 130;
  */
 export function AddFieldScreen() {
   const t = useTranslations("farmerFields");
+  const errMsg = useErrorMessage();
   const locale = useLocale();
   const router = useRouter();
   const token = publicEnv.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -52,8 +54,10 @@ export function AddFieldScreen() {
     return last.center[0] ?? null;
   });
   const [profileCountry, setProfileCountry] = useState<OliveCountry | null>(null);
-  const [trees, setTrees] = useState(80);
+  const [treesText, setTreesText] = useState("80");
   const [ageYears, setAgeYears] = useState(35);
+  const [showAllVarieties, setShowAllVarieties] = useState(false);
+  const [treesTouched, setTreesTouched] = useState(false);
   const oliveCountry = useMemo(
     () => resolveOliveCountry({ locale, lon: mapLon, profileCountry }).country,
     [locale, mapLon, profileCountry],
@@ -61,11 +65,16 @@ export function AddFieldScreen() {
   const [varietySlug, setVarietySlug] = useState(() => defaultVarietySlug(oliveCountry));
   const [irrigated, setIrrigated] = useState(false);
   const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
 
   const varietyGroups = useMemo(
-    () => varietiesGrouped(locale, mapLon, profileCountry),
-    [locale, mapLon, profileCountry],
+    () => varietiesGrouped(locale, mapLon, profileCountry, showAllVarieties),
+    [locale, mapLon, profileCountry, showAllVarieties],
   );
+
+  function parseTrees(): number | null {
+    return parseTreeCount(treesText);
+  }
 
   useEffect(() => {
     const supabase = tryCreateBrowserClient();
@@ -87,10 +96,11 @@ export function AddFieldScreen() {
   }, []);
 
   useEffect(() => {
+    if (showAllVarieties) return;
     if (!isVarietyAllowed(varietySlug, oliveCountry)) {
       setVarietySlug(defaultVarietySlug(oliveCountry));
     }
-  }, [oliveCountry, varietySlug]);
+  }, [oliveCountry, varietySlug, showAllVarieties]);
 
   const satelliteTrees = useMemo(() => {
     if (areaHa == null || areaHa <= 0) return null;
@@ -105,19 +115,26 @@ export function AddFieldScreen() {
       const lon = ring.reduce((s, p) => s + p[0], 0) / ring.length;
       setMapLon(lon);
     }
-    if (ha != null && ha > 0) {
+    // Do not overwrite a number the user already typed — offer estimate separately.
+    if (ha != null && ha > 0 && !treesTouched) {
       const estimate = Math.max(10, Math.round(ha * TREES_PER_HA));
-      setTrees(estimate);
+      setTreesText(String(estimate));
     }
   }
 
   async function saveField() {
+    if (saving || saveLock.current) return;
     if (!name.trim()) {
       toast.error(t("needName"));
       return;
     }
     if (!polygon) {
       toast.error(t("needPolygon"));
+      return;
+    }
+    const trees = parseTrees();
+    if (trees == null) {
+      toast.error(t("invalidTrees"));
       return;
     }
     if (!hasSupabaseConfig()) {
@@ -130,6 +147,7 @@ export function AddFieldScreen() {
       return;
     }
 
+    saveLock.current = true;
     setSaving(true);
     try {
       const {
@@ -158,7 +176,8 @@ export function AddFieldScreen() {
       });
 
       if (error) {
-        toast.error(error.message);
+        saveLock.current = false;
+        toast.error(errMsg(error.message, "saveFailed"));
         return;
       }
 
@@ -194,7 +213,7 @@ export function AddFieldScreen() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t("nameExample")}
-              maxLength={24}
+              maxLength={80}
               className="h-full min-w-0 flex-1 bg-transparent text-ap-card font-bold text-ink outline-none placeholder:text-muted-foreground"
             />
             <button
@@ -238,35 +257,74 @@ export function AddFieldScreen() {
             <ApCard className="p-3.5">
               <p className="text-ap-small font-medium text-muted-foreground">{t("numberOfTrees")}</p>
               <div className="mt-2 flex items-center justify-between gap-1">
-                <RoundBtn label={t("less")} onClick={() => setTrees((n) => Math.max(1, n - 1))}>
+                <RoundBtn
+                  label={t("less")}
+                  onClick={() => {
+                    setTreesTouched(true);
+                    const n = parseTrees() ?? 1;
+                    setTreesText(String(Math.max(1, n - 1)));
+                  }}
+                >
                   <Minus className="size-4" />
                 </RoundBtn>
                 <input
-                  type="number"
+                  type="text"
                   inputMode="numeric"
-                  min={1}
-                  max={5000}
-                  value={trees}
+                  value={treesText}
                   onChange={(e) => {
-                    const n = Number(e.target.value);
-                    if (!Number.isFinite(n)) return;
-                    setTrees(Math.max(1, Math.min(5000, Math.round(n))));
+                    setTreesTouched(true);
+                    // Keep exactly what was typed; invalid input is flagged below, never rewritten.
+                    setTreesText(e.target.value.slice(0, 7));
                   }}
+<<<<<<< HEAD
                   className="min-w-0 flex-1 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+=======
+                  aria-invalid={treesText.trim() !== "" && parseTrees() == null}
+                  className="w-16 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none"
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
                 />
-                <RoundBtn label={t("more")} onClick={() => setTrees((n) => Math.min(5000, n + 1))}>
+                <RoundBtn
+                  label={t("more")}
+                  onClick={() => {
+                    setTreesTouched(true);
+                    const n = parseTrees() ?? 0;
+                    setTreesText(String(Math.min(5000, n + 1)));
+                  }}
+                >
                   <Plus className="size-4" />
                 </RoundBtn>
               </div>
+<<<<<<< HEAD
             </ApCard>
 
             <ApCard className="p-3.5">
+=======
+              {treesText.trim() !== "" && parseTrees() == null ? (
+                <p className="mt-1 text-ap-small font-semibold text-risk" role="alert">
+                  {t("invalidTrees")}
+                </p>
+              ) : null}
+              {satelliteTrees != null && treesTouched ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTreesText(String(satelliteTrees));
+                    setTreesTouched(false);
+                  }}
+                  className="mt-2 text-left text-ap-small font-bold text-ap-accent"
+                >
+                  {t("useEstimate", { n: satelliteTrees })}
+                </button>
+              ) : null}
+            </div>
+            <div className="rounded-[18px] border border-line bg-card p-3">
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
               <p className="text-ap-small font-medium text-muted-foreground">{t("treeAgeExact")}</p>
-              <div className="mt-2 flex items-center justify-between gap-1">
+              <div className="mt-2 flex items-center justify-between gap-2">
                 <RoundBtn label={t("less")} onClick={() => setAgeYears((n) => Math.max(1, n - 1))}>
                   <Minus className="size-4" />
                 </RoundBtn>
-                <div className="flex min-w-0 flex-1 items-baseline justify-center gap-1">
+                <div className="flex min-w-0 flex-1 flex-col items-center justify-center">
                   <input
                     type="number"
                     inputMode="numeric"
@@ -278,7 +336,7 @@ export function AddFieldScreen() {
                       if (!Number.isFinite(n)) return;
                       setAgeYears(Math.max(1, Math.min(200, Math.round(n))));
                     }}
-                    className="w-12 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-16 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                   <span className="text-ap-small font-bold text-muted-foreground">{t("treeAgeYears")}</span>
                 </div>
@@ -296,12 +354,30 @@ export function AddFieldScreen() {
             </ApCard>
           </div>
 
+<<<<<<< HEAD
           <ApCard className="mt-2.5 p-3.5">
             <p className="text-ap-small font-medium text-muted-foreground">{t("oliveVariety")}</p>
             <div className="mt-2.5 space-y-3">
               {varietyGroups.map((group) => (
                 <div key={group.origin}>
                   <p className="mb-1.5 text-[12px] font-bold tracking-[0.6px] text-muted-foreground uppercase">
+=======
+          <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-ap-small font-medium text-muted-foreground">{t("oliveVariety")}</p>
+              <button
+                type="button"
+                onClick={() => setShowAllVarieties((v) => !v)}
+                className="text-ap-small font-bold text-ap-accent"
+              >
+                {showAllVarieties ? t("showLocalVarieties") : t("showAllVarieties")}
+              </button>
+            </div>
+            <div className="mt-2 space-y-2.5">
+              {varietyGroups.map((group) => (
+                <div key={group.origin}>
+                  <p className="mb-1 text-[12px] font-bold tracking-[0.6px] text-muted-foreground uppercase">
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
                     {t(group.labelKey)}
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -353,8 +429,13 @@ function PillBtn({ on, onClick, children }: { on: boolean; onClick: () => void; 
       type="button"
       onClick={onClick}
       className={cn(
+<<<<<<< HEAD
         "inline-flex min-h-11 items-center rounded-full border px-4 text-ap-pill font-bold transition-colors",
         on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink hover:bg-soft",
+=======
+        "inline-flex min-h-11 items-center rounded-full border px-3 text-ap-pill font-bold",
+        on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
       )}
     >
       {children}
@@ -368,7 +449,11 @@ function RoundBtn({ label, onClick, children }: { label: string; onClick: () => 
       type="button"
       aria-label={label}
       onClick={onClick}
+<<<<<<< HEAD
       className="flex size-11 shrink-0 items-center justify-center rounded-full bg-soft transition-colors hover:bg-soft/80"
+=======
+      className="flex size-11 shrink-0 items-center justify-center rounded-full bg-soft"
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
     >
       {children}
     </button>

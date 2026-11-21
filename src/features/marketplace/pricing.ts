@@ -1,4 +1,4 @@
-/** Pure market helpers: prices are rounded to €0.05 and totals to €50. No UI imports. */
+/** Pure market helpers. Prices round to €0.05 in pickers; money totals are exact to the cent. No UI imports. */
 
 const toCents = (n: number) => Math.round(n * 100);
 const fromCents = (c: number) => c / 100;
@@ -12,6 +12,28 @@ function localeTag(locale?: string) {
   if (locale.startsWith("el")) return "el-GR";
   if (locale.startsWith("tr")) return "tr-TR";
   return "en-GB";
+}
+
+function asDate(d: string | Date): Date {
+  if (d instanceof Date) return d;
+  const iso = /^\d{4}-\d{2}-\d{2}/.test(d) ? `${d.slice(0, 10)}T12:00:00` : d;
+  return new Date(iso);
+}
+
+/** "1,55 €" / "30.000 €" — 2 fraction digits under €10, none at/above. */
+export function formatEuro(n: number, locale: string) {
+  const digits = n < 10 ? 2 : 0;
+  return new Intl.NumberFormat(localeTag(locale), {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(n);
+}
+
+/** "1,55 €/kg" */
+export function formatEuroPerKg(n: number, locale: string) {
+  return `${formatEuro(n, locale)}/kg`;
 }
 
 /** "1,55 €" / "€1.55" depending on locale. */
@@ -33,12 +55,37 @@ export function euroTotal(n: number, locale?: string) {
   }).format(n);
 }
 
-/** "4,5 t" */
+/** "2,5 t" / "33 t" — always a space before the unit. */
 export function formatTons(n: number, locale?: string) {
   const body = new Intl.NumberFormat(localeTag(locale), {
     maximumFractionDigits: n % 1 ? 1 : 0,
   }).format(n);
   return `${body} t`;
+}
+
+/** "27 Νοε" */
+export function formatDateShort(d: string | Date, locale: string) {
+  const dt = asDate(d);
+  if (Number.isNaN(dt.getTime())) return typeof d === "string" ? d : "—";
+  return dt.toLocaleDateString(localeTag(locale), { day: "numeric", month: "short" });
+}
+
+/**
+ * "27 Νοε–4 Δεκ", or "3–10 Νοε" when both dates share the same month/year.
+ */
+export function formatDateRange(a: string | Date, b: string | Date, locale: string) {
+  const start = asDate(a);
+  const end = asDate(b);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return `${formatDateShort(a, locale)}–${formatDateShort(b, locale)}`;
+  }
+  const tag = localeTag(locale);
+  const sameMonth = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
+  if (sameMonth) {
+    const month = end.toLocaleDateString(tag, { month: "short" });
+    return `${start.getDate()}–${end.getDate()} ${month}`;
+  }
+  return `${formatDateShort(start, locale)}–${formatDateShort(end, locale)}`;
 }
 
 /** "Banned in the last 12 months" window, in days. */
@@ -73,4 +120,50 @@ export function hasBannedLast12Months(sprays: { fieldId: string; banned: boolean
   return sprays.some((s) => s.fieldId === fieldId && s.banned && s.ts >= from && s.ts <= now);
 }
 
-export const saleTotal = (tons: number, pricePerKg: number) => roundTotal(tons * 1000 * pricePerKg);
+/** Exact sale amount in euros (to the cent). Both sides must show the same number, so never round to €50. */
+export const saleTotal = (tons: number, pricePerKg: number) => Math.round(tons * 1000 * pricePerKg * 100) / 100;
+
+/**
+ * Locale-aware number parser for user input ("12.300" Greek thousands, "12,5" decimal comma, "12 300").
+ * Returns null for anything that is not a plain positive decimal (no "1e6", "0x10", "-5").
+ */
+export function parseLocaleNumber(raw: string): number | null {
+  let s = String(raw ?? "").trim().replace(/[\s\u00a0\u202f']/g, "");
+  if (!s) return null;
+  if (!/^[0-9.,]+$/.test(s)) return null;
+  const hasDot = s.includes(".");
+  const hasComma = s.includes(",");
+  if (hasDot && hasComma) {
+    const dec = s.lastIndexOf(".") > s.lastIndexOf(",") ? "." : ",";
+    const thou = dec === "." ? "," : ".";
+    s = s.split(thou).join("");
+    if (dec === ",") s = s.replace(",", ".");
+  } else if (hasComma) {
+    if (/^\d{1,3}(,\d{3})+$/.test(s) && s.split(",").length > 2) s = s.split(",").join("");
+    else s = s.replace(",", ".");
+  } else if (hasDot) {
+    if (/^[1-9]\d{0,2}(\.\d{3})+$/.test(s)) s = s.split(".").join("");
+  }
+  if (!/^\d+(\.\d+)?$/.test(s)) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Same bounds the database CHECK constraints enforce (see migration 20261121020000). */
+export const MARKET_LIMITS = {
+  lotTons: { min: 0.1, max: 500 },
+  pricePerKg: { min: 0.05, max: 20 },
+  requestTons: { min: 0.1, max: 2000 },
+} as const;
+
+export type BoundedResult =
+  | { ok: true; value: number }
+  | { ok: false; reason: "invalid" | "tooLow" | "tooHigh"; min: number; max: number };
+
+export function parseBounded(raw: string, bounds: { min: number; max: number }): BoundedResult {
+  const n = parseLocaleNumber(raw);
+  if (n == null || n <= 0) return { ok: false, reason: "invalid", ...bounds };
+  if (n < bounds.min) return { ok: false, reason: "tooLow", ...bounds };
+  if (n > bounds.max) return { ok: false, reason: "tooHigh", ...bounds };
+  return { ok: true, value: n };
+}

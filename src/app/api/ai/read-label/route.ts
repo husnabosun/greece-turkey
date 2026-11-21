@@ -3,17 +3,17 @@ import { DEMO_LABEL, geminiJson, LABEL_PROMPT, labelResult, readLabelRequest } f
 import { euCheck } from "@/features/logbook";
 import { aiRateLimiter } from "@/shared/lib/api/rate-limit";
 import { fromZodError, jsonError, jsonOk } from "@/shared/lib/api/http";
+import { requireApiUser } from "@/shared/lib/api/require-user";
 
 export const runtime = "nodejs";
-
-function clientKey(request: Request): string {
-  return request.headers.get("x-device-id") ?? request.headers.get("x-forwarded-for") ?? "anon";
-}
 
 /** Gemini label OCR + EU compliance check for the spray logbook draft. */
 export async function POST(request: Request) {
   try {
-    if (!aiRateLimiter.allow(`label:${clientKey(request)}`)) {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
+    if (!aiRateLimiter.allow(`label:${auth.userId}`)) {
       return jsonError("Rate limit exceeded", 429);
     }
 

@@ -60,7 +60,7 @@ export function AppShell({ links, children }: Props) {
       </aside>
 
       <div className="flex min-h-dvh w-full flex-1 flex-col md:pl-60">
-        <main className="flex w-full min-h-0 flex-1 flex-col px-4 pt-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:px-6 md:pt-4 md:pb-6">
+        <main className="mx-auto flex w-full min-h-0 max-w-lg flex-1 flex-col px-4 pt-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:max-w-[1200px] md:px-8 md:pt-4 md:pb-6">
           {children}
         </main>
       </div>

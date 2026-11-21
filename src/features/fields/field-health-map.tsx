@@ -7,7 +7,12 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { colors } from "@/shared/theme/tokens";
 import { cn } from "@/shared/lib/utils";
 import {
-  DEFAULT_FIELD_CENTER,
+  initialMapView,
+  LOCATE_ZOOM,
+  requestDeviceLocation,
+  writeLastMapCenter,
+} from "@/features/fields/map-location";
+import {
   DEFAULT_FIELD_ZOOM,
   boundsFromPolygon,
   parseFieldPolygon,
@@ -105,10 +110,31 @@ export function FieldHealthMap({
     let ro: ResizeObserver | null = null;
     const timers: number[] = [];
 
+    const midOfBounds = (
+      b: [[number, number], [number, number]] | null,
+    ): [number, number] | null => (b ? [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2] : null);
+    const geomPoly = parseFieldPolygon(geom);
+    let outlineMid: [number, number] | null = null;
+    if (outlines?.length) {
+      for (const o of outlines) {
+        const p = parseFieldPolygon(o.geom);
+        outlineMid = p ? midOfBounds(boundsFromPolygon(p)) : null;
+        if (outlineMid) break;
+      }
+    }
+    const saved = initialMapView();
     const center: [number, number] =
       lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat)
         ? [lon, lat]
-        : DEFAULT_FIELD_CENTER;
+        : midOfBounds(geomPoly ? boundsFromPolygon(geomPoly) : null) ??
+          outlineMid ??
+          saved.center;
+    const startZoom =
+      lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat)
+        ? DEFAULT_FIELD_ZOOM
+        : geomPoly || outlineMid
+          ? DEFAULT_FIELD_ZOOM
+          : saved.zoom;
 
     const boot = () => {
       if (removed || mapRef.current) return;
@@ -120,7 +146,7 @@ export function FieldHealthMap({
         container,
         style: SATELLITE_STYLE,
         center,
-        zoom: DEFAULT_FIELD_ZOOM,
+        zoom: startZoom,
         attributionControl: true,
         collectResourceTiming: false,
         failIfMajorPerformanceCaveat: false,
@@ -270,11 +296,20 @@ export function FieldHealthMap({
       onLocate();
       return;
     }
-    const poly = parseFieldPolygon(geom);
-    const center: [number, number] | null =
-      lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
-    fitToField(map, poly, center);
-    onLocate();
+    void requestDeviceLocation()
+      .then((pos) => {
+        const next: [number, number] = [pos.coords.longitude, pos.coords.latitude];
+        writeLastMapCenter(next[0], next[1], LOCATE_ZOOM);
+        map.easeTo({ center: next, zoom: LOCATE_ZOOM, duration: 600 });
+        onLocate();
+      })
+      .catch(() => {
+        const poly = parseFieldPolygon(geom);
+        const center: [number, number] | null =
+          lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
+        fitToField(map, poly, center);
+        onLocate();
+      });
   }
 
   const legend: { key: MapTreeStatus; label: string }[] = [
@@ -317,7 +352,7 @@ export function FieldHealthMap({
         role="switch"
         aria-checked={showHealth}
         onClick={() => onToggleHealth(!showHealth)}
-        className="absolute top-2 left-2 z-10 flex h-8 items-center gap-1.5 rounded-full bg-white px-2.5 shadow-sm"
+        className="absolute top-2 left-2 z-10 flex min-h-11 items-center gap-1.5 rounded-full bg-white px-3 shadow-sm"
       >
         <Leaf className="size-3.5 text-good" aria-hidden />
         <span className="text-ap-small font-semibold text-ink">{labels.aiLayer}</span>
@@ -349,7 +384,7 @@ export function FieldHealthMap({
             }
             locate();
           }}
-          className="flex size-9 items-center justify-center rounded-xl bg-white shadow-sm"
+          className="flex size-11 items-center justify-center rounded-xl bg-white shadow-sm"
         >
           <Crosshair className="size-[18px] text-ink" aria-hidden />
         </button>
@@ -358,7 +393,7 @@ export function FieldHealthMap({
             type="button"
             aria-label={labels.zoomIn}
             onClick={() => (useStatic ? setStaticZoom((z) => Math.min(2, z + 0.25)) : zoomBy(0.6))}
-            className="flex size-9 items-center justify-center"
+            className="flex size-11 items-center justify-center"
           >
             <Plus className="size-[18px] text-ink" aria-hidden />
           </button>
@@ -366,7 +401,7 @@ export function FieldHealthMap({
             type="button"
             aria-label={labels.zoomOut}
             onClick={() => (useStatic ? setStaticZoom((z) => Math.max(1, z - 0.25)) : zoomBy(-0.6))}
-            className="flex size-9 items-center justify-center"
+            className="flex size-11 items-center justify-center"
           >
             <Minus className="size-[18px] text-ink" aria-hidden />
           </button>

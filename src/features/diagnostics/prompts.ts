@@ -26,6 +26,13 @@ Extract exactly what is printed. Do not guess and do not use outside knowledge a
 - confidence: 0 to 1, how sure you are that you read the label correctly. Use below 0.4 when the photo is blurry or the label is not fully visible.
 ${LABEL_RULES}`;
 
+export const LEAF_GATE_PROMPT = `You look at one photo and decide if it shows an olive leaf (Olea europaea leaf) suitable for disease diagnosis.
+Return JSON only:
+- isOliveLeaf: true only when you clearly see an olive leaf (blade / tip / petiole). Charts, screens, soil, whole trees from far away, fruit-only, traps, people, or random objects → false.
+- confidence: 0 to 1 how sure you are about that yes/no.
+- reason: short English phrase, e.g. "olive leaf close-up" or "spreadsheet screenshot".
+When unsure, set isOliveLeaf false and confidence below 0.5.`;
+
 export const LEAF_PROMPT = `You look at a photo of an olive leaf and classify the disease.
 Choose exactly one label:
 - "Healthy" if the leaf looks clean

@@ -20,7 +20,7 @@ import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 
 type NavItem = {
-  labelKey: "overview" | "findOlives" | "requests" | "offers" | "deliveries";
+  labelKey: "overview" | "findOlives" | "offers" | "deliveries" | "requests";
   href: string;
   Icon: LucideIcon;
 };
@@ -28,9 +28,9 @@ type NavItem = {
 const NAV: NavItem[] = [
   { labelKey: "overview", href: "/processor/overview", Icon: LayoutDashboard },
   { labelKey: "findOlives", href: "/processor/lots", Icon: Search },
-  { labelKey: "requests", href: "/processor/requests", Icon: ClipboardList },
   { labelKey: "offers", href: "/processor/offers", Icon: Inbox },
   { labelKey: "deliveries", href: "/processor/deliveries", Icon: Truck },
+  { labelKey: "requests", href: "/processor/requests", Icon: ClipboardList },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -45,23 +45,54 @@ function NavPill({
   label,
   Icon,
   active,
-  pillRef,
 }: {
   href: string;
   label: string;
   Icon: LucideIcon;
   active: boolean;
-  pillRef?: (el: HTMLAnchorElement | null) => void;
 }) {
   return (
     <Link
-      ref={pillRef}
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn("flex h-11 shrink-0 items-center gap-2.5 rounded-full px-3.5", active ? "bg-ink" : "hover:bg-soft")}
     >
       <Icon className={cn("size-[18px]", active ? "text-white" : "text-ink")} strokeWidth={active ? 2.2 : 1.9} aria-hidden />
       <span className={cn("text-[14px] leading-[18px] font-bold", active ? "text-white" : "text-ink")}>{label}</span>
+    </Link>
+  );
+}
+
+function BottomTab({
+  href,
+  label,
+  Icon,
+  active,
+}: {
+  href: string;
+  label: string;
+  Icon: LucideIcon;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className="flex min-h-11 flex-col items-center justify-center gap-0.5 px-1"
+    >
+      <Icon
+        className={cn("size-[22px]", active ? "text-good" : "text-muted-foreground")}
+        strokeWidth={active ? 2.3 : 1.9}
+        aria-hidden
+      />
+      <span
+        className={cn(
+          "max-w-full truncate text-center text-[12px] leading-[14px]",
+          active ? "font-bold text-ink" : "font-medium text-muted-foreground",
+        )}
+      >
+        {label}
+      </span>
     </Link>
   );
 }
@@ -110,10 +141,11 @@ function UserMenu({
       return;
     }
     setSigningOut(true);
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
     setSigningOut(false);
     setOpen(false);
     router.replace("/login");
+    router.refresh();
   }
 
   return (
@@ -145,12 +177,12 @@ function UserMenu({
         <div
           role="menu"
           className={cn(
-            "absolute z-40 min-w-[200px] overflow-hidden rounded-2xl border border-line bg-card py-1 shadow-[0_12px_32px_rgba(0,0,0,.14)]",
+            "absolute z-50 min-w-[200px] overflow-hidden rounded-2xl border border-line bg-card py-1 shadow-[0_12px_32px_rgba(0,0,0,.14)]",
             placement === "up" ? "bottom-full left-0 mb-2 w-full" : "top-full right-0 mt-2 w-56",
           )}
         >
           <p className="truncate px-3 pt-2 pb-1 text-[12px] font-extrabold text-ink">{company}</p>
-          <p className="px-3 pb-2 text-[11px] font-medium text-muted-foreground">{panel}</p>
+          <p className="px-3 pb-2 text-[12px] font-medium text-muted-foreground">{panel}</p>
           <button
             type="button"
             role="menuitem"
@@ -174,7 +206,6 @@ export function ProcessorShell({ children }: { children: ReactNode }) {
   const fallback = t("processorFallback");
   const [company, setCompany] = useState(fallback);
   const [initials, setInitials] = useState("PR");
-  const activePillRef = useRef<HTMLAnchorElement | null>(null);
 
   const nav = useMemo(
     () =>
@@ -207,10 +238,6 @@ export function ProcessorShell({ children }: { children: ReactNode }) {
     })();
   }, [fallback]);
 
-  useEffect(() => {
-    activePillRef.current?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-  }, [pathname]);
-
   const panel = t("processorPanel");
 
   return (
@@ -224,7 +251,7 @@ export function ProcessorShell({ children }: { children: ReactNode }) {
           <Initials text={initials} size={44} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[15px] leading-5 font-extrabold text-ink">{company}</p>
-            <p className="mt-0.5 text-[11px] leading-[14px] font-medium text-muted-foreground">{panel}</p>
+            <p className="mt-0.5 text-[12px] leading-[14px] font-medium text-muted-foreground">{panel}</p>
           </div>
         </div>
         <nav className="mt-5 flex flex-col gap-1">
@@ -242,7 +269,7 @@ export function ProcessorShell({ children }: { children: ReactNode }) {
         <UserMenu company={company} panel={panel} logoutLabel={tAuth("logout")} placement="up" />
       </aside>
 
-      <div className="border-b border-line bg-card px-4 py-3 min-[900px]:hidden">
+      <div className="relative z-50 overflow-visible border-b border-line bg-card px-4 py-3 min-[900px]:hidden">
         <div className="flex h-10 items-center justify-between gap-2">
           <BrandLogo size={30} />
           <UserMenu
@@ -254,30 +281,30 @@ export function ProcessorShell({ children }: { children: ReactNode }) {
             initials={initials}
           />
         </div>
-        <nav className="-mx-4 mt-2.5 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {nav.map((item) => {
-            const active = isActive(pathname, item.href);
-            return (
-              <NavPill
-                key={item.href}
-                href={item.href}
-                label={item.label}
-                Icon={item.Icon}
-                active={active}
-                pillRef={active ? (el) => {
-                  activePillRef.current = el;
-                } : undefined}
-              />
-            );
-          })}
-        </nav>
       </div>
 
       <div className="flex min-h-dvh flex-1 flex-col min-[900px]:pl-[240px]">
-        <main className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col px-4 pt-4 pb-10 min-[900px]:px-6 min-[900px]:pt-6 min-[900px]:pb-8">
+        <main className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col px-4 pt-4 pb-24 min-[900px]:px-6 min-[900px]:pt-6 min-[900px]:pb-8">
           {children}
         </main>
       </div>
+
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-card pb-[env(safe-area-inset-bottom)] min-[900px]:hidden"
+        aria-label={panel}
+      >
+        <div className="mx-auto grid h-16 grid-cols-5 px-1">
+          {nav.map((item) => (
+            <BottomTab
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              Icon={item.Icon}
+              active={isActive(pathname, item.href)}
+            />
+          ))}
+        </div>
+      </nav>
     </div>
   );
 }

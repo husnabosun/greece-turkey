@@ -52,7 +52,8 @@ const clamp = (n: number, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, Math.ro
 
 function sprayScore(count: number, banned: boolean): number {
   if (banned) return 35;
-  if (count === 0) return 88;
+  // No recorded sprays → no evidence of safe practice (not a free 88).
+  if (count === 0) return 50;
   if (count <= 2) return 92;
   if (count <= 4) return 78;
   return 62;
@@ -87,12 +88,13 @@ export function computeQualityScore(input: QualityInput): QualityResult {
     breakdown.tree * 0.3 + breakdown.spray * 0.3 + breakdown.harvest * 0.2 + breakdown.records * 0.2,
   );
 
+  /** Keys resolved in the UI via `farmerQuality.plan*` (C1). */
   const plan: QualityPlanItem[] = [];
-  if (banned) plan.push({ text: "Stop using EU-not-approved products and record an approved alternative with an agronomist.", points: 12 });
-  if (breakdown.records < 80) plan.push({ text: "Add missing spray records and keep the logbook up to date.", points: 8 });
-  if (input.peakRiskScore >= 65) plan.push({ text: "Check traps and leaves this week — risk is high on this field.", points: 6 });
-  if (input.healthyTreeShare < 0.85) plan.push({ text: "Re-check suspicious trees and save a new scan photo.", points: 5 });
-  if (plan.length === 0) plan.push({ text: "Keep weekly checks and record every spray after you apply it.", points: 2 });
+  if (banned) plan.push({ text: "planBanned", points: 12 });
+  if (breakdown.records < 80) plan.push({ text: "planRecords", points: 8 });
+  if (input.peakRiskScore >= 65) plan.push({ text: "planRisk", points: 6 });
+  if (input.healthyTreeShare < 0.85) plan.push({ text: "planTrees", points: 5 });
+  if (plan.length === 0) plan.push({ text: "planKeep", points: 2 });
 
   return { score, breakdown, plan: plan.slice(0, 4), engineVersion: QUALITY_ENGINE_VERSION };
 }

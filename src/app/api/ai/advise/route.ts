@@ -10,12 +10,9 @@ import {
 } from "@/features/diagnostics";
 import { aiRateLimiter } from "@/shared/lib/api/rate-limit";
 import { fromZodError, jsonError, jsonOk } from "@/shared/lib/api/http";
+import { requireApiUser } from "@/shared/lib/api/require-user";
 
 export const runtime = "nodejs";
-
-function clientKey(request: Request): string {
-  return request.headers.get("x-device-id") ?? request.headers.get("x-forwarded-for") ?? "anon";
-}
 
 function allowedNumbers(body: ReturnType<typeof adviseRequest.parse>): number[] {
   const nums: number[] = [];
@@ -36,7 +33,10 @@ function allowedNumbers(body: ReturnType<typeof adviseRequest.parse>): number[] 
 /** Risk-engine explainer (EN / TR / EL) with chemical-safety filter. */
 export async function POST(request: Request) {
   try {
-    if (!aiRateLimiter.allow(`advise:${clientKey(request)}`)) {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
+    if (!aiRateLimiter.allow(`advise:${auth.userId}`)) {
       return jsonError("Rate limit exceeded", 429);
     }
 

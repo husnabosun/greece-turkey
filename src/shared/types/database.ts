@@ -133,6 +133,7 @@ export type LogbookEntry = {
   protection_days: number | null;
   targets: string[];
   eu_banned: boolean;
+  eu_status?: "banned" | "allowed" | "unknown";
   eu_hits: string[];
   applied_at: string;
   area_label: string | null;
@@ -322,6 +323,31 @@ export type Database = {
       current_user_role: { Args: Record<string, never>; Returns: UserRole };
       is_farmer: { Args: Record<string, never>; Returns: boolean };
       is_processor: { Args: Record<string, never>; Returns: boolean };
+      accept_offer: {
+        Args: {
+          p_offer_id: string;
+          p_scheduled_for?: string | null;
+          p_delivery_in_days?: number | null;
+        };
+        Returns: string;
+      };
+      counter_offer: {
+        Args: { p_offer_id: string; p_price_per_kg: number };
+        Returns: string;
+      };
+      advance_delivery: {
+        Args: {
+          p_delivery_id: string;
+          p_next: DeliveryStatus;
+          p_actual_kg?: number | null;
+          p_lab_result?: LabResult | null;
+        };
+        Returns: Delivery;
+      };
+      cancel_delivery: {
+        Args: { p_delivery_id: string; p_reason?: string | null };
+        Returns: Delivery;
+      };
       create_field_from_geojson: {
         Args: {
           p_name: string;

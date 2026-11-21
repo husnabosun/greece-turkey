@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -10,9 +11,21 @@ import { ApButton } from "@/shared/components/brand/ap-button";
 import { ApCard } from "@/shared/components/brand/ap-card";
 import { Pill } from "@/shared/components/brand/pill";
 import { Link, useRouter } from "@/shared/i18n/navigation";
-import { euroPrice, euroTotal, formatTons, saleTotal } from "@/features/marketplace/pricing";
+import {
+  MARKET_LIMITS,
+  euroPrice,
+  euroTotal,
+  formatTons,
+  parseBounded,
+  saleTotal,
+} from "@/features/marketplace/pricing";
 import { varietyLabelFromStored } from "@/features/fields/olive-varieties";
-import { LotsMap, type LotMapPoint } from "@/features/marketplace/lots-map";
+import type { LotMapPoint } from "@/features/marketplace/lots-map";
+// Mapbox (~1 MB) is only fetched when a map is actually on screen.
+const LotsMap = dynamic(() => import("@/features/marketplace/lots-map").then((m) => m.LotsMap), {
+  ssr: false,
+  loading: () => <div className="w-full animate-pulse rounded-[18px] bg-soft" style={{ height: 240 }} />,
+});
 import { regionLabel } from "@/features/marketplace/regions";
 import {
   DayChipPicker,
@@ -35,6 +48,7 @@ import {
   useProcessorMarket,
   type ProcessorOffer,
 } from "@/features/marketplace/use-processor-market";
+import { useBoundsMessage, useErrorMessage } from "@/shared/lib/error-message";
 
 function offerQualityBadges(offer: ProcessorOffer, t: (key: string) => string): string[] {
   const lot = offer.lot;
@@ -56,6 +70,8 @@ async function withdrawProcessorOffer(offerId: string): Promise<{ ok: boolean; e
 
 export function ProcessorOfferDetailScreen({ id }: { id: string }) {
   const t = useTranslations("processor");
+  const errMsg = useErrorMessage();
+  const boundsMsg = useBoundsMessage();
   const locale = useLocale();
   const router = useRouter();
   const { offers, requests, loading, error, reload } = useProcessorMarket();
@@ -83,14 +99,19 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
   const onAcceptConfirm = async () => {
     if (!offer) return;
     setBusy(true);
-    toast.message(t("accepting"));
+    const toastId = toast.loading(t("accepting"));
     try {
       const res = await acceptIncomingOffer(offer.id, { scheduledFor: acceptDate });
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"), { id: toastId });
         return;
       }
-      toast.success(t("acceptedScheduled", { date: acceptDate }));
+      const dateLabel = new Date(`${acceptDate}T12:00:00`).toLocaleDateString(locale, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+      toast.success(t("acceptedScheduled", { date: dateLabel }), { id: toastId });
       setAcceptOpen(false);
       await reload();
       router.push("/processor/deliveries");
@@ -105,7 +126,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
     try {
       const res = await rejectOffer(offer.id);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("rejectedOk"));
@@ -120,26 +141,27 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
   const openCounterDialog = () => {
     if (!offer) return;
     const suggested = Math.max(0.05, Math.round((offer.pricePerKg - 0.05) * 100) / 100);
-    setCounterPrice(String(suggested));
+    setCounterPrice(String(suggested).replace(".", ","));
     setCounterOpen(true);
   };
 
   const onCounterConfirm = async () => {
     if (!offer) return;
-    const next = Number(counterPrice.replace(",", "."));
-    if (!Number.isFinite(next) || next <= 0) {
-      toast.error(t("invalidPrice"));
+    const pc = parseBounded(counterPrice, MARKET_LIMITS.pricePerKg);
+    if (!pc.ok) {
+      toast.error(boundsMsg(pc, "price", locale));
       return;
     }
+    const next = pc.value;
     setBusy(true);
-    toast.message(t("countering"));
+    const toastId = toast.loading(t("countering"));
     try {
       const res = await counterIncomingOffer(offer, next);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"), { id: toastId });
         return;
       }
-      toast.success(t("counterSentDetail"));
+      toast.success(t("counterSentDetail"), { id: toastId });
       setCounterOpen(false);
       await reload();
     } finally {
@@ -153,7 +175,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
     try {
       const res = await withdrawProcessorOffer(offer.id);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("withdrawnOk"));
@@ -226,10 +248,11 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
   const formattedTotal = euroTotal(saleTotal(offer.tons, offer.pricePerKg), locale);
   const summaryLine = `${variety} · ${formattedTons} · ${formattedPrice} · ≈ ${formattedTotal}`;
 
-  const parsedCounter = Number(counterPrice.replace(",", "."));
-  const counterPreview =
-    Number.isFinite(parsedCounter) && parsedCounter > 0
-      ? euroTotal(saleTotal(offer.tons, parsedCounter), locale)
+  const counterCheck = parseBounded(counterPrice, MARKET_LIMITS.pricePerKg);
+  const counterPreview = counterCheck.ok
+    ? euroTotal(saleTotal(offer.tons, counterCheck.value), locale)
+    : counterPrice.trim()
+      ? boundsMsg(counterCheck as Extract<typeof counterCheck, { ok: false }>, "price", locale)
       : "—";
 
   const statusLabel =
@@ -284,7 +307,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
         title={t("acceptOfferDialogTitle")}
         actionLabel={busy ? t("loading") : t("accept")}
         actionDisabled={busy}
-        onAction={() => void onAcceptConfirm()}
+        onAction={() => onAcceptConfirm()}
       >
         <div className="rounded-xl bg-soft px-3.5 py-2.5 text-[14px] font-extrabold text-ink">
           {summaryLine}
@@ -312,7 +335,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
         subtitle={t("counterDialogHint")}
         actionLabel={busy ? t("loading") : t("counter")}
         actionDisabled={busy}
-        onAction={() => void onCounterConfirm()}
+        onAction={() => onCounterConfirm()}
       >
         <TextField
           label={t("price")}
@@ -334,7 +357,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
         subtitle={t("rejectConfirm")}
         actionLabel={busy ? t("loading") : t("reject")}
         actionDisabled={busy}
-        onAction={() => void onRejectConfirm()}
+        onAction={() => onRejectConfirm()}
       >
         <p className="text-[13px] font-medium text-muted-foreground">{summaryLine}</p>
       </Dialog>
@@ -347,7 +370,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
         subtitle={t("withdrawOfferConfirm")}
         actionLabel={busy ? t("loading") : t("withdrawOffer")}
         actionDisabled={busy}
-        onAction={() => void onWithdrawConfirm()}
+        onAction={() => onWithdrawConfirm()}
       >
         <p className="text-[13px] font-medium text-muted-foreground">{summaryLine}</p>
       </Dialog>
@@ -357,7 +380,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
         {/* Δεξιά στήλη στο desktop / Πρώτη κάρτα στο κινητό: Τιμή, Βαθμολογία, Σύνολο & Ενέργειες */}
         <ApCard className="space-y-4 p-5 min-[900px]:sticky min-[900px]:top-6 min-[900px]:col-start-2 min-[900px]:row-start-1">
           <div>
-            <p className="text-[11px] font-bold tracking-[1px] text-muted-foreground uppercase">
+            <p className="text-[12px] font-bold tracking-[1px] text-muted-foreground uppercase">
               {offer.initiatedBy === "processor" ? t("yourOfferPrice") : t("asksPriceLabel")}
             </p>
             <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[15px] font-bold text-ink">
@@ -429,7 +452,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
         <div className="space-y-5 min-[900px]:col-start-1 min-[900px]:row-start-1">
           <ApCard className="overflow-hidden p-0">
             <div className="border-b border-line bg-soft/60 px-5 py-4">
-              <p className="text-[11px] font-bold tracking-[1px] text-ap-accent uppercase">
+              <p className="text-[12px] font-bold tracking-[1px] text-ap-accent uppercase">
                 {offer.initiatedBy === "farmer" ? t("tabIncoming") : t("tabOutgoing")}
               </p>
               <h2 className="mt-1 text-[22px] font-extrabold text-ink">{place}</h2>
@@ -480,7 +503,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
 
               {offer.message ? (
                 <div className="rounded-xl bg-soft px-3 py-2.5">
-                  <p className="text-[11px] font-bold tracking-[1px] text-muted-foreground uppercase">
+                  <p className="text-[12px] font-bold tracking-[1px] text-muted-foreground uppercase">
                     {t("message")}
                   </p>
                   <p className="mt-1 text-[14px] text-ink">{offer.message}</p>
@@ -490,7 +513,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
           </ApCard>
 
           <div>
-            <p className="mb-2 text-[11px] font-bold tracking-[1px] text-muted-foreground uppercase">
+            <p className="mb-2 text-[12px] font-bold tracking-[1px] text-muted-foreground uppercase">
               {t("pickupMapTitle")}
             </p>
             <LotsMap
@@ -520,7 +543,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
 function DetailCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-card px-3 py-2.5">
-      <p className="text-[11px] font-bold tracking-[1px] text-muted-foreground uppercase">{label}</p>
+      <p className="text-[12px] font-bold tracking-[1px] text-muted-foreground uppercase">{label}</p>
       <p className="mt-1 text-[15px] font-extrabold text-ink">{value}</p>
     </div>
   );

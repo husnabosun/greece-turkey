@@ -149,7 +149,7 @@
     @apply text-[14px] leading-snug;
   }
   .text-ap-small {
-    @apply text-[11.5px] leading-tight;
+    @apply text-[13px] leading-snug;
   }
   .text-ap-pill {
     @apply text-[12.5px] font-bold;

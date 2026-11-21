@@ -39,7 +39,7 @@ function ScoreRing({ score, qualityLabel }: { score: number; qualityLabel: strin
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <p className={`text-3xl font-extrabold tabular-nums ${low ? "text-risk" : "text-good"}`}>{score}</p>
-        <p className="text-[11px] font-bold text-muted-foreground">{qualityLabel}</p>
+        <p className="text-[12px] font-bold text-muted-foreground">{qualityLabel}</p>
       </div>
     </div>
   );
@@ -61,8 +61,6 @@ export function QualityScreen() {
   const { fields, loading: fieldsLoading } = useFarmerFields();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [bootstrapped, setBootstrapped] = useState<Record<string, boolean>>({});
-
   useEffect(() => {
     if (!fields.length) {
       setSelectedId(null);
@@ -122,14 +120,7 @@ export function QualityScreen() {
     }
   }
 
-  // Auto-compute once when field has no score yet.
-  useEffect(() => {
-    if (fieldsLoading || scoreLoading || !field || current || refreshing) return;
-    if (bootstrapped[field.id]) return;
-    setBootstrapped((prev) => ({ ...prev, [field.id]: true }));
-    void onRefresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot bootstrap per field
-  }, [field?.id, scoreLoading, current?.id, bootstrapped, fieldsLoading, refreshing]);
+  // No auto-insert on visit (Π4) — user refreshes explicitly via the button.
 
   return (
     <div className="w-full flex-1 space-y-4">
@@ -236,15 +227,28 @@ export function QualityScreen() {
                     { text: t("planDefault2"), points: 4 },
                     { text: t("planDefault3"), points: 3 },
                   ]
-              ).map((item, i) => (
+              ).map((item, i) => {
+                const planKeys = new Set([
+                  "planBanned",
+                  "planRecords",
+                  "planRisk",
+                  "planTrees",
+                  "planKeep",
+                  "planDefault1",
+                  "planDefault2",
+                  "planDefault3",
+                ]);
+                const label = planKeys.has(item.text) ? t(item.text as "planBanned") : item.text;
+                return (
                 <li key={`${item.text}-${i}`} className="flex items-start gap-2 text-ap-body text-ink">
-                  <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border border-line bg-card text-[11px] font-bold">
+                  <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border border-line bg-card text-[12px] font-bold">
                     {i + 1}
                   </span>
-                  <span className="flex-1">{item.text}</span>
+                  <span className="flex-1">{label}</span>
                   <span className="font-extrabold text-good">+{item.points}</span>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </AIBox>
         </>

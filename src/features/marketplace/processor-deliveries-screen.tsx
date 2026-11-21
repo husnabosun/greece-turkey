@@ -17,7 +17,7 @@ import { ApCard } from "@/shared/components/brand/ap-card";
 import { Pill } from "@/shared/components/brand/pill";
 import { StatusSteps } from "@/shared/components/brand/status-steps";
 import { cn } from "@/shared/lib/utils";
-import { euroPrice, euroTotal, formatTons, saleTotal } from "@/features/marketplace/pricing";
+import { euroPrice, euroTotal, formatTons, parseLocaleNumber, saleTotal } from "@/features/marketplace/pricing";
 import {
   canAdvanceDelivery,
   deliveryStepIndex,
@@ -42,11 +42,13 @@ import {
 } from "./schedule";
 import {
   advanceDelivery,
+  cancelDelivery,
   scheduleDelivery,
   useProcessorMarket,
   type ProcessorDelivery,
 } from "./use-processor-market";
 import { useVarietyLabel } from "./processor-shared";
+import { useErrorMessage } from "@/shared/lib/error-message";
 
 function effectiveTons(d: ProcessorDelivery): number {
   return d.actualKg != null && d.actualKg > 0 ? d.actualKg / 1000 : d.tons;
@@ -73,6 +75,7 @@ function capitalize(str: string, tag: string): string {
 
 export function ProcessorDeliveriesScreen() {
   const t = useTranslations("processor");
+  const errMsg = useErrorMessage();
   const locale = useLocale();
   const tag = localeTag(locale);
   const varietyLabel = useVarietyLabel();
@@ -111,6 +114,9 @@ export function ProcessorDeliveriesScreen() {
   const [weighKg, setWeighKg] = useState("");
   const [labOk, setLabOk] = useState<"passed" | "failed">("passed");
   const [advancing, setAdvancing] = useState(false);
+  const [weighConfirm, setWeighConfirm] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<ProcessorDelivery | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const [scheduleTarget, setScheduleTarget] = useState<ProcessorDelivery | null>(null);
   const [scheduleDate, setScheduleDate] = useState(() =>
@@ -125,6 +131,7 @@ export function ProcessorDeliveriesScreen() {
       String(d.actualKg != null ? Math.round(d.actualKg) : Math.round(d.tons * 1000)),
     );
     setLabOk("passed");
+    setWeighConfirm(false);
   };
 
   const openSchedule = (d: ProcessorDelivery) => {
@@ -140,10 +147,18 @@ export function ProcessorDeliveriesScreen() {
     try {
       const res = await scheduleDelivery(scheduleTarget.id, scheduleDate);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
-      toast.success(t("deliveryScheduled", { date: scheduleDate }));
+      toast.success(
+        t("deliveryScheduled", {
+          date: new Date(`${scheduleDate}T12:00:00`).toLocaleDateString(locale, {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+          }),
+        }),
+      );
       setScheduleTarget(null);
       await reload();
     } finally {
@@ -151,39 +166,70 @@ export function ProcessorDeliveriesScreen() {
     }
   };
 
+  const weighParsed = parseLocaleNumber(weighKg);
+  const weighExpectedKg = advanceTarget ? advanceTarget.tons * 1000 : 0;
+  const weighRatio = weighParsed != null && weighExpectedKg > 0 ? weighParsed / weighExpectedKg : null;
+  // Hard limits mirror the DB check (30%–200% of the agreed tonnes); outside ±20% we ask to confirm.
+  const weighInvalid = weighRatio == null || weighRatio < 0.3 || weighRatio > 2;
+  const weighUnusual = !weighInvalid && weighRatio != null && (weighRatio < 0.8 || weighRatio > 1.2);
+
   const onAdvanceConfirm = async () => {
-    if (!advanceTarget) return;
+    if (!advanceTarget || advancing) return;
     const next = nextDeliveryStatus(advanceTarget.status);
+    if (advanceTarget.status === "scheduled") {
+      if (weighInvalid || weighParsed == null) {
+        toast.error(t("weighOutOfRange"), { id: "weigh-range" });
+        return;
+      }
+      if (weighUnusual && !weighConfirm) {
+        setWeighConfirm(true);
+        return;
+      }
+    }
     setAdvancing(true);
-    toast.message(t("advancing"));
+    const toastId = toast.loading(t("advancing"));
     try {
       const extras =
         advanceTarget.status === "scheduled"
-          ? { actualKg: Number(weighKg.replace(",", ".")) || undefined }
+          ? { actualKg: weighParsed ?? undefined }
           : advanceTarget.status === "weighed"
             ? { labResult: labOk }
             : undefined;
-      if (advanceTarget.status === "scheduled") {
-        const kg = Number(weighKg.replace(",", "."));
-        if (!Number.isFinite(kg) || kg <= 0) {
-          toast.error(t("saveFailed"));
-          return;
-        }
-      }
       const res = await advanceDelivery(advanceTarget.id, advanceTarget.status, extras);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"), { id: toastId });
         return;
       }
       toast.success(
         next
           ? t("advancedDetail", { status: t(`step.${next}` as "step.weighed") })
           : t("advanced"),
+        { id: toastId },
       );
       setAdvanceTarget(null);
       await reload();
     } finally {
       setAdvancing(false);
+    }
+  };
+
+  const onCancelConfirm = async () => {
+    if (!cancelTarget || cancelling) return;
+    setCancelling(true);
+    try {
+      const res = await cancelDelivery(
+        cancelTarget.id,
+        cancelTarget.labResult === "failed" ? "lab_failed_return" : "cancelled_before_weighing",
+      );
+      if (!res.ok) {
+        toast.error(errMsg(res.error, "saveFailed"));
+        return;
+      }
+      toast.success(cancelTarget.labResult === "failed" ? t("returnDone") : t("cancelDone"));
+      setCancelTarget(null);
+      await reload();
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -308,7 +354,7 @@ export function ProcessorDeliveriesScreen() {
           <ApCard className="p-4">
             <div className="flex flex-wrap items-start justify-between gap-3 opacity-45">
               <div className="min-w-[200px] flex-1">
-                <p className="text-[11px] font-bold tracking-[1px] text-ap-accent uppercase">
+                <p className="text-[12px] font-bold tracking-[1px] text-ap-accent uppercase">
                   {t("inProgress")}
                 </p>
                 <p className="text-[16px] font-extrabold text-ink">—</p>
@@ -362,7 +408,11 @@ export function ProcessorDeliveriesScreen() {
                         <p className="text-[16px] font-extrabold text-ink">
                           {d.farmerName ?? d.lotRegion ?? t("anonymousGrove")}
                         </p>
-                        <Pill tone="warn">{t(`step.${d.status}` as "step.scheduled")}</Pill>
+                        {d.labResult === "failed" ? (
+                          <Pill tone="risk">{t("labFailedPill")}</Pill>
+                        ) : (
+                          <Pill tone="warn">{t(`step.${d.status}` as "step.scheduled")}</Pill>
+                        )}
                       </div>
                       <p className="mt-1 text-[13px] text-muted-foreground">
                         {[
@@ -383,23 +433,45 @@ export function ProcessorDeliveriesScreen() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[22px] font-extrabold text-ink">
+                      <p className={cn("text-[22px] font-extrabold text-ink", d.labResult === "failed" && "text-muted-foreground line-through")}>
                         {euroTotal(saleTotal(tons, d.pricePerKg), locale)}
                       </p>
-                      <p className="text-[12px] text-muted-foreground">{t("expected")}</p>
+                      <p className="text-[12px] text-muted-foreground">
+                        {d.labResult === "failed" ? t("notPayable") : t("expected")}
+                      </p>
                     </div>
                   </div>
                   <div className="mt-3 max-w-[760px]">
                     <StatusSteps steps={deliverySteps} current={step} />
                   </div>
+                  {d.labResult === "failed" ? (
+                    <p className="mt-3 rounded-xl bg-risk-soft px-3 py-2 text-[13px] font-semibold text-risk">
+                      {t("labFailedExplain")}
+                    </p>
+                  ) : null}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <ApButton
-                      label={nextLabel}
-                      variant="dark"
-                      icon={<Scale className="size-4" />}
-                      disabled={!canAdvanceDelivery(d.status)}
-                      onClick={() => openAdvance(d)}
-                    />
+                    {d.labResult === "failed" ? (
+                      <ApButton
+                        label={t("returnLot")}
+                        variant="dark"
+                        onClick={() => setCancelTarget(d)}
+                      />
+                    ) : (
+                      <ApButton
+                        label={nextLabel}
+                        variant="dark"
+                        icon={<Scale className="size-4" />}
+                        disabled={!canAdvanceDelivery(d.status, d.labResult)}
+                        onClick={() => openAdvance(d)}
+                      />
+                    )}
+                    {d.status === "scheduled" ? (
+                      <ApButton
+                        label={t("cancelPickup")}
+                        variant="outline"
+                        onClick={() => setCancelTarget(d)}
+                      />
+                    ) : null}
                     {d.status === "scheduled" ? (
                       <ApButton
                         label={parsedDate ? t("reschedule") : t("setSchedule")}
@@ -426,7 +498,7 @@ export function ProcessorDeliveriesScreen() {
           <div className="grid grid-cols-2 gap-3 min-[900px]:grid-cols-4">
             <DeliveryKpiCard
               label={t("tonnesBought")}
-              value={`${tonnesBought.toFixed(tonnesBought >= 10 ? 0 : 1)} t`}
+              value={formatTons(tonnesBought, locale)}
               hint={t("deliveriesCount", { count: completed.length })}
               icon={<Wheat className="size-4" />}
             />
@@ -531,7 +603,7 @@ export function ProcessorDeliveriesScreen() {
         subtitle={t("scheduleDialogHint")}
         actionLabel={scheduling ? t("loading") : t("scheduleDialogTitle")}
         actionDisabled={scheduling}
-        onAction={() => void onScheduleConfirm()}
+        onAction={() => onScheduleConfirm()}
       >
         <DayChipPicker
           label={t("arriveOn")}
@@ -557,20 +629,53 @@ export function ProcessorDeliveriesScreen() {
             ? `${advanceTarget.farmerName ?? advanceTarget.lotRegion ?? ""} · ${formatTons(effectiveTons(advanceTarget), locale)}`
             : undefined
         }
-        actionLabel={advancing ? t("loading") : t("advance")}
-        actionDisabled={advancing}
-        onAction={() => void onAdvanceConfirm()}
+        actionLabel={
+          advancing
+            ? t("loading")
+            : advanceTarget?.status === "scheduled" && weighUnusual && weighConfirm
+              ? t("weighConfirmAction")
+              : t("advance")
+        }
+        actionDisabled={advancing || (advanceTarget?.status === "scheduled" && weighInvalid)}
+        onAction={() => onAdvanceConfirm()}
       >
         {advanceTarget?.status === "scheduled" ? (
           <>
             <TextField
               label={t("weighKgLabel")}
               value={weighKg}
-              onChange={setWeighKg}
+              onChange={(v) => {
+                setWeighKg(v);
+                setWeighConfirm(false);
+              }}
               suffix="kg"
               inputMode="decimal"
             />
             <p className="text-[12px] font-medium text-muted-foreground">{t("weighKgHint")}</p>
+            {weighParsed != null ? (
+              <p
+                className={cn(
+                  "text-[13px] font-semibold",
+                  weighInvalid ? "text-risk" : weighUnusual ? "text-warn-text" : "text-ink",
+                )}
+              >
+                {t("weighReadback", {
+                  kg: new Intl.NumberFormat(tag, { maximumFractionDigits: 2 }).format(weighParsed),
+                  diff: `${weighParsed - weighExpectedKg >= 0 ? "+" : "−"}${new Intl.NumberFormat(tag, { maximumFractionDigits: 0 }).format(Math.abs(weighParsed - weighExpectedKg))}`,
+                  total: euroTotal(saleTotal(weighParsed / 1000, advanceTarget.pricePerKg), locale),
+                })}
+              </p>
+            ) : weighKg.trim() ? (
+              <p className="text-[13px] font-semibold text-risk">{t("weighNotNumber")}</p>
+            ) : null}
+            {weighInvalid && weighParsed != null ? (
+              <p className="text-[13px] font-semibold text-risk">{t("weighOutOfRange")}</p>
+            ) : null}
+            {weighUnusual && weighConfirm ? (
+              <p className="rounded-xl bg-warn-soft px-3 py-2 text-[13px] font-semibold text-warn-text">
+                {t("weighUnusualConfirm")}
+              </p>
+            ) : null}
           </>
         ) : null}
         {advanceTarget?.status === "weighed" ? (
@@ -594,6 +699,24 @@ export function ProcessorDeliveriesScreen() {
             })}
           </p>
         ) : null}
+      </Dialog>
+
+      <Dialog
+        open={cancelTarget != null}
+        onClose={() => setCancelTarget(null)}
+        title={cancelTarget?.labResult === "failed" ? t("returnLotTitle") : t("cancelPickupTitle")}
+        subtitle={
+          cancelTarget
+            ? `${cancelTarget.farmerName ?? cancelTarget.lotRegion ?? ""} · ${formatTons(cancelTarget.tons, locale)}`
+            : undefined
+        }
+        actionLabel={cancelling ? t("loading") : cancelTarget?.labResult === "failed" ? t("returnLot") : t("cancelPickup")}
+        actionDisabled={cancelling}
+        onAction={() => onCancelConfirm()}
+      >
+        <p className="text-[14px] font-medium text-muted-foreground">
+          {cancelTarget?.labResult === "failed" ? t("returnLotBody") : t("cancelPickupBody")}
+        </p>
       </Dialog>
     </div>
   );
@@ -623,7 +746,7 @@ function DeliveryKpiCard({
           <p className="mt-0.5 truncate text-[26px] leading-8 font-extrabold tracking-tight text-ink">
             {value}
           </p>
-          <p className="mt-0.5 truncate text-[11px] leading-[14px] font-medium text-muted-foreground">
+          <p className="mt-0.5 truncate text-[12px] leading-[14px] font-medium text-muted-foreground">
             {hint}
           </p>
         </div>

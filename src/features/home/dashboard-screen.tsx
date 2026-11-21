@@ -1,5 +1,7 @@
 "use client";
 
+import { useErrorMessage } from "@/shared/lib/error-message";
+import { localizeTip } from "@/features/weather-risk/tip-i18n";
 import { useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -34,7 +36,7 @@ import { useFieldWeather } from "@/features/weather-risk/use-field-weather";
 import { LOCALES, type Locale } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { SignOutButton } from "@/features/auth/sign-out-button";
-import { AiTag, ApButton, ApCard, FieldChips, Pill, SectionHeader } from "@/shared/components/brand";
+import { ApButton, ApCard, FieldChips, Pill, SectionHeader } from "@/shared/components/brand";
 import { colors } from "@/shared/theme/tokens";
 import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
 import { Skeleton } from "@/shared/components/ui/skeleton";
@@ -98,6 +100,7 @@ function weatherLabelKey(label: string) {
 export function DashboardScreen() {
   const t = useTranslations("farmerHome");
   const tTasks = useTranslations("farmerTasks");
+  const errMsg = useErrorMessage();
   const tThreats = useTranslations("riskThreats");
   const tFields = useTranslations("farmerFields");
   const locale = useLocale();
@@ -118,8 +121,16 @@ export function DashboardScreen() {
   const [fieldPlace, setFieldPlace] = useState<string | null>(null);
   const [recheckCount, setRecheckCount] = useState(0);
   const [offerCount, setOfferCount] = useState(0);
+  const [fieldScores, setFieldScores] = useState<Record<string, number>>({});
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
+  const [greeting, setGreeting] = useState<"greetingMorning" | "greetingAfternoon" | "greetingEvening">(
+    "greetingAfternoon",
+  );
+
+  useEffect(() => {
+    setGreeting(greetingKey());
+  }, []);
 
   useEffect(() => {
     const supabase = tryCreateBrowserClient();
@@ -130,7 +141,7 @@ export function DashboardScreen() {
       if (!user) return;
       const { data: profile } = await supabase
         .from("profiles")
-        .select("display_name, place")
+        .select("display_name, place, country")
         .eq("id", user.id)
         .maybeSingle();
       const meta = user.user_metadata as { display_name?: string } | undefined;
@@ -141,8 +152,23 @@ export function DashboardScreen() {
         "";
       setDisplayName(name);
       setProfilePlace((typeof profile?.place === "string" ? profile.place : "").trim());
+
+      let onboardingDone = false;
+      try {
+        const raw = localStorage.getItem("ap_notify_prefs");
+        if (raw) {
+          const parsed = JSON.parse(raw) as { onboardingDone?: boolean };
+          onboardingDone = Boolean(parsed.onboardingDone);
+        }
+      } catch {
+        /* ignore */
+      }
+      const hasCountry = profile?.country === "GR" || profile?.country === "TR";
+      if (!hasCountry && !onboardingDone) {
+        router.replace("/farmer/welcome");
+      }
     })();
-  }, []);
+  }, [router]);
 
   /** Greeting location uses the first field with coords (not chip selection). */
   const greetingField = useMemo(
@@ -194,12 +220,12 @@ export function DashboardScreen() {
       if (!user || cancelled) return;
 
       const fieldIds = fields.map((f) => f.id);
-      const [offersRes, treesRes] = await Promise.all([
+      const [offersRes, treesRes, scansRes, scoresRes] = await Promise.all([
         supabase
           .from("offers")
           .select("id, status")
           .eq("farmer_id", user.id)
-          .in("status", ["pending", "countered"]),
+          .eq("status", "pending"),
         fieldIds.length
           ? supabase
               .from("field_trees")
@@ -207,13 +233,49 @@ export function DashboardScreen() {
               .in("field_id", fieldIds)
               .in("status", ["diseased", "suspicious"])
           : Promise.resolve({ data: [] as { id: string }[] }),
+        fieldIds.length
+          ? supabase
+              .from("scans")
+              .select("id, diagnosis, confidence, title")
+              .eq("farmer_id", user.id)
+              .in("field_id", fieldIds)
+              .order("captured_at", { ascending: false })
+              .limit(40)
+          : Promise.resolve({
+              data: [] as { id: string; diagnosis?: string | null; confidence?: number | null; title?: string | null }[],
+            }),
+        fieldIds.length
+          ? supabase
+              .from("quality_scores")
+              .select("field_id, score, computed_at")
+              .in("field_id", fieldIds)
+              .order("computed_at", { ascending: false })
+          : Promise.resolve({ data: [] as { field_id: string; score: number }[] }),
       ]);
       if (cancelled) return;
 
       const taskRechecks = tasks.filter((row) => row.kind === "recheck" && !row.done).length;
       const treeRechecks = treesRes.data?.length ?? 0;
-      setRecheckCount(taskRechecks > 0 ? taskRechecks : treeRechecks);
+      const scanRechecks = (scansRes.data ?? []).filter((s) => {
+        const dx = `${s.diagnosis ?? ""} ${s.title ?? ""}`.toLowerCase();
+        const risky =
+          dx.includes("high") ||
+          dx.includes("risk") ||
+          dx.includes("peacock") ||
+          dx.includes("fly") ||
+          dx.includes("κυκλοκ") ||
+          dx.includes("δάκ");
+        const lowConf = s.confidence != null && s.confidence < 0.7;
+        return risky || lowConf;
+      }).length;
+      setRecheckCount(Math.max(taskRechecks, treeRechecks, scanRechecks));
       setOfferCount(offersRes.data?.length ?? 0);
+
+      const scores: Record<string, number> = {};
+      for (const row of scoresRes.data ?? []) {
+        if (scores[row.field_id] == null) scores[row.field_id] = row.score;
+      }
+      setFieldScores(scores);
     })();
     return () => {
       cancelled = true;
@@ -245,7 +307,7 @@ export function DashboardScreen() {
     try {
       const result = await completeTask(taskId);
       if (!result.ok) {
-        toast.error(result.error ?? tTasks("actionFailed"));
+        toast.error(errMsg(result.error, "actionFailed"));
         await reloadTasks();
         return;
       }
@@ -261,7 +323,7 @@ export function DashboardScreen() {
     try {
       const result = await dismissTask(taskId);
       if (!result.ok) {
-        toast.error(result.error ?? tTasks("actionFailed"));
+        toast.error(errMsg(result.error, "actionFailed"));
         await reloadTasks();
         return;
       }
@@ -295,12 +357,12 @@ export function DashboardScreen() {
   const tone = TONE[level];
   const threat = elevated ? THREAT_BY_ID[elevated.threat] : null;
   const scanMode = elevated ? SCAN_MODE[elevated.threat] : undefined;
-  /** Distinct High threats in the next 3 days (demo `countRisks`). */
+  /** Distinct Medium+High threats in the next 3 days (Π3). */
   const riskCount = useMemo(() => {
     if (!risk) return 0;
     let n = 0;
     for (const days of Object.values(risk)) {
-      if (days.slice(0, 3).some((a) => LEVEL_RANK[a.level] >= LEVEL_RANK.High)) n += 1;
+      if (days.slice(0, 3).some((a) => LEVEL_RANK[a.level] >= LEVEL_RANK.Medium)) n += 1;
     }
     return n;
   }, [risk]);
@@ -342,7 +404,7 @@ export function DashboardScreen() {
       : t("kickerAllClear");
 
   const tipText =
-    (elevated?.actions?.[0] ?? "") ||
+    localizeTip(elevated?.actions?.[0] ?? "", locale) ||
     (elevated ? threatTip(elevated.threat, tThreats) : "") ||
     (weather ? t("keepChecks") : fields.length === 0 ? t("noFieldsBody") : t("noLocationBody"));
 
@@ -360,14 +422,45 @@ export function DashboardScreen() {
   }));
 
   const location =
-    fieldPlace || profilePlace || (fields.length === 0 ? t("noPlace") : "");
+    profilePlace || fieldPlace || (fields.length === 0 ? t("noPlace") : "");
+
+  const priorityAction =
+    offerCount > 0
+      ? {
+          href: "/farmer/market?tab=offers" as const,
+          title: t("priorityOffer", { n: offerCount }),
+          cta: t("priorityOfferCta"),
+          tone: "good" as const,
+        }
+      : elevated && elevated.level === "High"
+        ? {
+            href: (SCAN_MODE[elevated.threat]
+              ? scanCameraHref({
+                  fieldId: primary?.id,
+                  mode: SCAN_MODE[elevated.threat],
+                })
+              : "/farmer/alerts") as string,
+            title: t("priorityRisk", {
+              threat: threatLabel(elevated.threat, tThreats),
+            }),
+            cta: t("priorityRiskCta"),
+            tone: "risk" as const,
+          }
+        : recheckCount > 0
+          ? {
+              href: "/farmer/scan" as const,
+              title: t("priorityRecheck", { n: recheckCount }),
+              cta: t("priorityRecheckCta"),
+              tone: "warn" as const,
+            }
+          : null;
 
   return (
     <div className="w-full flex-1 overflow-x-hidden">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="text-ap-title text-ink">
-            {t(greetingKey())},
+          <h1 className="text-ap-title text-ink" suppressHydrationWarning>
+            {t(greeting)},
             <br />
             {displayName || t("farmerFallback")}
           </h1>
@@ -382,17 +475,29 @@ export function DashboardScreen() {
             aria-label={t("settings")}
             aria-expanded={menu}
             onClick={() => setMenu((v) => !v)}
+<<<<<<< HEAD
             className="flex size-11 items-center justify-center rounded-full border border-line bg-card transition-colors hover:bg-soft"
+=======
+            className="flex size-11 items-center justify-center rounded-full border border-line bg-card"
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
           >
             <Settings className="size-[18px]" aria-hidden />
           </button>
           <Link
+<<<<<<< HEAD
             href="/farmer/tasks"
             className="relative flex size-11 items-center justify-center rounded-full border border-line bg-card transition-colors hover:bg-soft"
             aria-label={t("tasks")}
+=======
+            href="/farmer/notifications"
+            className="relative flex size-11 items-center justify-center rounded-full border border-line bg-card"
+            aria-label={t("alerts")}
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
           >
             <Bell className="size-[18px] text-good" aria-hidden />
-            <i className="absolute top-2.5 right-2.5 size-2 rounded-full bg-[#E5473A]" />
+            {offerCount > 0 ? (
+              <i className="absolute top-2.5 right-2.5 size-2 rounded-full bg-[#E5473A]" />
+            ) : null}
           </Link>
           {menu ? (
             <>
@@ -400,6 +505,7 @@ export function DashboardScreen() {
                 type="button"
                 aria-label={t("settings")}
                 onClick={() => setMenu(false)}
+<<<<<<< HEAD
                 className="fixed inset-0 z-10 cursor-default"
               />
               <div className="absolute top-12 right-0 z-20 w-[236px] rounded-2xl border border-line bg-card p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
@@ -437,12 +543,73 @@ export function DashboardScreen() {
                 </div>
                 <div className="border-t border-line pt-1">
                   <SignOutButton className="h-11 w-full justify-start rounded-xl px-2.5" />
+=======
+                className="flex h-11 items-center gap-2.5 rounded-xl px-2.5 text-ap-body font-semibold text-ink"
+              >
+                <Plus className="size-[18px]" aria-hidden />
+                {t("addField")}
+              </Link>
+              <Link
+                href="/farmer/welcome"
+                onClick={() => setMenu(false)}
+                className="flex h-11 items-center gap-2.5 rounded-xl px-2.5 text-ap-body font-semibold text-ink"
+              >
+                <MapPin className="size-[18px]" aria-hidden />
+                {t("profileSettings")}
+              </Link>
+              <div className="px-2.5 pt-1 pb-1.5">
+                <p className="mb-1.5 flex items-center gap-2 text-ap-body font-semibold text-ink">
+                  <Globe className="size-4" aria-hidden />
+                  {t("advisorLanguage")}
+                </p>
+                <div className="flex gap-1.5">
+                  {LOCALES.map((code) => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => {
+                        router.replace(pathname, { locale: code as Locale });
+                        setMenu(false);
+                      }}
+                      className={cn(
+                        "min-h-11 flex-1 rounded-full border text-ap-pill font-bold uppercase",
+                        locale === code ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
+                      )}
+                    >
+                      {code}
+                    </button>
+                  ))}
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
                 </div>
               </div>
             </>
           ) : null}
         </div>
       </div>
+
+      {priorityAction ? (
+        <Link
+          href={priorityAction.href}
+          className={cn(
+            "mt-4 flex min-h-14 items-center gap-3 rounded-[18px] px-4 py-3",
+            priorityAction.tone === "good"
+              ? "bg-good-soft"
+              : priorityAction.tone === "risk"
+                ? "bg-risk-soft"
+                : "bg-warn-soft",
+          )}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-ap-small font-bold tracking-[0.4px] text-muted-foreground uppercase">
+              {t("doToday")}
+            </p>
+            <p className="text-ap-body font-extrabold text-ink">{priorityAction.title}</p>
+          </div>
+          <span className="shrink-0 rounded-full bg-ink px-3 py-2 text-ap-pill font-bold text-white">
+            {priorityAction.cta}
+          </span>
+        </Link>
+      ) : null}
 
       {fieldsLoading ? (
         <div className="mt-4">
@@ -467,6 +634,7 @@ export function DashboardScreen() {
           <Skeleton className="h-44 w-full rounded-[22px]" />
         </div>
       ) : (
+<<<<<<< HEAD
         <>
           <div className="mt-3.5 flex min-h-11 flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-2xl border border-line bg-card px-3.5 py-2 text-ap-body font-semibold">
             <div className="flex items-center gap-2">
@@ -482,6 +650,19 @@ export function DashboardScreen() {
                 <span className="font-medium text-muted-foreground">{rainText}</span>
               </div>
             ) : null}
+=======
+        <div className="mt-3.5 md:grid md:grid-cols-2 md:items-start md:gap-6">
+          <div className="min-w-0">
+          <div className="flex h-11 items-center gap-2 rounded-2xl border border-line bg-card px-3 text-ap-body font-semibold">
+            <WeatherIcon className="size-[18px] shrink-0 text-warn" aria-hidden />
+            <span>{weather ? `${Math.round(weather.current.temp)}°C` : "—"}</span>
+            <span className="truncate font-medium text-muted-foreground">{weatherLabel}</span>
+            <span className="mx-1 h-5 w-px shrink-0 bg-line" />
+            <span className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+              <Droplet className="size-4 shrink-0 text-ap-accent" aria-hidden />
+              <span className="truncate font-medium text-muted-foreground">{rainText}</span>
+            </span>
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
           </div>
 
           <div className={cn("mt-3.5 rounded-[22px] p-4", tone.card)}>
@@ -514,11 +695,37 @@ export function DashboardScreen() {
                 <CardIcon className="size-5" style={{ color: tone.iconColor }} aria-hidden />
               </div>
             </div>
+<<<<<<< HEAD
 
             <p className="mt-1.5 text-ap-body text-[#5a5a5a]">{tipText}</p>
             <AiTag source="demo" className="mt-2" />
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+=======
+            <p className={cn("mt-3 text-[12px] font-bold tracking-[1.4px] uppercase", tone.kicker)}>
+              {kickerText}
+            </p>
+            <h2 className="mt-1.5 max-w-[240px] text-[23px] leading-tight font-extrabold tracking-tight text-ink">
+              {elevated && threat
+                ? t("riskIs", {
+                    threat: threatLabel(elevated.threat, tThreats),
+                    level: riskLevelLabel(elevated.level, tThreats),
+                  })
+                : weather
+                  ? t("noBigRisks")
+                  : t("noWeatherYet")}
+            </h2>
+            <p className="mt-1.5 max-w-[260px] text-ap-body text-[#5a5a5a]">{tipText}</p>
+            <div
+              className={cn(
+                "absolute top-14 right-4 flex size-12 items-center justify-center rounded-full",
+                tone.iconBg,
+              )}
+            >
+              <CardIcon className="size-5" style={{ color: tone.iconColor }} aria-hidden />
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-2">
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
               {elevated && scanMode ? (
                 <ApButton
                   label={t("ctaScan")}
@@ -565,10 +772,14 @@ export function DashboardScreen() {
           <SectionHeader
             title={t("todayTasks")}
             action={
+<<<<<<< HEAD
               <Link
                 href="/farmer/tasks"
                 className="inline-flex min-h-11 items-center text-ap-body font-medium text-muted-foreground"
               >
+=======
+              <Link href="/farmer/tasks" className="inline-flex min-h-11 min-w-11 items-center justify-end text-ap-body font-medium text-muted-foreground">
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
                 {t("seeAll")}
               </Link>
             }
@@ -610,28 +821,49 @@ export function DashboardScreen() {
               ))}
             </div>
           )}
+          </div>
 
+          <div className="mt-4 min-w-0 md:mt-0">
           <SectionHeader
             title={t("yourFields")}
             action={
+<<<<<<< HEAD
               <Link
                 href="/farmer/fields"
                 className="inline-flex min-h-11 items-center text-ap-body font-medium text-muted-foreground"
               >
+=======
+              <Link href="/farmer/fields" className="inline-flex min-h-11 min-w-11 items-center justify-end text-ap-body font-medium text-muted-foreground">
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
                 {t("seeAll")}
               </Link>
             }
           />
-          {fields.length === 0 ? (
+          {fieldsLoading ? (
+            <div className="mt-2.5 flex gap-2.5">
+              <Skeleton className="h-24 w-[236px] shrink-0 rounded-[18px]" />
+              <Skeleton className="h-24 w-[236px] shrink-0 rounded-[18px]" />
+            </div>
+          ) : fields.length === 0 ? (
             <p className="mt-2 text-ap-body text-muted-foreground">{t("noFieldsBody")}</p>
           ) : (
+<<<<<<< HEAD
             <div className="mt-2 flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+=======
+            <div className="mt-2.5 flex gap-2.5 overflow-x-auto pb-1 md:flex-col md:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
               {shown.map((f) => {
                 const live = elevated && primary?.id === f.id ? elevated : null;
                 const liveThreat = live ? THREAT_BY_ID[live.threat] : null;
+                const score = fieldScores[f.id];
                 return (
+<<<<<<< HEAD
                   <Link key={f.id} href="/farmer/fields" className="w-[240px] shrink-0">
                     <ApCard className="p-3.5 transition-colors hover:border-ink/30">
+=======
+                  <Link key={f.id} href="/farmer/fields" className="w-[236px] shrink-0 md:w-full">
+                    <ApCard className="p-3">
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
                       <div className="flex items-center gap-2.5">
                         <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-good-soft">
                           <Trees className="size-5 text-good" aria-hidden />
@@ -641,11 +873,17 @@ export function DashboardScreen() {
                           <p className="text-ap-small text-muted-foreground">
                             {f.tree_count != null ? tFields("treesCount", { n: f.tree_count }) : "—"}
                             {f.area_ha != null
-                              ? ` · ${tFields("haCount", { n: formatStremmata(Number(f.area_ha)) })}`
+                              ? ` · ${tFields("haCount", { n: formatStremmata(Number(f.area_ha), 1, locale) })}`
                               : ""}
                           </p>
                         </div>
+<<<<<<< HEAD
                         <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+=======
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-soft text-ap-body font-extrabold text-muted-foreground">
+                          {score != null ? score : "—"}
+                        </span>
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
                       </div>
                       {live && liveThreat ? (
                         <div className="mt-2.5 flex min-h-6 items-center gap-2">
@@ -667,7 +905,8 @@ export function DashboardScreen() {
               })}
             </div>
           )}
-        </>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -693,7 +932,11 @@ function QuickPill({
     <Link
       href={href}
       className={cn(
+<<<<<<< HEAD
         "flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border-[1.5px] bg-card px-2 py-1.5 text-center text-[12px] leading-tight font-bold transition-colors hover:bg-soft/60",
+=======
+        "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border-[1.5px] bg-card text-ap-pill font-bold",
+>>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
         style,
       )}
     >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ClipboardList,
   Gauge,
@@ -19,12 +19,17 @@ import { ApButton } from "@/shared/components/brand/ap-button";
 import { ApCard } from "@/shared/components/brand/ap-card";
 import { Pill } from "@/shared/components/brand/pill";
 import { Link, useRouter } from "@/shared/i18n/navigation";
-import { euroPrice, euroTotal, formatTons, saleTotal } from "@/features/marketplace/pricing";
+import {
+  formatEuro,
+  formatEuroPerKg,
+  formatTons,
+  saleTotal,
+  MARKET_LIMITS,
+  parseBounded,
+} from "@/features/marketplace/pricing";
 import { trustBadges } from "@/features/marketplace/badges";
 import { canAdvanceDelivery } from "@/features/marketplace/delivery-state";
-import { reverseGeocodePlace } from "@/features/fields/reverse-geocode";
 import {
-  Amount,
   DayChipPicker,
   Dialog,
   EmptyBlock,
@@ -36,6 +41,7 @@ import {
   WeekStrip,
   type LotBadge,
   type WeekDayCell,
+  useAsyncDialog,
 } from "./processor-kit";
 import { regionLabel } from "./regions";
 import {
@@ -58,6 +64,7 @@ import {
   type ProcessorOffer,
 } from "./use-processor-market";
 import { useVarietyLabel } from "./processor-shared";
+import { useBoundsMessage, useErrorMessage } from "@/shared/lib/error-message";
 
 function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"processor">>): LotBadge[] {
   const trust = trustBadges(
@@ -78,86 +85,76 @@ function lotBadgesFor(lot: ProcessorLot, t: ReturnType<typeof useTranslations<"p
     out.push({ id: "lab-suggested", label: t("badge.labSuggested") });
   }
   if (lot.hasBannedSpray) {
-    out.unshift({ id: "banned", label: t("noBannedProducts") });
+    out.unshift({ id: "banned", label: t("sprayNotApproved") });
   }
   return out;
 }
 
-function useLotPlaceLabels(lots: ProcessorLot[]) {
-  const locale = useLocale();
-  const [labels, setLabels] = useState<Record<string, string>>({});
-  const lotsRef = useRef(lots);
-  lotsRef.current = lots;
-
-  // Stable string key — do not depend on array identity (e.g. `lot ? [lot] : []`).
-  const key = lots
-    .filter((l) => l.lat != null && l.lon != null)
-    .map((l) => `${l.id}:${l.lat},${l.lon}:${l.town ?? ""}:${l.region}`)
-    .sort()
-    .join("|");
-
-  useEffect(() => {
-    if (!key) {
-      setLabels((prev) => (Object.keys(prev).length === 0 ? prev : {}));
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const next: Record<string, string> = {};
-      await Promise.all(
-        lotsRef.current.map(async (lot) => {
-          if (lot.lat == null || lot.lon == null) return;
-          if (lot.town) {
-            next[lot.id] = `${lot.town}${lot.region ? `, ${lot.region}` : ""}`;
-            return;
-          }
-          const place = await reverseGeocodePlace(lot.lat, lot.lon, locale);
-          if (place) next[lot.id] = place;
-        }),
-      );
-      if (!cancelled) setLabels(next);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [key, locale]);
-
-  return labels;
-}
-
-function overviewGreeting(locale: string, company: string) {
-  const hour = new Date().getHours();
+/** `now` is null during SSR/hydration (server runs in UTC), so greeting and date render only on the client. */
+function overviewGreeting(locale: string, company: string, now: Date | null) {
+  const hour = now?.getHours() ?? 12;
   const hello =
     hour < 12 ? "greetingMorning" : hour < 18 ? "greetingAfternoon" : "greetingEvening";
-  const date = new Date().toLocaleDateString(locale, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  const date = now
+    ? now.toLocaleDateString(locale, {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      })
+    : "\u00a0";
   return { hello, company, date };
+}
+
+function titleCaseName(name: string) {
+  return name
+    .toLocaleLowerCase("el-GR")
+    .replace(/(^|[\s/-])\S/g, (ch) => ch.toLocaleUpperCase("el-GR"));
 }
 
 function SupplyWeekBars({
   weekTons,
   labels,
+  globalMax,
+  compact = false,
 }: {
   weekTons: [number, number, number, number];
   labels: [string, string, string, string];
+  globalMax: number;
+  compact?: boolean;
 }) {
-  const max = Math.max(1, ...weekTons);
+  const locale = useLocale();
+  const max = Math.max(1, globalMax);
+  if (compact) {
+    return (
+      <div className="flex h-8 items-end gap-1">
+        {weekTons.map((tons, i) => (
+          <div key={labels[i]} className="flex h-full w-3 items-end rounded-sm bg-soft" title={formatTons(tons, locale)}>
+            {tons > 0 ? (
+              <div
+                className="w-full rounded-sm bg-good"
+                style={{ height: `${Math.max(12, Math.round((tons / max) * 100))}%` }}
+              />
+            ) : null}
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="mt-3 grid grid-cols-4 gap-2">
       {weekTons.map((tons, i) => (
         <div key={labels[i]} className="flex flex-col items-center gap-1.5">
           <div className="flex h-14 w-full items-end justify-center rounded-md bg-soft px-1 pb-1">
-            <div
-              className="w-full max-w-[28px] rounded-sm bg-ink/80"
-              style={{ height: `${Math.max(6, Math.round((tons / max) * 100))}%` }}
-              title={`${tons} t`}
-            />
+            {tons > 0 ? (
+              <div
+                className="w-full max-w-[28px] rounded-sm bg-good"
+                style={{ height: `${Math.max(6, Math.round((tons / max) * 100))}%` }}
+                title={formatTons(tons, locale)}
+              />
+            ) : null}
           </div>
-          <span className="text-[10px] font-semibold text-muted-foreground">{labels[i]}</span>
-          <span className="text-[11px] font-bold text-ink">{tons > 0 ? formatTons(tons) : "–"}</span>
+          <span className="text-[12px] font-semibold text-muted-foreground">{labels[i]}</span>
+          <span className="text-[12px] font-bold text-ink">{tons > 0 ? formatTons(tons, locale) : "–"}</span>
         </div>
       ))}
     </div>
@@ -166,6 +163,9 @@ function SupplyWeekBars({
 
 export function ProcessorOverviewScreen() {
   const t = useTranslations("processor");
+  const errMsg = useErrorMessage();
+  const boundsMsg = useBoundsMessage();
+  const { confirm: confirmDialog, prompt: promptDialog, dialog: asyncDialog } = useAsyncDialog();
   const tNav = useTranslations("processorNav");
   const locale = useLocale();
   const router = useRouter();
@@ -187,7 +187,10 @@ export function ProcessorOverviewScreen() {
   const [acceptDate, setAcceptDate] = useState(() => addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
-  const greet = overviewGreeting(locale, company);
+  const [showAllSupply, setShowAllSupply] = useState(false);
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => setNow(new Date()), []);
+  const greet = overviewGreeting(locale, company, now);
   const weekDates = useMemo(() => nextSevenDays(), []);
 
   useEffect(() => {
@@ -213,14 +216,14 @@ export function ProcessorOverviewScreen() {
   const onAcceptConfirm = async () => {
     if (!acceptOffer) return;
     setBusyOfferId(acceptOffer.id);
-    toast.message(t("accepting"));
+    const toastId = toast.loading(t("accepting"));
     try {
       const res = await acceptIncomingOffer(acceptOffer.id, { scheduledFor: acceptDate });
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"), { id: toastId });
         return;
       }
-      toast.success(t("acceptedScheduled", { date: acceptDate }));
+      toast.success(t("acceptedScheduled", { date: new Date(`${acceptDate}T12:00:00`).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" }) }), { id: toastId });
       setAcceptOffer(null);
       setSelectedDay(acceptDate);
       await reload();
@@ -231,25 +234,26 @@ export function ProcessorOverviewScreen() {
 
   const onCounter = async (offer: ProcessorOffer) => {
     const suggested = Math.max(0.05, Math.round((offer.pricePerKg - 0.05) * 100) / 100);
-    const raw = window.prompt(t("counterPrompt"), String(suggested));
+    const raw = await promptDialog(t("counterPrompt"), String(suggested).replace(".", ","));
     if (raw == null) {
       toast.message(t("counterCancelled"));
       return;
     }
-    const next = Number(raw.replace(",", "."));
-    if (!Number.isFinite(next) || next <= 0) {
-      toast.error(t("invalidPrice"));
+    const pc = parseBounded(raw, MARKET_LIMITS.pricePerKg);
+    if (!pc.ok) {
+      toast.error(boundsMsg(pc, "price", locale));
       return;
     }
+    const next = pc.value;
     setBusyOfferId(offer.id);
-    toast.message(t("countering"));
+    const toastId = toast.loading(t("countering"));
     try {
       const res = await counterIncomingOffer(offer, next);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"), { id: toastId });
         return;
       }
-      toast.success(t("counterSentDetail"));
+      toast.success(t("counterSentDetail"), { id: toastId });
       await reload();
     } finally {
       setBusyOfferId(null);
@@ -257,12 +261,12 @@ export function ProcessorOverviewScreen() {
   };
 
   const onReject = async (offer: ProcessorOffer) => {
-    if (!window.confirm(t("rejectConfirm"))) return;
+    if (!(await confirmDialog(t("rejectConfirm")))) return;
     setBusyOfferId(offer.id);
     try {
       const res = await rejectOffer(offer.id);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("rejectedOk"));
@@ -296,20 +300,24 @@ export function ProcessorOverviewScreen() {
         isToday: iso === todayIsoDate(),
         tons,
         overloaded: tons >= DAY_CAPACITY_TONS,
-        chips: dayDeliveries.map((d) => ({
-          id: d.id,
-          label: `${d.lotVariety ? varietyLabel(d.lotVariety) : t("anonymousGrove")} · ${formatTons(d.tons, locale)}`,
-        })),
+        deliveryCount: dayDeliveries.length,
+        chips: [],
       };
     });
-  }, [weekDates, openDeliveries, locale, varietyLabel, t]);
+  }, [weekDates, openDeliveries, locale]);
+
+  const supplyGlobalMax = useMemo(
+    () => Math.max(1, ...supply.flatMap((row) => row.weekTons)),
+    [supply],
+  );
+  const supplyRows = showAllSupply ? supply : supply.slice(0, 3);
 
   const selectedDayDeliveries = selectedDay
     ? openDeliveries.filter((d) => parseIsoDate(d.scheduledFor) === selectedDay)
     : [];
 
   const onAdvanceFromDay = async (d: ProcessorDelivery) => {
-    if (!canAdvanceDelivery(d.status)) return;
+    if (!canAdvanceDelivery(d.status, d.labResult)) return;
     // Weighbridge / lab need inputs — open the Deliveries page for the confirm dialog.
     router.push("/processor/deliveries");
   };
@@ -319,7 +327,7 @@ export function ProcessorOverviewScreen() {
     try {
       const res = await scheduleDelivery(deliveryId, iso);
       if (!res.ok) {
-        toast.error(res.error ?? t("saveFailed"));
+        toast.error(errMsg(res.error, "saveFailed"));
         return;
       }
       toast.success(t("deliveryScheduled", { date: iso }));
@@ -335,6 +343,7 @@ export function ProcessorOverviewScreen() {
 
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-6">
+      {asyncDialog}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-[240px] shrink">
           <p className="text-[13px] font-semibold text-muted-foreground capitalize">{greet.date}</p>
@@ -343,7 +352,7 @@ export function ProcessorOverviewScreen() {
           </h1>
           <p className="mt-1 text-[16px] leading-5 font-medium text-muted-foreground">{t("overviewSubtitle")}</p>
         </div>
-        <Link href="/processor/lots">
+        <Link href="/processor/lots" className="hidden min-[900px]:block">
           <ApButton label={tNav("findOlives")} variant="dark" icon={<Search className="size-4" />} />
         </Link>
       </div>
@@ -352,10 +361,10 @@ export function ProcessorOverviewScreen() {
         <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{t(error)}</ApCard>
       ) : null}
 
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-2 gap-3 min-[900px]:flex min-[900px]:flex-wrap">
         <StatCard
           href="#incoming-offers"
-          label={t("incomingOffers")}
+          label={t("kpiOffers")}
           value={loading ? "…" : String(incoming.length)}
           hint={t("waitingAnswer")}
           icon={<Inbox className="size-[18px]" />}
@@ -364,7 +373,7 @@ export function ProcessorOverviewScreen() {
         />
         <StatCard
           href="/processor/requests"
-          label={t("openRequests")}
+          label={t("kpiRequests")}
           value={loading ? "…" : String(openRequests.length)}
           hint={t("waitingFarmers")}
           icon={<ClipboardList className="size-[18px]" />}
@@ -372,7 +381,7 @@ export function ProcessorOverviewScreen() {
         />
         <StatCard
           href="/processor/deliveries"
-          label={t("deliveriesWeek")}
+          label={t("kpiDeliveriesWeek")}
           value={loading ? "…" : String(deliveriesWeek.length)}
           hint={t("notPaidYet")}
           icon={<Truck className="size-[18px]" />}
@@ -401,80 +410,85 @@ export function ProcessorOverviewScreen() {
           selectedIso={selectedDay}
           onSelect={(iso) => setSelectedDay((cur) => (cur === iso ? null : iso))}
           emptyHint={t("weekStripEmpty")}
+          legendScheduled={t("weekLegendScheduled")}
+          legendOverloaded={t("weekLegendOverloaded")}
+          deliveriesLabel={(count) => t("deliveriesCount", { count })}
         />
 
         {selectedDay ? (
           <ApCard className="overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4 pb-2">
-              <div>
-                <p className="text-[15px] font-extrabold text-ink">
-                  {t("dayDetailTitle", {
-                    date: new Date(`${selectedDay}T12:00:00`).toLocaleDateString(locale, {
-                      weekday: "long",
-                      day: "numeric",
-                      month: "long",
-                    }),
-                  })}
-                </p>
-                <p className="text-[12px] font-medium text-muted-foreground">
-                  {selectedDayDeliveries.length === 0
-                    ? t("dayDetailEmpty")
-                    : t("dayDetailTons", {
+            {selectedDayDeliveries.length === 0 ? (
+              <p className="px-4 py-3 text-[13px] font-semibold text-muted-foreground">{t("dayDetailEmpty")}</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4 pb-2">
+                  <div>
+                    <p className="text-[15px] font-extrabold text-ink">
+                      {t("dayDetailTitle", {
+                        date: new Date(`${selectedDay}T12:00:00`).toLocaleDateString(locale, {
+                          weekday: "long",
+                          day: "numeric",
+                          month: "long",
+                        }),
+                      })}
+                    </p>
+                    <p className="text-[12px] font-medium text-muted-foreground">
+                      {t("dayDetailTons", {
                         n: selectedDayDeliveries.reduce((s, d) => s + d.tons, 0),
                         count: selectedDayDeliveries.length,
                       })}
-                </p>
-              </div>
-              <Link href="/processor/deliveries" className="text-[12px] font-bold text-ink hover:underline">
-                {t("seeAll")}
-              </Link>
-            </div>
-            {selectedDayDeliveries.length === 0 ? (
-              <p className="border-t border-line px-4 py-6 text-center text-[13px] font-semibold text-muted-foreground">
-                {t("dayDetailEmpty")}
-              </p>
-            ) : (
-              selectedDayDeliveries.map((d) => {
-                const nextLabel =
-                  d.status === "scheduled"
-                    ? t("recordWeighbridge")
-                    : d.status === "weighed"
-                      ? t("markLab")
-                      : d.status === "lab_checked"
-                        ? t("markPaid")
-                        : t("advance");
-                return (
-                  <div key={d.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="text-[14px] font-extrabold text-ink">
-                        {d.farmerName ?? d.lotRegion ?? t("anonymousGrove")}
-                      </p>
-                      <p className="text-[12px] font-medium text-muted-foreground">
-                        {[
-                          d.lotVariety ? varietyLabel(d.lotVariety) : null,
-                          `${d.tons} t`,
-                          t(`step.${d.status}` as "step.scheduled"),
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[14px] font-extrabold text-ink">
-                        {euroTotal(saleTotal(d.tons, d.pricePerKg))}
-                      </span>
-                      {canAdvanceDelivery(d.status) ? (
-                        <ApButton
-                          label={nextLabel}
-                          variant="dark"
-                          icon={<Scale className="size-4" />}
-                          onClick={() => void onAdvanceFromDay(d)}
-                        />
-                      ) : null}
-                    </div>
+                    </p>
                   </div>
-                );
-              })
+                  <Link href="/processor/deliveries" className="text-[12px] font-bold text-ink hover:underline">
+                    {t("seeAllDeliveries")}
+                  </Link>
+                </div>
+                {selectedDayDeliveries.map((d) => {
+                  const nextLabel =
+                    d.status === "scheduled"
+                      ? t("recordWeighbridge")
+                      : d.status === "weighed"
+                        ? t("markLab")
+                        : d.status === "lab_checked"
+                          ? t("markPaid")
+                          : t("advance");
+                  const farmer =
+                    d.farmerName
+                      ? titleCaseName(d.farmerName)
+                      : d.lotRegion
+                        ? regionLabel(d.lotRegion, locale)
+                        : t("anonymousGrove");
+                  return (
+                    <div key={d.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-[14px] font-extrabold text-ink">{farmer}</p>
+                        <p className="text-[12px] font-medium text-muted-foreground">
+                          {[
+                            d.lotVariety ? varietyLabel(d.lotVariety) : null,
+                            formatTons(d.tons, locale),
+                            t(`step.${d.status}` as "step.scheduled"),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[14px] font-extrabold text-ink">
+                          {formatEuro(saleTotal(d.tons, d.pricePerKg), locale)}
+                        </span>
+                        {canAdvanceDelivery(d.status, d.labResult) ? (
+                          <ApButton
+                            label={nextLabel}
+                            variant="dark"
+                            icon={<Scale className="size-4" />}
+                            onClick={() => void onAdvanceFromDay(d)}
+                          />
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
             )}
           </ApCard>
         ) : null}
@@ -488,7 +502,13 @@ export function ProcessorOverviewScreen() {
             {unscheduled.map((d) => (
               <div key={d.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
                 <div>
-                  <p className="text-[14px] font-extrabold text-ink">{d.farmerName ?? d.lotRegion ?? t("anonymousGrove")}</p>
+                  <p className="text-[14px] font-extrabold text-ink">
+                    {d.farmerName
+                      ? titleCaseName(d.farmerName)
+                      : d.lotRegion
+                        ? regionLabel(d.lotRegion, locale)
+                        : t("anonymousGrove")}
+                  </p>
                   <p className="text-[12px] font-medium text-muted-foreground">
                     {[d.lotVariety ? varietyLabel(d.lotVariety) : null, formatTons(d.tons, locale)].filter(Boolean).join(" · ")}
                   </p>
@@ -500,7 +520,7 @@ export function ProcessorOverviewScreen() {
                       type="button"
                       disabled={schedulingId === d.id}
                       onClick={() => void onQuickSchedule(d.id, iso)}
-                      className="rounded-full border border-line bg-card px-2.5 py-1 text-[11px] font-bold text-ink hover:bg-soft disabled:opacity-50"
+                      className="rounded-full border border-line bg-card px-2.5 py-1 text-[12px] font-bold text-ink hover:bg-soft disabled:opacity-50"
                     >
                       {iso === todayIsoDate() ? t("todayShort") : formatChipDay(iso)}
                     </button>
@@ -519,13 +539,13 @@ export function ProcessorOverviewScreen() {
         subtitle={t("offerDetailHint")}
         actionLabel={busyOfferId ? t("loading") : t("accept")}
         actionDisabled={busyOfferId != null}
-        onAction={() => void onAcceptConfirm()}
+        onAction={() => onAcceptConfirm()}
       >
         {acceptOffer ? (
           <div className="mb-4 space-y-2 rounded-xl bg-soft p-3">
             <p className="text-[15px] font-extrabold text-ink">
               {acceptOffer.lot
-                ? lotPlaceLabel(acceptOffer.lot, t("anonymousGrove"))
+                ? lotPlaceLabel(acceptOffer.lot, t("anonymousGrove"), undefined, locale)
                 : t("anonymousGrove")}
             </p>
             <p className="text-[13px] font-medium text-muted-foreground">
@@ -533,14 +553,14 @@ export function ProcessorOverviewScreen() {
                 ? t("incomingSub", {
                     variety: varietyLabel(acceptOffer.lot.variety),
                     tons: acceptOffer.tons,
-                    region: acceptOffer.lot.region,
+                    region: regionLabel(acceptOffer.lot.region, locale),
                   })
-                : `${acceptOffer.tons} t`}
+                : formatTons(acceptOffer.tons, locale)}
             </p>
             <p className="text-[18px] font-extrabold text-ink">
-              {t("asksPrice", { price: euroPrice(acceptOffer.pricePerKg) })}
+              {formatEuroPerKg(acceptOffer.pricePerKg, locale)}
               <span className="ml-2 text-[12px] font-semibold text-muted-foreground">
-                {t("approx", { total: euroTotal(saleTotal(acceptOffer.tons, acceptOffer.pricePerKg)) })}
+                {t("approx", { total: formatEuro(saleTotal(acceptOffer.tons, acceptOffer.pricePerKg), locale) })}
               </span>
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
@@ -586,8 +606,11 @@ export function ProcessorOverviewScreen() {
             ) : (
               incoming.map((offer, i) => {
                 const lot = offer.lot;
-                const place = lot ? lotPlaceLabel(lot, t("anonymousGrove")) : t("anonymousGrove");
+                const place = lot ? lotPlaceLabel(lot, t("anonymousGrove"), undefined, locale) : t("anonymousGrove");
                 const badges = lot ? lotBadgesFor(lot, t) : [];
+                const priceLine = `${formatEuroPerKg(offer.pricePerKg, locale)} · ${t("approx", {
+                  total: formatEuro(saleTotal(offer.tons, offer.pricePerKg), locale),
+                })}`;
                 return (
                   <LotRow
                     key={offer.id}
@@ -604,30 +627,13 @@ export function ProcessorOverviewScreen() {
                         ? t("incomingSub", {
                             variety: varietyLabel(lot.variety),
                             tons: offer.tons,
-                            region: lot.region,
+                            region: regionLabel(lot.region, locale),
                           })
-                        : `${offer.tons} t`
+                        : formatTons(offer.tons, locale)
                     }
-                    badges={<LotBadges badges={badges} max={2} />}
+                    badges={<LotBadges badges={badges} max={3} />}
                     score={lot?.qualityScore != null ? <ScoreBox score={lot.qualityScore} /> : <span />}
-                    value={
-                      <>
-                        <Amount value={euroPrice(offer.pricePerKg)} unit="/kg" />
-                        <span className="text-[11px] font-semibold text-ink">
-                          {t("asksPrice", { price: euroPrice(offer.pricePerKg) })}
-                        </span>
-                        <span className="text-[11px] font-medium text-muted-foreground">
-                          {t("approx", { total: euroTotal(saleTotal(offer.tons, offer.pricePerKg)) })}
-                        </span>
-                      </>
-                    }
-                    actions={
-                      <ApButton
-                        label={t("openOffer")}
-                        variant="dark"
-                        onClick={() => router.push(`/processor/offers/${offer.id}`)}
-                      />
-                    }
+                    value={<span className="text-[14px] font-extrabold text-ink">{priceLine}</span>}
                   />
                 );
               })
@@ -649,14 +655,14 @@ export function ProcessorOverviewScreen() {
             ) : (
               outgoing.map((offer) => {
                 const lot = offer.lot;
-                const place = lot ? lotPlaceLabel(lot, t("anonymousGrove")) : t("anonymousGrove");
+                const place = lot ? lotPlaceLabel(lot, t("anonymousGrove"), undefined, locale) : t("anonymousGrove");
                 return (
                   <div key={offer.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
                     <div>
                       <p className="text-[15px] font-extrabold text-ink">{place}</p>
                       <p className="text-[12px] font-medium text-muted-foreground">
                         {t("waitingFarmerAnswer", {
-                          price: euroPrice(offer.pricePerKg),
+                          price: formatEuro(offer.pricePerKg, locale),
                           tons: offer.tons,
                         })}
                       </p>
@@ -672,13 +678,10 @@ export function ProcessorOverviewScreen() {
         <aside className="min-w-0">
           <Panel
             title={t("upcomingDeliveries")}
-            subtitle={t("upcomingDeliveriesHint")}
             right={
-              deliveriesWeek.length > 0 ? (
-                <Link href="/processor/deliveries" className="text-[12px] font-bold text-ink hover:underline">
-                  {t("seeAll")}
-                </Link>
-              ) : null
+              <Link href="/processor/deliveries" className="text-[12px] font-bold text-ink hover:underline">
+                {t("seeAllDeliveries")}
+              </Link>
             }
           >
             {deliveriesWeek.length === 0 ? (
@@ -695,9 +698,15 @@ export function ProcessorOverviewScreen() {
             ) : (
               deliveriesWeek.slice(0, 5).map((d) => {
                 const when = parseIsoDate(d.scheduledFor);
+                const farmer =
+                  d.farmerName
+                    ? titleCaseName(d.farmerName)
+                    : d.lotRegion
+                      ? regionLabel(d.lotRegion, locale)
+                      : t("anonymousGrove");
                 return (
                   <div key={d.id} className="border-t border-line px-4 py-3">
-                    <p className="text-[14px] font-extrabold text-ink">{d.farmerName ?? d.lotRegion ?? t("anonymousGrove")}</p>
+                    <p className="text-[14px] font-extrabold text-ink">{farmer}</p>
                     <p className="mt-0.5 text-[12px] font-medium text-muted-foreground">
                       {[
                         when
@@ -715,7 +724,9 @@ export function ProcessorOverviewScreen() {
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
-                    <p className="mt-1 text-[13px] font-extrabold text-ink">{euroTotal(saleTotal(d.tons, d.pricePerKg))}</p>
+                    <p className="mt-1 text-[13px] font-extrabold text-ink">
+                      {formatEuro(saleTotal(d.tons, d.pricePerKg), locale)}
+                    </p>
                   </div>
                 );
               })
@@ -737,27 +748,53 @@ export function ProcessorOverviewScreen() {
             }
           />
         ) : (
-          <div className="grid grid-cols-1 gap-3 border-t border-line p-4 sm:grid-cols-2">
-            {supply.map((row) => {
-              const total = row.weekTons.reduce((a, b) => a + b, 0);
-              return (
-                <div key={row.region} className="relative rounded-[16px] border border-line bg-background p-4">
-                  <div className="flex items-start justify-between gap-2">
+          <>
+            {/* Mobile compact rows */}
+            <div className="space-y-2 border-t border-line p-3 min-[640px]:hidden">
+              {supplyRows.map((row) => {
+                const total = row.weekTons.reduce((a, b) => a + b, 0);
+                return (
+                  <div
+                    key={row.region}
+                    className="flex h-16 items-center justify-between gap-3 rounded-[14px] border border-line bg-background px-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-[14px] font-extrabold text-ink">{regionLabel(row.region, locale)}</p>
+                      <p className="text-[12px] font-medium text-muted-foreground">{formatTons(total, locale)}</p>
+                    </div>
+                    <SupplyWeekBars weekTons={row.weekTons} labels={weekLabels} globalMax={supplyGlobalMax} compact />
+                  </div>
+                );
+              })}
+              {supply.length > 3 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllSupply((v) => !v)}
+                  className="w-full rounded-full border border-line px-3 py-2 text-[13px] font-bold text-ink hover:bg-soft"
+                >
+                  {showAllSupply ? t("clearFilters") : t("seeAllRegions")}
+                </button>
+              ) : null}
+            </div>
+
+            {/* Desktop cards */}
+            <div className="hidden gap-3 border-t border-line p-4 min-[640px]:grid min-[640px]:grid-cols-2">
+              {supply.map((row) => {
+                const total = row.weekTons.reduce((a, b) => a + b, 0);
+                return (
+                  <div key={row.region} className="rounded-[16px] border border-line bg-background p-4">
                     <div>
                       <p className="text-[15px] font-extrabold text-ink">{regionLabel(row.region, locale)}</p>
                       <p className="text-[12px] font-medium text-muted-foreground">
                         {t("regionTotalTonsLabel", { tons: formatTons(total, locale) })}
                       </p>
                     </div>
-                    <span className="rounded-full bg-soft px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
-                      {t("riskUnknown")}
-                    </span>
+                    <SupplyWeekBars weekTons={row.weekTons} labels={weekLabels} globalMax={supplyGlobalMax} />
                   </div>
-                  <SupplyWeekBars weekTons={row.weekTons} labels={weekLabels} />
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </Panel>
 
