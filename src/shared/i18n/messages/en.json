@@ -629,6 +629,18 @@
     "labelTooDark": "The label is too dark to read. Try again in daylight.",
     "labelUnclear": "I could not read the label with confidence. Take a closer, sharper photo."
   },
+  "scoreHistory": {
+    "title": "Score history",
+    "subtitle": "Last {n} months",
+    "now": "Now",
+    "up": "Up {n, plural, one {# point} other {# points}} since {month}",
+    "down": "Down {n, plural, one {# point} other {# points}} since {month}",
+    "same": "No change since {month}",
+    "chartLabel": "Quality score over the last {n} months",
+    "pointLabel": "{month}: score {n}",
+    "emptyTitle": "History appears after a few weeks",
+    "emptyBody": "We need at least two scores in different months to draw the trend."
+  },
   "farmerQuality": {
     "title": "Quality score",
     "subtitle": "Dynamic score and improvement plan.",

@@ -629,6 +629,18 @@
     "labelTooDark": "Etiket okunamayacak kadar karanlık. Gün ışığında tekrar dene.",
     "labelUnclear": "Etiketi güvenle okuyamadım. Daha yakın ve net bir fotoğraf çek."
   },
+  "scoreHistory": {
+    "title": "Puan geçmişi",
+    "subtitle": "Son {n} ay",
+    "now": "Şimdi",
+    "up": "{month} ayından bu yana {n} puan arttı",
+    "down": "{month} ayından bu yana {n} puan düştü",
+    "same": "{month} ayından bu yana değişiklik yok",
+    "chartLabel": "Son {n} ayın kalite puanı",
+    "pointLabel": "{month}: puan {n}",
+    "emptyTitle": "Geçmiş birkaç hafta sonra görünür",
+    "emptyBody": "Eğilimi çizmek için farklı aylarda en az iki puan gerekir."
+  },
   "farmerQuality": {
     "title": "Kalite skoru",
     "subtitle": "Dinamik skor ve iyileştirme planı.",

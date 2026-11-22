@@ -53,6 +53,7 @@ import {
   useProcessorMarket,
   type ProcessorLot,
 } from "./use-processor-market";
+import { ScoreHistoryChart } from "@/features/quality/score-history-chart";
 import { useBoundsMessage, useErrorMessage } from "@/shared/lib/error-message";
 
 const DEMO_EXCHANGE = 0.8;
@@ -520,6 +521,9 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
 
       <div className="grid grid-cols-1 gap-6 min-[900px]:grid-cols-[1fr_360px]">
         <div className="order-2 flex min-w-0 flex-col gap-4 min-[900px]:order-1">
+          {/* Score history only: no farmer identity is selected or shown (reveals after accept, as before). */}
+          <ScoreHistoryChart fieldId={lot.fieldId} refreshKey={lot.qualityScore} className="p-5" />
+
           <ApCard className="p-5">
             <p className="text-[16px] font-extrabold text-ink">{t("scoreBreakdownTitle")}</p>
             <div className="mt-3">
