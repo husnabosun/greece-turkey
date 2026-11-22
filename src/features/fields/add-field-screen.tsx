@@ -17,6 +17,7 @@ import {
   varietiesGrouped,
   type OliveCountry,
 } from "@/features/fields/olive-varieties";
+import { TREES_PER_HA_TYPICAL } from "@/features/fields/olive-density";
 import { ApCard } from "@/shared/components/brand";
 import { useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
@@ -32,8 +33,9 @@ const AGE_PRESETS = [
   { key: "ageMid" as const, years: 35 },
   { key: "ageOld" as const, years: 60 },
 ];
-/** Rough olive density for satellite estimate when polygon area is known. */
-const TREES_PER_HA = 130;
+
+/** Agronomic typical (~20 trees/στρέμμα) when Vision is still loading or unavailable. */
+const TREES_PER_HA = TREES_PER_HA_TYPICAL;
 
 /**
  * Add field — your product flow: enter details, save, done.
@@ -58,6 +60,8 @@ export function AddFieldScreen() {
   const [ageYears, setAgeYears] = useState(35);
   const [showAllVarieties, setShowAllVarieties] = useState(false);
   const [treesTouched, setTreesTouched] = useState(false);
+  const [aiTrees, setAiTrees] = useState<number | null>(null);
+  const [countingTrees, setCountingTrees] = useState(false);
   const oliveCountry = useMemo(
     () => resolveOliveCountry({ locale, lon: mapLon, profileCountry }).country,
     [locale, mapLon, profileCountry],
@@ -66,6 +70,8 @@ export function AddFieldScreen() {
   const [irrigated, setIrrigated] = useState(false);
   const [saving, setSaving] = useState(false);
   const saveLock = useRef(false);
+  const treesTouchedRef = useRef(treesTouched);
+  const countRequestId = useRef(0);
 
   const varietyGroups = useMemo(
     () => varietiesGrouped(locale, mapLon, profileCountry, showAllVarieties),
@@ -96,26 +102,77 @@ export function AddFieldScreen() {
   }, []);
 
   useEffect(() => {
+    treesTouchedRef.current = treesTouched;
+  }, [treesTouched]);
+
+  useEffect(() => {
     if (showAllVarieties) return;
     if (!isVarietyAllowed(varietySlug, oliveCountry)) {
       setVarietySlug(defaultVarietySlug(oliveCountry));
     }
   }, [oliveCountry, varietySlug, showAllVarieties]);
 
-  const satelliteTrees = useMemo(() => {
+  const densityTrees = useMemo(() => {
     if (areaHa == null || areaHa <= 0) return null;
     return Math.max(10, Math.round(areaHa * TREES_PER_HA));
   }, [areaHa]);
 
+  /** Prefer AI crown count; fall back to area×density while counting / if AI fails. */
+  const satelliteTrees = aiTrees ?? densityTrees;
+
+  useEffect(() => {
+    if (!polygon) {
+      setAiTrees(null);
+      setCountingTrees(false);
+      return;
+    }
+
+    const requestId = ++countRequestId.current;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setCountingTrees(true);
+        try {
+          const res = await fetch("/api/ai/count-trees", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ polygon }),
+          });
+          if (requestId !== countRequestId.current) return;
+          const json = (await res.json()) as {
+            ok?: boolean;
+            data?: { treeCount?: number; unavailable?: boolean };
+          };
+          if (!res.ok || !json.ok || json.data?.unavailable || typeof json.data?.treeCount !== "number") {
+            setAiTrees(null);
+            return;
+          }
+          const n = Math.max(1, Math.min(5000, Math.round(json.data.treeCount)));
+          setAiTrees(n);
+          if (!treesTouchedRef.current) setTreesText(String(n));
+        } catch {
+          if (requestId === countRequestId.current) setAiTrees(null);
+        } finally {
+          if (requestId === countRequestId.current) setCountingTrees(false);
+        }
+      })();
+    }, 450);
+
+    return () => {
+      window.clearTimeout(timer);
+      countRequestId.current += 1;
+    };
+  }, [polygon]);
+
   function onPolygon(next: FieldPolygon | null, ha: number | null) {
     setPolygon(next);
     setAreaHa(ha);
+    setAiTrees(null);
     if (next?.coordinates?.[0]?.length) {
       const ring = next.coordinates[0];
       const lon = ring.reduce((s, p) => s + p[0], 0) / ring.length;
       setMapLon(lon);
     }
-    // Do not overwrite a number the user already typed — offer estimate separately.
+    // Density placeholder until AI returns — do not overwrite a number the user typed.
     if (ha != null && ha > 0 && !treesTouched) {
       const estimate = Math.max(10, Math.round(ha * TREES_PER_HA));
       setTreesText(String(estimate));
@@ -244,10 +301,15 @@ export function AddFieldScreen() {
         )}
 
         <div className="px-4 md:px-6">
-          {satelliteTrees != null ? (
+          {countingTrees ? (
+            <p className="mt-2.5 flex items-center gap-1.5 text-ap-body font-semibold text-muted-foreground">
+              <Sparkles className="size-4 shrink-0 animate-pulse" aria-hidden />
+              {t("countingTrees")}
+            </p>
+          ) : satelliteTrees != null ? (
             <p className="mt-2.5 flex items-center gap-1.5 text-ap-body font-semibold text-good">
               <Sparkles className="size-4 shrink-0" aria-hidden />
-              {t("satelliteTrees", { n: satelliteTrees })}
+              {aiTrees != null ? t("satelliteTrees", { n: aiTrees }) : t("densityTrees", { n: satelliteTrees })}
             </p>
           ) : (
             <p className="mt-2.5 text-ap-small text-muted-foreground">{t("drawHint")}</p>

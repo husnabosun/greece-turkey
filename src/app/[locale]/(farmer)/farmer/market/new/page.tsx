@@ -3,7 +3,7 @@ import { NewListingScreen } from "@/features/marketplace/new-listing-screen";
 
 type Props = {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ field?: string; factory?: string; request?: string }>;
+  searchParams: Promise<{ field?: string; factory?: string; request?: string; product?: string }>;
 };
 
 export default async function NewListingPage({ params, searchParams }: Props) {
@@ -15,6 +15,7 @@ export default async function NewListingPage({ params, searchParams }: Props) {
       fieldId={query.field}
       factoryId={query.factory}
       buyRequestId={query.request}
+      product={query.product === "oil" || query.product === "olives" ? query.product : undefined}
     />
   );
 }

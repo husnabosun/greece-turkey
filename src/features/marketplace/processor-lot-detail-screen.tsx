@@ -20,11 +20,20 @@ import {
   formatDateShort,
   formatEuro,
   formatEuroPerKg,
-  formatTons,
+  formatQuantity,
+  kgToTons,
   MARKET_LIMITS,
   parseBounded,
   saleTotal,
+  tonsToKg,
 } from "@/features/marketplace/pricing";
+import {
+  ProductBadge,
+  oilCategoryI18nKey,
+  oilStorageI18nKey,
+  productI18nKey,
+} from "@/features/marketplace/product-badge";
+import { scoreBand, scoreToneClasses } from "@/features/marketplace/score-slider";
 // Mapbox (~1 MB) is only fetched when a map is actually on screen.
 const LotsMap = dynamic(() => import("./lots-map").then((m) => m.LotsMap), {
   ssr: false,
@@ -64,21 +73,6 @@ type SprayRow = {
   euBanned: boolean;
   euStatus: "banned" | "allowed" | "unknown";
 };
-
-type FactorTone = "good" | "warn" | "risk";
-
-function scoreTone(score: number): FactorTone {
-  if (score >= 80) return "good";
-  if (score >= 70) return "warn";
-  return "risk";
-}
-
-function scoreToneClass(score: number) {
-  const tone = scoreTone(score);
-  if (tone === "good") return { text: "text-good", soft: "bg-good-soft", pill: "good" as const };
-  if (tone === "warn") return { text: "text-warn-text", soft: "bg-warn-soft", pill: "warn" as const };
-  return { text: "text-risk", soft: "bg-risk-soft", pill: "risk" as const };
-}
 
 function fallbackBreakdown(score: number): QualityBreakdown {
   const s = Math.max(0, Math.min(100, Math.round(score)));
@@ -141,9 +135,10 @@ function FactorRow({
   warnLabel: string;
   riskLabel: string;
 }) {
-  const tone = value != null ? scoreToneClass(value) : null;
+  const tone = value != null ? scoreToneClasses(value) : null;
+  const band = value != null ? scoreBand(value) : null;
   const pillLabel =
-    value == null ? null : scoreTone(value) === "good" ? goodLabel : scoreTone(value) === "warn" ? warnLabel : riskLabel;
+    band == null ? null : band === "high" ? goodLabel : band === "mid" ? warnLabel : riskLabel;
   return (
     <div className="flex items-start justify-between gap-3 border-t border-line py-3 first:border-t-0 first:pt-0">
       <div className="min-w-0 flex-1">
@@ -183,6 +178,7 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
     (o) => o.lotId === id && o.initiatedBy === "processor" && (o.status === "pending" || o.status === "countered"),
   );
   const listed = lot?.status === "listed";
+  const isOil = lot?.product === "oil";
 
   useEffect(() => {
     if (!lot) return;
@@ -291,23 +287,35 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
 
   const openOffer = () => {
     if (!lot) return;
-    setTons(String(Math.min(5, lot.tons)));
-    setPrice(String(lot.pricePerKg ?? DEMO_EXCHANGE));
+    if (lot.product === "oil") {
+      setTons(String(Math.min(500, tonsToKg(lot.tons))));
+      setPrice(String(lot.pricePerKg ?? 5));
+    } else {
+      setTons(String(Math.min(5, lot.tons)));
+      setPrice(String(lot.pricePerKg ?? DEMO_EXCHANGE));
+    }
     setArriveOn(addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
     setOpen(true);
   };
 
-  const tonsCheck = parseBounded(String(tons), {
-    min: MARKET_LIMITS.lotTons.min,
-    max: Math.min(MARKET_LIMITS.lotTons.max, lot?.tons ?? MARKET_LIMITS.lotTons.max),
-  });
-  const priceCheck = parseBounded(String(price), MARKET_LIMITS.pricePerKg);
-  const offerTons = tonsCheck.ok ? tonsCheck.value : 0;
+  const qtyBounds = isOil
+    ? {
+        min: MARKET_LIMITS.oilKg.min,
+        max: Math.min(MARKET_LIMITS.oilKg.max, lot ? tonsToKg(lot.tons) : MARKET_LIMITS.oilKg.max),
+      }
+    : {
+        min: MARKET_LIMITS.lotTons.min,
+        max: Math.min(MARKET_LIMITS.lotTons.max, lot?.tons ?? MARKET_LIMITS.lotTons.max),
+      };
+  const tonsCheck = parseBounded(String(tons), qtyBounds);
+  const priceCheck = parseBounded(String(price), isOil ? MARKET_LIMITS.oilPricePerKg : MARKET_LIMITS.pricePerKg);
+  const offerQty = tonsCheck.ok ? tonsCheck.value : 0;
+  const offerTons = isOil ? kgToTons(offerQty) : offerQty;
   const offerPrice = priceCheck.ok ? priceCheck.value : 0;
   const offerValid = lot != null && tonsCheck.ok && priceCheck.ok;
   const offerTotal = offerValid ? formatEuro(saleTotal(offerTons, offerPrice), locale) : null;
   const offerErrors = [
-    String(tons).trim() && !tonsCheck.ok ? boundsMsg(tonsCheck, "tons", locale) : null,
+    String(tons).trim() && !tonsCheck.ok ? boundsMsg(tonsCheck, isOil ? "kg" : "tons", locale) : null,
     String(price).trim() && !priceCheck.ok ? boundsMsg(priceCheck, "price", locale) : null,
   ].filter(Boolean) as string[];
   const [submitting, setSubmitting] = useState(false);
@@ -391,7 +399,7 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
   const harvest = harvestRangeLabel(lot.harvestStart, lot.harvestEnd, locale);
   const useLabel = lot.useType === "table" ? t("filterTable") : t("filterOil");
   const factors = breakdown ?? (lot.qualityScore != null ? fallbackBreakdown(lot.qualityScore) : null);
-  const scoreStyle = lot.qualityScore != null ? scoreToneClass(lot.qualityScore) : null;
+  const scoreStyle = lot.qualityScore != null ? scoreToneClasses(lot.qualityScore) : null;
   const statusSubtitle =
     lot.status === "sold"
       ? t("lotDetailSubtitleSold")
@@ -399,11 +407,18 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
         ? t("lotDetailSubtitleReserved")
         : null;
 
+  const qtyLabel = formatQuantity(lot.product, lot.tons, locale);
   const offerForm = (
     <>
-      <TextField label={t("tons")} value={tons} onChange={setTons} suffix="t" inputMode="decimal" />
+      <TextField
+        label={isOil ? t("quantityKg") : t("tons")}
+        value={tons}
+        onChange={setTons}
+        suffix={isOil ? "kg" : "t"}
+        inputMode="decimal"
+      />
       <p className="text-[12px] font-medium text-muted-foreground">
-        {t("tonsExceedLot", { max: formatTons(lot.tons, locale) })}
+        {t("tonsExceedLot", { max: qtyLabel })}
       </p>
       <TextField label={t("price")} value={price} onChange={setPrice} suffix="€/kg" inputMode="decimal" />
       {offerErrors.map((m) => (
@@ -431,8 +446,11 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
     <div className="flex flex-col rounded-[18px] border border-line bg-card p-5">
       <div className="order-2 flex items-start justify-between gap-3 min-[900px]:order-1">
         <div className="min-w-0 flex-1">
+          <div className="mb-2">
+            <ProductBadge product={lot.product} label={t(productI18nKey(lot.product))} />
+          </div>
           <h1 className="text-[24px] leading-7 font-extrabold text-ink">
-            {variety} · {formatTons(lot.tons, locale)}
+            {variety} · {qtyLabel}
           </h1>
           {statusSubtitle ? (
             <p className="mt-1 text-[13px] font-medium text-muted-foreground">{statusSubtitle}</p>
@@ -474,11 +492,24 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
 
       <dl className="order-4 mt-4 grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-line pt-4 text-[14px]">
         {[
-          { k: t("tons"), v: formatTons(lot.tons, locale) },
+          { k: isOil ? t("quantityKg") : t("tons"), v: qtyLabel },
           { k: t("variety"), v: variety },
           { k: t("province"), v: region },
           { k: t("harvestPeriod"), v: harvest },
-          { k: t("useLabel"), v: useLabel },
+          ...(isOil
+            ? [
+                ...(lot.oilCategory
+                  ? [{ k: t("oilCategory"), v: t(oilCategoryI18nKey(lot.oilCategory)) }]
+                  : []),
+                ...(lot.acidity != null ? [{ k: t("acidity"), v: `${lot.acidity}%` }] : []),
+                ...(lot.harvestSeason ? [{ k: t("harvestSeason"), v: lot.harvestSeason }] : []),
+                ...(lot.storage ? [{ k: t("storage"), v: t(oilStorageI18nKey(lot.storage)) }] : []),
+                ...(lot.peroxide != null ? [{ k: t("peroxide"), v: String(lot.peroxide) }] : []),
+                ...(lot.polyphenols != null ? [{ k: t("polyphenols"), v: String(lot.polyphenols) }] : []),
+                ...(lot.pdoPgi ? [{ k: t("pdoPgi"), v: lot.pdoPgi }] : []),
+                ...(lot.organic ? [{ k: t("organicOil"), v: "✓" }] : []),
+              ]
+            : [{ k: t("useLabel"), v: useLabel }]),
         ].map((row) => (
           <div key={row.k} className="min-w-0">
             <dt className="font-medium text-muted-foreground">{row.k}</dt>
@@ -632,7 +663,7 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
                   lon: lot.lon,
                   label: resolvedPlace,
                   score: lot.qualityScore,
-                  title: `${variety} · ${formatTons(lot.tons, locale)}`,
+                  title: `${variety} · ${qtyLabel}`,
                   subtitle: region,
                   priceLabel: lot.pricePerKg != null ? formatEuroPerKg(lot.pricePerKg, locale) : t("openToOffers"),
                   useLabel,
@@ -676,7 +707,7 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
           open={open}
           onClose={() => setOpen(false)}
           title={t("makeOffer")}
-          subtitle={`${variety} · ${formatTons(lot.tons, locale)}`}
+          subtitle={`${variety} · ${qtyLabel}`}
           actionLabel={t("sendOfferAction")}
           onAction={() => submit()}
           actionDisabled={!offerValid || sent || submitting}
@@ -701,7 +732,7 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
           }
         >
           <p className="text-[13px] font-medium text-muted-foreground">
-            {variety} · {formatTons(lot.tons, locale)}
+            {variety} · {qtyLabel}
           </p>
           {offerForm}
         </BottomSheet>

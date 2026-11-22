@@ -63,10 +63,12 @@ type BoundsFail = { ok: false; reason: "invalid" | "tooLow" | "tooHigh"; min: nu
 export function useBoundsMessage() {
   const t = useTranslations("errors.bounds");
   return useCallback(
-    (r: BoundsFail, unit: "tons" | "price", locale: string) => {
+    (r: BoundsFail, unit: "tons" | "price" | "kg", locale: string) => {
       const fmt = (n: number) =>
-        n.toLocaleString(locale, { maximumFractionDigits: unit === "price" ? 2 : 1 });
-      const u = unit === "price" ? t("unitPrice") : t("unitTons");
+        n.toLocaleString(locale, {
+          maximumFractionDigits: unit === "price" ? 2 : unit === "kg" ? 0 : 1,
+        });
+      const u = unit === "price" ? t("unitPrice") : unit === "kg" ? t("unitKg") : t("unitTons");
       if (r.reason === "invalid") return t("invalid");
       if (r.reason === "tooLow") return t("tooLow", { min: fmt(r.min), unit: u });
       return t("tooHigh", { max: fmt(r.max), unit: u });

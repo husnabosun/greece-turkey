@@ -16,6 +16,7 @@ import {
   DEFAULT_FIELD_ZOOM,
   boundsFromPolygon,
   parseFieldPolygon,
+  SATELLITE_MAX_ZOOM,
   SATELLITE_STYLE,
   type FieldPolygon,
 } from "@/features/fields/satellite-style";
@@ -146,7 +147,8 @@ export function FieldHealthMap({
         container,
         style: SATELLITE_STYLE,
         center,
-        zoom: startZoom,
+        zoom: Math.min(startZoom, SATELLITE_MAX_ZOOM),
+        maxZoom: SATELLITE_MAX_ZOOM,
         attributionControl: true,
         collectResourceTiming: false,
         failIfMajorPerformanceCaveat: false,

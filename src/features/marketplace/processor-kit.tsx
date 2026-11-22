@@ -16,6 +16,7 @@ import { ApButton } from "@/shared/components/brand/ap-button";
 import { ApCard } from "@/shared/components/brand/ap-card";
 import { Chip } from "@/shared/components/brand/chip";
 import { todayIsoDate } from "@/features/marketplace/schedule";
+import { scoreToneClasses } from "@/features/marketplace/score-slider";
 import { Link } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 
@@ -227,12 +228,6 @@ export const initialsOf = (name: string) =>
     .map((w) => w[0]?.toLocaleUpperCase("tr-TR") ?? "")
     .join("");
 
-function scoreTone(score: number) {
-  if (score >= 80) return { bg: "bg-good-soft", text: "text-good" };
-  if (score >= 70) return { bg: "bg-warn-soft", text: "text-warn-text" };
-  return { bg: "bg-risk-soft", text: "text-risk" };
-}
-
 export function ScoreBox({
   score,
   large = false,
@@ -246,13 +241,13 @@ export function ScoreBox({
   hero?: boolean;
 }) {
   const t = useTranslations("processor");
-  const tone = scoreTone(score);
+  const tone = scoreToneClasses(score);
   return (
     <div
       className={cn(
         "flex flex-col items-center",
         hero ? "rounded-2xl px-4 py-3" : large ? "rounded-xl px-3 py-2" : "rounded-lg px-2 py-1",
-        tone.bg,
+        tone.soft,
       )}
     >
       {!hideLabel ? (
@@ -294,7 +289,12 @@ export function Segmented<T extends string>({
   fullWidth?: boolean;
 }) {
   return (
-    <div className={cn("flex h-10 flex-row rounded-full bg-soft p-1", fullWidth ? "w-full" : "self-start")}>
+    <div
+      className={cn(
+        "flex h-11 flex-row rounded-full bg-soft p-1",
+        fullWidth ? "w-full" : "w-fit max-w-full self-start",
+      )}
+    >
       {options.map((o) => {
         const on = o.value === value;
         return (
@@ -305,14 +305,23 @@ export function Segmented<T extends string>({
             aria-selected={on}
             onClick={() => onChange(o.value)}
             className={cn(
-              "flex items-center justify-center gap-1 rounded-full px-4",
-              fullWidth ? "min-w-0 flex-1" : "min-w-[96px]",
-              on && "bg-ink",
+              "flex h-full items-center justify-center gap-1.5 rounded-full px-4 transition-colors",
+              fullWidth ? "min-w-0 flex-1" : "min-w-[7.5rem]",
+              on ? "bg-ink shadow-sm" : "hover:bg-card/70",
             )}
           >
-            <span className={cn("text-[12px] leading-4 font-bold", on ? "text-white" : "text-muted-foreground")}>{o.label}</span>
+            <span
+              className={cn(
+                "truncate text-[13px] leading-4 font-bold",
+                on ? "text-white" : "text-muted-foreground",
+              )}
+            >
+              {o.label}
+            </span>
             {o.badge ? (
-              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-risk px-1 text-[12px] font-bold text-white">{o.badge}</span>
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-risk px-1.5 text-[11px] font-bold text-white">
+                {o.badge}
+              </span>
             ) : null}
           </button>
         );
@@ -588,12 +597,6 @@ export function WeekStrip({
   );
 }
 
-function compactScoreTone(score: number) {
-  if (score >= 80) return { soft: "bg-good-soft", text: "text-good" };
-  if (score >= 70) return { soft: "bg-warn-soft", text: "text-warn-text" };
-  return { soft: "bg-risk-soft", text: "text-risk" };
-}
-
 export function LotResultCard({
   href,
   title,
@@ -622,7 +625,7 @@ export function LotResultCard({
   selected?: boolean;
   onHover?: () => void;
 }) {
-  const tone = score != null ? compactScoreTone(score) : null;
+  const tone = score != null ? scoreToneClasses(score) : null;
   return (
     <Link
       href={href}
@@ -649,10 +652,10 @@ export function LotResultCard({
           </div>
         ) : null}
       </div>
-      <div className="flex min-h-[24px] flex-wrap gap-1">{badges}</div>
+      <div className="flex min-h-6 flex-wrap items-center gap-1.5">{badges}</div>
       <div className="mt-auto border-t border-line pt-3">
-        <div className="text-[16px] font-extrabold text-ink">{price}</div>
-        {priceHint ? <p className="text-[12px] font-medium text-muted-foreground">{priceHint}</p> : null}
+        <div className="text-[16px] leading-5 font-extrabold text-ink">{price}</div>
+        {priceHint ? <p className="mt-0.5 text-[12px] leading-4 font-medium text-muted-foreground">{priceHint}</p> : null}
         {ctaLabel ? (
           <div className="mt-3">
             <ApButton label={ctaLabel} variant="dark" className="w-full" />

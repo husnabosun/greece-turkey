@@ -1,11 +1,15 @@
 import { DEFAULT_LOCALE } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { varietyAgronomyContext } from "@/features/fields/olive-varieties";
+import type { OilCategory, OilStorage, ProductKind } from "@/shared/types/database";
 
 export type PublishLotInput = {
-  fieldId: string;
+  /** Optional for oil (bulk stock); required for olives. */
+  fieldId?: string | null;
+  product?: ProductKind;
   variety: string | null;
   varietySlug: string | null;
+  /** Always in tons for DB (oil: pass kg/1000). */
   tons: number;
   pricePerKg: number;
   negotiable: boolean;
@@ -18,6 +22,14 @@ export type PublishLotInput = {
   region?: string | null;
   country?: "GR" | "TR" | null;
   qualityScore?: number | null;
+  oilCategory?: OilCategory | null;
+  acidity?: number | null;
+  harvestSeason?: string | null;
+  storage?: OilStorage | null;
+  peroxide?: number | null;
+  polyphenols?: number | null;
+  pdoPgi?: string | null;
+  organic?: boolean;
   /**
    * Flow B: offer to a mill buy-request.
    * Creates a non-public (`draft`) lot + farmer-initiated offer so mills don't
@@ -52,6 +64,14 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "needLogin" };
 
+  const product: ProductKind = input.product ?? "olives";
+  if (product === "olives" && !input.fieldId) {
+    return { ok: false, error: "insertFailed", detail: "field required for olives" };
+  }
+  if (product === "oil" && (input.oilCategory == null || input.acidity == null)) {
+    return { ok: false, error: "insertFailed", detail: "oil category and acidity required" };
+  }
+
   const agro = varietyAgronomyContext(input.varietySlug ?? input.variety);
   const useType = agro?.primary_use === "TABLE" ? "table" : "oil";
   const variety =
@@ -78,7 +98,7 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
   }
 
   let qualityScore = input.qualityScore ?? null;
-  if (qualityScore == null) {
+  if (qualityScore == null && input.fieldId) {
     const { data: qs } = await supabase
       .from("quality_scores")
       .select("score")
@@ -89,13 +109,17 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
     qualityScore = qs?.score ?? null;
   }
 
-  const { data: field } = await supabase
-    .from("fields")
-    .select("lat, lon")
-    .eq("id", input.fieldId)
-    .maybeSingle();
-  const lat = field?.lat ?? null;
-  const lon = field?.lon ?? null;
+  let lat: number | null = null;
+  let lon: number | null = null;
+  if (input.fieldId) {
+    const { data: field } = await supabase
+      .from("fields")
+      .select("lat, lon")
+      .eq("id", input.fieldId)
+      .maybeSingle();
+    lat = field?.lat ?? null;
+    lon = field?.lon ?? null;
+  }
 
   const { data: localeProfile } = await supabase
     .from("profiles")
@@ -134,8 +158,9 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
     .from("lots")
     .insert({
       farmer_id: user.id,
-      field_id: input.fieldId,
+      field_id: input.fieldId ?? null,
       status: targetedOffer ? "draft" : "listed",
+      product,
       use_type: useType,
       variety,
       tons: input.tons,
@@ -150,6 +175,14 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
       harvest_start: period.start,
       harvest_end: period.end,
       quality_score: qualityScore,
+      oil_category: product === "oil" ? input.oilCategory ?? null : null,
+      acidity: product === "oil" ? input.acidity ?? null : null,
+      harvest_season: product === "oil" ? input.harvestSeason ?? null : null,
+      storage: product === "oil" ? input.storage ?? null : null,
+      peroxide: product === "oil" ? input.peroxide ?? null : null,
+      polyphenols: product === "oil" ? input.polyphenols ?? null : null,
+      pdo_pgi: product === "oil" ? input.pdoPgi ?? null : null,
+      organic: product === "oil" ? Boolean(input.organic) : false,
       listed_at: targetedOffer ? null : new Date().toISOString(),
     })
     .select("id")

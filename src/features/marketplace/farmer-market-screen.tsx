@@ -14,6 +14,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { StatusSteps } from "@/shared/components/brand";
+import { Chip } from "@/shared/components/brand/chip";
 import { varietyLabel } from "@/features/fields/olive-varieties";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import {
@@ -21,16 +22,22 @@ import {
   deliveryPayableKg,
   deliveryStepIndex,
 } from "@/features/marketplace/delivery-state";
-import { BottomSheet, DayChipPicker } from "@/features/marketplace/processor-kit";
+import { BottomSheet, DayChipPicker, Segmented } from "@/features/marketplace/processor-kit";
+import { scoreToneClasses } from "@/features/marketplace/score-slider";
 import {
   MARKET_LIMITS,
   formatEuro,
   formatEuroPerKg,
+  formatQuantity,
   formatTons,
+  kgToTons,
   parseBounded,
   parseLocaleNumber,
   saleTotal,
+  tonsToKg,
 } from "@/features/marketplace/pricing";
+import { ProductBadge, productI18nKey } from "@/features/marketplace/product-badge";
+import type { ProductKind } from "@/shared/types/database";
 import { formatRequestWindow, isRequestWindowExpired } from "@/features/marketplace/request-window";
 import { regionForPoint, regionLabel, requestRegions } from "@/features/marketplace/regions";
 import {
@@ -172,6 +179,7 @@ function availableOk(field: Field, ctx: MatchCtx): boolean {
 
 function requestFitsField(req: MarketRequest, field: Field, ctx: MatchCtx): boolean {
   if (req.tons - req.filledTons <= 0) return false;
+  if (req.product === "oil") return true;
   return varietyOk(req, field) && regionOk(req, field, ctx) && scoreOk(req, field, ctx) && availableOk(field, ctx);
 }
 
@@ -192,6 +200,10 @@ function requestMismatchReason(
   locale: string,
   t: ReturnType<typeof useTranslations<"farmerMarket">>,
 ): string {
+  if (req.product === "oil") {
+    if (req.tons - req.filledTons <= 0) return t("requestFilled");
+    return t("cannotSellHere");
+  }
   if (!fields.length) return t("needFieldFirst");
   if (req.tons - req.filledTons <= 0) return t("requestFilled");
   const withVariety = fields.filter((f) => varietyOk(req, f));
@@ -222,6 +234,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     requests,
     deliveries,
     fieldCards,
+    stockLots,
     farmerCountry,
     loading: marketLoading,
     reload,
@@ -249,6 +262,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const [listingPrice, setListingPrice] = useState("");
   const [listingTons, setListingTons] = useState("");
   const [listingBusy, setListingBusy] = useState(false);
+  const [sellProduct, setSellProduct] = useState<ProductKind>("oil");
 
   const steps = useMemo(
     () => [t("stepScheduled"), t("stepWeighed"), t("stepLab"), t("stepPaid")],
@@ -315,7 +329,11 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const filteredRequests = useMemo(() => {
     let list = requests.filter((req) => !isRequestWindowExpired(req.windowLabel));
     if (filters.includes("fits")) {
-      list = list.filter((req) => bestFieldForRequest(fields, matchCtx, req) != null);
+      list = list.filter((req) =>
+        req.product === "oil"
+          ? req.tons - req.filledTons > 0
+          : bestFieldForRequest(fields, matchCtx, req) != null,
+      );
     }
     const regionFilters = filters
       .filter((f) => f.startsWith("region:"))
@@ -418,29 +436,39 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     }, 100);
   }
 
+  function listingProduct(card: FieldMarketCard): ProductKind {
+    const lot = card.lots.find((l) => l.id === card.listedLotId);
+    return lot?.product ?? "olives";
+  }
+
   function openListing(field: Field, card: FieldMarketCard) {
     if (!card.listedLotId || card.lotStatus !== "listed") return;
     setListingTarget({ field, card });
     setListingPrice(
       card.listedPrice != null ? card.listedPrice.toFixed(2).replace(".", ",") : "",
     );
-    setListingTons(card.listedTons != null ? String(card.listedTons).replace(".", ",") : "");
+    const oil = listingProduct(card) === "oil";
+    const qty = card.listedTons;
+    setListingTons(
+      qty != null ? String(oil ? tonsToKg(qty) : qty).replace(".", ",") : "",
+    );
   }
 
   async function confirmSaveListing() {
     if (!listingTarget?.card.listedLotId) return;
-    const pc = parseBounded(listingPrice, MARKET_LIMITS.pricePerKg);
-    const tc = parseBounded(listingTons, MARKET_LIMITS.lotTons);
+    const oil = listingProduct(listingTarget.card) === "oil";
+    const pc = parseBounded(listingPrice, oil ? MARKET_LIMITS.oilPricePerKg : MARKET_LIMITS.pricePerKg);
+    const tc = parseBounded(listingTons, oil ? MARKET_LIMITS.oilKg : MARKET_LIMITS.lotTons);
     if (!pc.ok) {
       toast.error(boundsMsg(pc, "price", locale));
       return;
     }
     if (!tc.ok) {
-      toast.error(boundsMsg(tc, "tons", locale));
+      toast.error(boundsMsg(tc, oil ? "kg" : "tons", locale));
       return;
     }
     const price = pc.value;
-    const tons = tc.value;
+    const tons = oil ? kgToTons(tc.value) : tc.value;
     setListingBusy(true);
     try {
       const result = await updateListedLot(listingTarget.card.listedLotId, {
@@ -530,50 +558,45 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
         </button>
       </div>
 
-      <div
-        role="tablist"
-        className="mt-3 flex min-h-11 gap-1 overflow-x-auto rounded-full bg-soft p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
-        {TABS.map((id) => {
-          const on = tab === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={on}
-              onClick={() => setTab(id)}
-              className={cn(
-                "relative flex min-h-11 min-w-[72px] flex-1 items-center justify-center gap-1 rounded-full px-2 text-ap-pill font-bold whitespace-nowrap",
-                on ? "bg-ink text-white" : "text-muted-foreground",
-              )}
-            >
-              {t(id)}
-              {(tabBadge[id] ?? 0) > 0 ? (
-                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-risk px-1 text-[12px] leading-none font-bold text-white">
-                  {tabBadge[id]}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
+      <div className="mt-3">
+        <Segmented
+          fullWidth
+          value={tab}
+          onChange={setTab}
+          options={TABS.map((id) => ({
+            value: id,
+            label: t(id),
+            badge: tabBadge[id] || undefined,
+          }))}
+        />
       </div>
 
       {tab === "overview" ? (
         <div className="mt-4">
-          <button
-            type="button"
-            onClick={() => router.push("/farmer/market/new")}
-            className="flex h-14 w-full items-center gap-3 rounded-[18px] bg-ink px-3 text-left text-white"
-          >
-            <span className="flex size-9 items-center justify-center rounded-full bg-white/15">
-              <Plus className="size-5" />
-            </span>
-            <span className="flex-1 text-ap-card font-extrabold">{t("sellOlives")}</span>
-            <span className="flex size-8 items-center justify-center rounded-full bg-white text-ink">
-              <ArrowRight className="size-4" />
-            </span>
-          </button>
+          <div className="rounded-[18px] border border-line bg-card p-3">
+            <Segmented
+              fullWidth
+              value={sellProduct}
+              onChange={setSellProduct}
+              options={[
+                { value: "oil", label: t("productOil") },
+                { value: "olives", label: t("productOlives") },
+              ]}
+            />
+            <button
+              type="button"
+              onClick={() => router.push(`/farmer/market/new?product=${sellProduct}`)}
+              className="mt-3 flex h-12 w-full items-center gap-3 rounded-2xl bg-ink px-4 text-left text-white"
+            >
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/15">
+                <Plus className="size-4" />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[15px] font-extrabold leading-5">{t("sellTitle")}</span>
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-ink">
+                <ArrowRight className="size-3.5" />
+              </span>
+            </button>
+          </div>
 
           <SectionTitle>{t("bestOffer")}</SectionTitle>
           {bestOffer ? (
@@ -628,29 +651,48 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                         />
                         <p className="truncate text-ap-body font-extrabold text-ink">{field.name}</p>
                       </div>
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-soft text-ap-small font-extrabold text-muted-foreground">
-                        {card?.qualityScore ?? "—"}
-                      </span>
+                      {(() => {
+                        const sc = card?.qualityScore;
+                        const tone = sc != null ? scoreToneClasses(sc) : null;
+                        return (
+                          <span
+                            className={cn(
+                              "flex size-7 shrink-0 items-center justify-center rounded-full text-ap-small font-extrabold",
+                              tone ? cn(tone.soft, tone.text) : "bg-soft text-muted-foreground",
+                            )}
+                          >
+                            {sc ?? "—"}
+                          </span>
+                        );
+                      })()}
                     </div>
                     {card && lots.length > 0 ? (
-                      <div className="mt-2 space-y-1.5">
+                      <div className="mt-2 space-y-2">
                         {lots.map((lot) => {
                           const isListed = lot.status === "listed";
                           return (
-                            <div key={lot.id} className="rounded-xl bg-soft/60 px-2.5 py-1.5">
-                              <p className={cn("text-ap-small font-bold", isListed ? "text-good" : "text-ap-accent")}>
-                                {lot.status === "listed"
-                                  ? t("fieldListed")
-                                  : lot.status === "sold"
-                                    ? t("fieldSold")
-                                    : t("fieldInDelivery")}
-                              </p>
-                              <p className="mt-0.5 text-ap-card text-ink">
+                            <div key={lot.id} className="rounded-xl bg-soft/70 px-2.5 py-2">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <ProductBadge product={lot.product} label={t(productI18nKey(lot.product))} />
+                                <span
+                                  className={cn(
+                                    "text-[11px] font-bold",
+                                    isListed ? "text-good" : "text-ap-accent",
+                                  )}
+                                >
+                                  {lot.status === "listed"
+                                    ? t("fieldListed")
+                                    : lot.status === "sold"
+                                      ? t("fieldSold")
+                                      : t("fieldInDelivery")}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-[13px] font-extrabold leading-4 text-ink">
                                 {lot.pricePerKg != null ? formatEuroPerKg(lot.pricePerKg, locale) : "—"}
-                                {lot.tons != null ? ` · ${formatTons(lot.tons, locale)}` : ""}
+                                {lot.tons != null ? ` · ${formatQuantity(lot.product, lot.tons, locale)}` : ""}
                               </p>
                               {isListed ? (
-                                <>
+                                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -662,7 +704,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                                         listedTons: lot.tons,
                                       })
                                     }
-                                    className="flex min-h-11 items-center text-ap-body font-bold text-ink"
+                                    className="inline-flex items-center text-[12px] font-bold text-ink"
                                   >
                                     {t("manageListing")}
                                     <ChevronRight className="size-3.5" />
@@ -671,12 +713,12 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                                     <button
                                       type="button"
                                       onClick={() => openLotOffers(lot.id)}
-                                      className="flex min-h-11 items-center text-ap-small font-semibold text-good"
+                                      className="inline-flex items-center text-[12px] font-semibold text-good"
                                     >
                                       {t("offersCount", { n: lot.offerCount })}
                                     </button>
                                   ) : null}
-                                </>
+                                </div>
                               ) : null}
                             </div>
                           );
@@ -688,8 +730,8 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                           {t("fieldNotListed")}
                         </p>
                         <Link
-                          href={`/farmer/market/new?field=${field.id}`}
-                          className="mt-1 inline-flex min-h-11 items-center text-ap-body font-bold text-ink"
+                          href={`/farmer/market/new?field=${field.id}&product=olives`}
+                          className="mt-1.5 inline-flex items-center text-[13px] font-bold text-ink"
                         >
                           {t("listNow")}
                           <ChevronRight className="size-3.5" />
@@ -700,6 +742,50 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                 );
               })}
             </div>
+          ) : null}
+
+          {stockLots.length > 0 ? (
+            <>
+              <SectionTitle>{t("yourStock")}</SectionTitle>
+              <div className="mt-2 space-y-2">
+                {stockLots.map((lot) => {
+                  const isListed = lot.status === "listed";
+                  return (
+                    <div key={lot.id} className="rounded-[18px] border border-line bg-card p-3.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ProductBadge product={lot.product} label={t(productI18nKey(lot.product))} />
+                        <span
+                          className={cn(
+                            "text-[11px] font-bold",
+                            isListed ? "text-good" : "text-ap-accent",
+                          )}
+                        >
+                          {lot.status === "listed"
+                            ? t("fieldListed")
+                            : lot.status === "sold"
+                              ? t("fieldSold")
+                              : t("fieldInDelivery")}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[12px] font-semibold text-muted-foreground">{t("bulkOil")}</p>
+                      <p className="mt-1 text-[15px] font-extrabold leading-5 text-ink">
+                        {lot.pricePerKg != null ? formatEuroPerKg(lot.pricePerKg, locale) : "—"}
+                        {lot.tons != null ? ` · ${formatQuantity(lot.product, lot.tons, locale)}` : ""}
+                      </p>
+                      {isListed && lot.offerCount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => openLotOffers(lot.id)}
+                          className="mt-2 inline-flex items-center text-[12px] font-semibold text-good"
+                        >
+                          {t("offersCount", { n: lot.offerCount })}
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           ) : null}
 
           <SectionTitle>{t("factoriesLooking")}</SectionTitle>
@@ -725,19 +811,21 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   offerLabel={t("offer")}
                   canSellLabel={t("canSellHere")}
                   filledOf={t("filledOf", {
-                    filled: formatTons(req.filledTons, locale).replace(" t", ""),
-                    total: formatTons(req.tons, locale).replace(" t", ""),
+                    filled: formatQuantity(req.product, req.filledTons, locale),
+                    total: formatQuantity(req.product, req.tons, locale),
                   })}
                   onOffer={() => {
+                    const oilOk = req.product === "oil" && req.tons - req.filledTons > 0;
                     const field = bestFieldForRequest(fields, matchCtx, req);
-                    if (!field) {
+                    if (!oilOk && !field) {
                       toast.message(requestMismatchReason(req, fields, matchCtx, locale, t));
                       return;
                     }
                     const qs = new URLSearchParams();
-                    qs.set("field", field.id);
+                    if (field) qs.set("field", field.id);
                     qs.set("factory", req.processorId);
                     qs.set("request", req.id);
+                    qs.set("product", req.product);
                     router.push(`/farmer/market/new?${qs.toString()}`);
                   }}
                 />
@@ -763,20 +851,20 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
             {filterChips.map((chip) => {
               const on = filters.includes(chip.key);
               return (
-                <button
+                <Chip
                   key={chip.key}
-                  type="button"
+                  tone="black"
+                  on={on}
                   onClick={() =>
                     setFilters((prev) => (on ? prev.filter((k) => k !== chip.key) : [...prev, chip.key]))
                   }
-                  className={cn(
-                    "inline-flex h-11 shrink-0 items-center gap-1 rounded-full border px-3 text-ap-pill font-bold",
-                    on ? "border-good bg-good-soft text-good" : "border-line bg-card text-ink",
-                  )}
+                  className="shrink-0"
                 >
-                  {on ? <Check className="size-3" strokeWidth={3} /> : null}
-                  {chip.label}
-                </button>
+                  <span className={cn("inline-flex items-center gap-1 text-ap-pill font-bold", on ? "text-white" : "text-ink")}>
+                    {on ? <Check className="size-3" strokeWidth={3} /> : null}
+                    {chip.label}
+                  </span>
+                </Chip>
               );
             })}
             <button
@@ -810,19 +898,21 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                 offerLabel={t("offer")}
                 canSellLabel={t("canSellHere")}
                 filledOf={t("filledOf", {
-                  filled: formatTons(req.filledTons, locale).replace(" t", ""),
-                  total: formatTons(req.tons, locale).replace(" t", ""),
+                  filled: formatQuantity(req.product, req.filledTons, locale),
+                  total: formatQuantity(req.product, req.tons, locale),
                 })}
                 onOffer={() => {
+                  const oilOk = req.product === "oil" && req.tons - req.filledTons > 0;
                   const field = bestFieldForRequest(fields, matchCtx, req);
-                  if (!field) {
+                  if (!oilOk && !field) {
                     toast.message(requestMismatchReason(req, fields, matchCtx, locale, t));
                     return;
                   }
                   const qs = new URLSearchParams();
-                  qs.set("field", field.id);
+                  if (field) qs.set("field", field.id);
                   qs.set("factory", req.processorId);
                   qs.set("request", req.id);
+                  qs.set("product", req.product);
                   router.push(`/farmer/market/new?${qs.toString()}`);
                 }}
               />
@@ -843,7 +933,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               <p className="text-ap-body font-semibold text-ink">{t("noIncomingOffersTitle")}</p>
               <p className="mt-1 text-ap-small text-muted-foreground">{t("noOffersAnyHint")}</p>
               <Link
-                href="/farmer/market/new"
+                href="/farmer/market/new?product=oil"
                 className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-5 text-ap-btn font-bold text-white"
               >
                 {t("listNow")}
@@ -1251,7 +1341,9 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               />
             </label>
             <label className="block">
-              <span className="text-ap-small font-bold text-muted-foreground">{t("tons")}</span>
+              <span className="text-ap-small font-bold text-muted-foreground">
+                {listingTarget && listingProduct(listingTarget.card) === "oil" ? t("quantityKg") : t("tons")}
+              </span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -1402,13 +1494,14 @@ function RequestCard({
   filledOf: string;
   onOffer: () => void;
 }) {
+  const t = useTranslations("farmerMarket");
   const initials = req.processorName
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
-  const fits = fitField != null;
+  const fits = req.product === "oil" ? req.tons - req.filledTons > 0 : fitField != null;
 
   return (
     <div className="rounded-[18px] border border-line bg-card p-3">
@@ -1417,9 +1510,12 @@ function RequestCard({
           {initials || "Μ"}
         </span>
         <div className="min-w-0 flex-1">
+          <div className="mb-0.5">
+            <ProductBadge product={req.product} label={t(productI18nKey(req.product))} />
+          </div>
           <p className="truncate text-ap-card font-extrabold text-ink">{req.processorName}</p>
           <p className="text-ap-small text-muted-foreground">
-            {varietyLabel(req.variety, locale)} · {formatTons(req.tons, locale)}
+            {varietyLabel(req.variety, locale)} · {formatQuantity(req.product, req.tons, locale)}
             {req.region ? ` · ${regionLabel(req.region, locale)}` : ""}
             {req.windowLabel
               ? ` · ${formatRequestWindow(req.windowLabel, locale) ?? req.windowLabel}`
@@ -1534,12 +1630,12 @@ function OfferCard({
       {busy ? (
         <p className="mt-2 text-ap-small font-semibold text-muted-foreground">…</p>
       ) : null}
-      <div className="mt-3 flex flex-wrap justify-end gap-2">
+      <div className="mt-3 grid grid-cols-3 gap-2">
         <button
           type="button"
           disabled={busy}
           onClick={onReject}
-          className="h-11 rounded-full border border-line bg-card px-4 text-ap-pill font-bold text-muted-foreground disabled:opacity-50"
+          className="h-10 rounded-full border border-line bg-card px-2 text-[12px] font-bold text-muted-foreground disabled:opacity-50"
         >
           {busy ? "…" : reject}
         </button>
@@ -1547,7 +1643,7 @@ function OfferCard({
           type="button"
           disabled={busy}
           onClick={onCounter}
-          className="h-11 rounded-full border border-ink bg-card px-4 text-ap-pill font-bold text-ink disabled:opacity-50"
+          className="h-10 rounded-full border border-ink bg-card px-2 text-[12px] font-bold text-ink disabled:opacity-50"
         >
           {busy ? "…" : counter}
         </button>
@@ -1555,7 +1651,7 @@ function OfferCard({
           type="button"
           disabled={busy}
           onClick={onAccept}
-          className={cn("h-11 rounded-full px-4 text-ap-pill font-bold text-white disabled:opacity-50", acceptClass)}
+          className={cn("h-10 rounded-full px-2 text-[12px] font-bold text-white disabled:opacity-50", acceptClass)}
         >
           {busy ? "…" : accept}
         </button>
