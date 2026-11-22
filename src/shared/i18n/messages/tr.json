@@ -556,7 +556,9 @@
     "notice_tooDark_title": "Fotoğraf çok karanlık",
     "tooDark": "Fotoğrafı gün ışığında, üzerinde gölge olmadan çek.",
     "notice_unsure_title": "Emin değilim",
-    "unsure": "Bu fotoğraftan anlayamıyorum. Daha yakından çek veya bir ziraat mühendisine danış."
+    "unsure": "Bu fotoğraftan anlayamıyorum. Daha yakından çek veya bir ziraat mühendisine danış.",
+    "notice_catchNotVisible_title": "Tuzağın içindeki yakalananları göster",
+    "catchNotVisible": "Tuzağın sadece dışını görebiliyorum. İçindekileri çek: şeffaf üst kısımdan, sıvıya yakın bakarak çek ki sinekler sayılabilsin."
   },
   "farmerLogbook": {
     "title": "Defter",

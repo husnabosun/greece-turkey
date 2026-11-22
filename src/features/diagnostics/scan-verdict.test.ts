@@ -44,6 +44,11 @@ describe("trap verdict", () => {
     expect(judgeTrap({ ...trap, photo: "wrong_scan_type" })).toEqual({ kind: "retake", reason: "wrong_scan_type" });
     expect(judgeTrap({ ...trap, photo: "blurry", flyCount: 30 })).toEqual({ kind: "retake", reason: "blurry" });
   });
+  it("asks to photograph the catch inside when a McPhail trap is seen from outside", () => {
+    expect(judgeTrap({ ...trap, photo: "catch_not_visible", flyCount: 0 })).toEqual({ kind: "retake", reason: "catch_not_visible" });
+    expect(trapResult.safeParse({ ...trap, photo: "catch_not_visible" }).success).toBe(true);
+    expect(fruitResult.safeParse({ ...fruit, photo: "catch_not_visible" }).success).toBe(false);
+  });
   it("is unsure when the count is not reliable", () => {
     expect(judgeTrap({ ...trap, confidence: 0.4 })).toEqual({ kind: "unsure" });
   });
@@ -83,6 +88,16 @@ describe("schemas", () => {
   it("reads an old 'olive fly sting' answer as olive fly", () => {
     const r = fruitResult.parse({ ...fruit, diagnosis: "Olive fly sting" });
     expect(r.diagnosis).toBe("olive fly");
+  });
+  it("reads null numbers and text of a bad photo as 0 and empty, so the photo is retaken (not 'AI unavailable')", () => {
+    const t = trapResult.parse({ photo: "too_dark", flyCount: null, mothCount: null, otherInsects: null, confidence: null, summary: null });
+    expect(t).toMatchObject({ flyCount: 0, mothCount: 0, otherInsects: false, confidence: 0, summary: "" });
+    expect(judgeTrap(t)).toEqual({ kind: "retake", reason: "too_dark" });
+    const f = fruitResult.parse({ photo: "blurry", diagnosis: null, confidence: null, summary: null });
+    expect(judgeFruit(f)).toEqual({ kind: "retake", reason: "blurry" });
+  });
+  it("an answer that says the photo is fine but has no sentence is unsure, not shown", () => {
+    expect(judgeFruit(fruitResult.parse({ ...fruit, summary: "" }))).toEqual({ kind: "unsure" });
   });
   it("rejects a diagnosis that is not in the list and a missing photo check", () => {
     expect(fruitResult.safeParse({ ...fruit, diagnosis: "frost" }).success).toBe(false);

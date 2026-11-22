@@ -556,7 +556,9 @@
     "notice_tooDark_title": "The photo is too dark",
     "tooDark": "Take the photo in daylight, without a shadow on it.",
     "notice_unsure_title": "I'm not sure",
-    "unsure": "I can't tell from this photo. Take a closer photo, or ask an agronomist."
+    "unsure": "I can't tell from this photo. Take a closer photo, or ask an agronomist.",
+    "notice_catchNotVisible_title": "Show the catch inside the trap",
+    "catchNotVisible": "I can only see the outside of the trap. Photograph the catch inside: look through the clear top, close to the liquid, so the flies can be counted."
   },
   "farmerLogbook": {
     "title": "Logbook",

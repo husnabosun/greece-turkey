@@ -49,6 +49,7 @@ type Notice =
   | "lowConfidence"
   | "notFruit"
   | "notTrap"
+  | "catchNotVisible"
   | "wrongType"
   | "blurry"
   | "tooDark"
@@ -60,6 +61,7 @@ const NOTICE_RETRY: Record<Notice, boolean> = {
   lowConfidence: false,
   notFruit: false,
   notTrap: false,
+  catchNotVisible: false,
   wrongType: false,
   blurry: false,
   tooDark: false,
@@ -68,6 +70,7 @@ const NOTICE_RETRY: Record<Notice, boolean> = {
 
 /** The message for a photo the server rejected (fruit and trap scans). */
 function retakeNotice(mode: string, reason: unknown): Notice {
+  if (reason === "catch_not_visible") return "catchNotVisible";
   if (reason === "wrong_scan_type") return "wrongType";
   if (reason === "blurry") return "blurry";
   if (reason === "too_dark") return "tooDark";

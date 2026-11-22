@@ -5,7 +5,15 @@ import type { FruitResult, LabelResult, TrapResult } from "./schemas";
 export const UNSURE_BELOW = 0.6;
 
 /** Why the farmer should take a new photo. */
-export type RetakeReason = "not_olive" | "wrong_scan_type" | "blurry" | "too_dark" | "not_a_label" | "cut_off" | "unclear";
+export type RetakeReason =
+  | "not_olive"
+  | "wrong_scan_type"
+  | "blurry"
+  | "too_dark"
+  | "catch_not_visible"
+  | "not_a_label"
+  | "cut_off"
+  | "unclear";
 
 /**
  * What the app does with an AI answer:

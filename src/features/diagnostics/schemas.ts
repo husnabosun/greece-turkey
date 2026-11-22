@@ -13,6 +13,14 @@ export const MAX_IMAGE_BASE64 = Math.ceil((MAX_IMAGE_BYTES * 4) / 3);
 
 const image = z.string().min(100).max(MAX_IMAGE_BASE64);
 const confidence = z.number().min(0).max(1);
+/**
+ * For the fruit, trap and label answers. When the photo is bad the model often answers `null` for numbers and text
+ * instead of 0 and "". That is still a valid "retake" answer, so null is read as 0 or "" here (not for the leaf scan).
+ */
+const nullAs = <T,>(empty: T) => (v: unknown) => (v === null || v === undefined ? empty : v);
+const looseConfidence = z.preprocess(nullAs(0), confidence);
+const looseCount = z.preprocess(nullAs(0), z.number().int().min(0).max(500));
+const looseText = (n: number) => z.preprocess(nullAs(""), z.string().max(n));
 const short = (n: number) => z.string().max(n);
 
 export const readLabelRequest = z.object({ imageBase64: image });
@@ -99,17 +107,19 @@ export const ndviRequest = z.object({
 
 /** What is wrong with the photo itself. Anything but "ok" means: ask for a new photo, give no diagnosis. */
 export const PHOTO_ISSUES = ["ok", "not_olive", "wrong_scan_type", "blurry", "too_dark"] as const;
+/** Trap photos have one more problem: a McPhail trap (bottle) seen from outside, where the catch inside cannot be counted. */
+export const TRAP_PHOTO_ISSUES = [...PHOTO_ISSUES, "catch_not_visible"] as const;
 export const LABEL_PHOTO_ISSUES = ["ok", "not_a_label", "cut_off", "blurry", "too_dark"] as const;
 
 export const labelResult = z.object({
   photo: z.enum(LABEL_PHOTO_ISSUES),
-  productName: z.string().max(120),
-  activeSubstances: z.array(z.string().max(80)).max(8),
+  productName: looseText(120),
+  activeSubstances: z.preprocess(nullAs([]), z.array(z.string().max(80)).max(8)),
   licenceNumber: z.string().max(60).nullable(),
   maxDosePerHa: z.string().max(60).nullable(),
   preHarvestDays: z.number().int().min(0).max(365).nullable(),
-  cropsListed: z.array(z.string().max(60)).max(20),
-  confidence,
+  cropsListed: z.preprocess(nullAs([]), z.array(z.string().max(60)).max(20)),
+  confidence: looseConfidence,
 });
 
 /** Quick gate: is this an olive leaf photo? */
@@ -157,23 +167,23 @@ function coerceFruitDiagnosis(raw: unknown): unknown {
 
 export const fruitResult = z.object({
   photo: z.enum(PHOTO_ISSUES),
-  diagnosis: z.preprocess(coerceFruitDiagnosis, z.enum(FRUIT_DIAGNOSES)),
-  confidence,
-  /** One short sentence for the farmer, in the language of the request. */
-  summary: z.string().min(1).max(220),
+  diagnosis: z.preprocess((v) => coerceFruitDiagnosis(nullAs("unclear")(v)), z.enum(FRUIT_DIAGNOSES)),
+  confidence: looseConfidence,
+  /** One short sentence for the farmer, in the language of the request. Empty when the photo is not usable. */
+  summary: looseText(220),
 });
 
 export const trapResult = z.object({
-  photo: z.enum(PHOTO_ISSUES),
+  photo: z.enum(TRAP_PHOTO_ISSUES),
   /** Olive flies (Bactrocera oleae) only. */
-  flyCount: z.number().int().min(0).max(500),
+  flyCount: looseCount,
   /** Olive moths (Prays oleae) only. */
-  mothCount: z.number().int().min(0).max(500),
+  mothCount: looseCount,
   /** Other insects (bycatch) are on the trap. */
-  otherInsects: z.boolean(),
-  confidence,
-  /** One short sentence for the farmer, in the language of the request. */
-  summary: z.string().min(1).max(220),
+  otherInsects: z.preprocess(nullAs(false), z.boolean()),
+  confidence: looseConfidence,
+  /** One short sentence for the farmer, in the language of the request. Empty when the photo is not usable. */
+  summary: looseText(220),
 });
 
 export const leafResult = z.object({

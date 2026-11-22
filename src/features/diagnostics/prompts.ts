@@ -50,12 +50,13 @@ When context includes variety disease_susceptibility (1–5), weigh peacock spot
 ${SAFETY_RULES}`;
 
 /** The photo check shared by the fruit and trap prompts. */
-const PHOTO_CHECK = (subject: string, wrong: string) => `First check the photo itself and set "photo":
+const PHOTO_CHECK = (subject: string, wrong: string, extra = "") => `First check the photo itself and set "photo":
 - "ok": the photo clearly shows ${subject}, sharp enough to judge.
 - "not_olive": the photo shows something else (a person, soil, a screen, another plant or fruit, an animal).
 - "wrong_scan_type": ${wrong}
 - "blurry": out of focus or shaky.
-- "too_dark": too dark, in deep shadow, or too much glare.
+- "too_dark": too dark, in deep shadow, or too much glare.${extra}
+If the photo is so dark or so blurry that you cannot tell what it shows, use "too_dark" or "blurry", not "not_olive". If you can see what it shows and it is not what is asked, use "not_olive" or "wrong_scan_type".
 When "photo" is not "ok", say so honestly: do not guess a diagnosis, use "unclear" or 0, and set confidence below 0.4.`;
 
 const SENTENCE = `- summary: ONE short, plain sentence for the farmer (at most 25 words) that says what you see and what it means. No lists of keywords, no latin names, no numbers other than the ones you counted.`;
@@ -70,7 +71,7 @@ Choose exactly one "diagnosis" from this list:
 - "sunscald": a pale or brown, dry, flat patch on the side of the fruit that faced the sun, on one side only.
 - "drought shrivel": fruit that is small and wrinkled all over. Several olives wrinkled the same way, even with a dull or darker band, point to drought or water stress rather than a fungus.
 - "sooty mould or scale": a black, soot-like coating on fruit or leaves, often with sticky honeydew and small scale insects on the twigs.
-- "healthy": the fruit looks clean and normal.
+- "healthy": the fruit is smooth, plump and evenly coloured, with no spots, holes, dark bands or patches. Wrinkled skin, dents, bands or patches are never "healthy": choose the closest cause with a confidence below 0.6, or "unclear".
 - "unclear": you cannot tell.
 - confidence: 0 to 1. Use below 0.6 when two causes look equally likely or the marks are tiny.
 ${SENTENCE}
@@ -78,15 +79,23 @@ When context includes variety disease_susceptibility.bactrocera_oleae (1–5) or
 For anything that needs treatment, do not suggest it. The app tells the farmer to ask a licensed agronomist.
 ${SAFETY_RULES}`;
 
-export const TRAP_PROMPT = `You look at a photo of a yellow sticky trap for olive flies and count what is stuck on it.
-${PHOTO_CHECK("a yellow sticky trap, mostly in view", 'the photo shows fruit, a leaf, or a label and not a trap.')}
+export const TRAP_PROMPT = `You look at a photo of an olive fly trap and count what is caught in it.
+Two kinds of trap are accepted:
+- a yellow sticky card: count what is stuck on the card.
+- a McPhail trap (a hanging bottle or jar with a clear top and a yellow or cloudy liquid): count the insects in or on the liquid.
+${PHOTO_CHECK(
+  "the catch of the trap: a yellow sticky card mostly in view, or the inside of a McPhail trap with the liquid and insects visible",
+  "the photo shows fruit, a leaf, or a label and not a trap.",
+  `
+- "catch_not_visible": a McPhail trap or another closed trap seen from the outside, so the insects inside cannot be seen or counted. Do not guess a count.`,
+)}
 Count only what you can clearly see:
 - flyCount: olive flies (Bactrocera oleae). Small flies, about 4 to 5 mm, with a clear wing with a dark spot at the tip and a yellow-brown body. A whole number, 0 when there are none.
 - mothCount: olive moths (Prays oleae). Small grey-silver moths with narrow folded wings, about 6 mm. A whole number, 0 when there are none.
-- otherInsects: true when you see other insects on the trap (bees, midges, beetles, wasps and so on), false when you see none. Never count them as olive flies.
-- A trap with a clean card and nothing stuck on it is valid: flyCount 0, mothCount 0, with high confidence when the whole card is visible.
+- otherInsects: true when you see other insects in the trap (bees, midges, beetles, wasps and so on), false when you see none. Never count them as olive flies.
+- A trap with a clean card, or clear liquid with nothing in it, is valid: flyCount 0, mothCount 0, with high confidence when the whole catch is visible.
 - If you are not sure whether an insect is an olive fly or a moth, do not count it.
-- confidence: 0 to 1 in your counts. Use below 0.6 when the trap is partly out of the photo, the flies are too small to count, or the card is crowded and hard to read.
+- confidence: 0 to 1 in your counts. Use below 0.6 when the trap is partly out of the photo, the flies are too small to count, or the catch is crowded and hard to read.
 ${SENTENCE}
 ${SAFETY_RULES}`;
 

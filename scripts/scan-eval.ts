@@ -11,6 +11,8 @@
  *                                   sooty-mould-or-scale, healthy, unsure, retake
  *   trap/flies-5__trap1.jpg         flies-N, empty, retake, unsure   (the count may be off by 2)
  *   label/ok__copper.jpg            ok, retake
+ * Or an explicit list with --cases test-photos/cases.json:  [{ "file": "dark.JPG", "mode": "fruit", "expect": "retake:too_dark" }, ...]
+ *   expect: retake · retake:<reason> · unsure · ok · flies>0 · flies=0 · flies-N · <diagnosis, e.g. olive-fly>
  * The photos stay on your computer, except for the calls to Vertex AI. Nothing is written to the database.
  */
 import { readdirSync, readFileSync, statSync, existsSync, writeFileSync } from "node:fs";
@@ -32,6 +34,7 @@ function arg(name: string, fallback: string): string {
 const dir = resolve(arg("dir", "./test-photos"));
 const language = arg("lang", "en") as Language;
 const only = arg("only", "") as Mode | "";
+const casesFile = arg("cases", "");
 
 type Row = { mode: Mode; file: string; expected: string; actual: string; ok: boolean | null; confidence: string; text: string; ms: number };
 
@@ -52,8 +55,11 @@ function expectedOf(file: string, flatMode?: Mode): string {
 /** "olive-fly", "olivefly" and "fly" all mean the same here. Only letters and digits count. */
 const squash = (s: string) => s.replace(/[^a-z0-9]/g, "");
 
-function matches(mode: Mode, expected: string, actual: string): boolean | null {
+function matches(mode: Mode, expected: string, actual: string, text = ""): boolean | null {
   if (!expected) return null;
+  if (expected.startsWith("retake:")) return actual === "retake" && text.toLowerCase().startsWith(expected.slice(7));
+  if (expected === "flies>0") return actual.startsWith("flies-") && Number(actual.slice(6)) > 0;
+  if (expected === "flies=0") return actual === "flies-0";
   if (mode === "trap" && expected === "empty") return actual === "flies-0";
   if (mode === "trap" && expected.startsWith("flies-") && actual.startsWith("flies-")) {
     return Math.abs(Number(expected.slice(6)) - Number(actual.slice(6))) <= 2;
@@ -61,9 +67,11 @@ function matches(mode: Mode, expected: string, actual: string): boolean | null {
   return expected === actual || (squash(expected).length >= 3 && squash(actual).includes(squash(expected)));
 }
 
-async function runOne(mode: Mode, path: string, file: string, flat = false): Promise<Row> {
+type Case = { path: string; file: string; mode: Mode; flat: boolean; expect?: string };
+
+async function runOne({ path, file, mode, flat, expect }: Case): Promise<Row> {
   const started = Date.now();
-  const base: Pick<Row, "mode" | "file" | "expected"> = { mode, file, expected: expectedOf(file, flat ? mode : undefined) };
+  const base: Pick<Row, "mode" | "file" | "expected"> = { mode, file, expected: expect ?? expectedOf(file, flat ? mode : undefined) };
   const bytes = readFileSync(path);
   const b64 = bytes.toString("base64");
   const row = (actual: string, confidence: string, text: string): Row => ({
@@ -71,13 +79,14 @@ async function runOne(mode: Mode, path: string, file: string, flat = false): Pro
     actual,
     confidence,
     text,
-    ok: matches(mode, base.expected, actual),
+    ok: matches(mode, base.expected, actual, text),
     ms: Date.now() - started,
   });
 
   if (bytes.length > MAX_IMAGE_BYTES) return row("skipped", "", `file is ${(bytes.length / 1e6).toFixed(1)} MB, the app resizes to under 4 MB first`);
   const check = checkImageBase64(b64);
-  if (!check.ok) return row("skipped", "", `the API would reject this file (${check.code})`);
+  // A tiny test picture is still sent to the AI so we can see the answer. The app resizes real photos, it never makes them this small.
+  if (!check.ok && check.code !== "too_small") return row("skipped", "", `the API would reject this file (${check.code})`);
 
   if (mode === "label") {
     const run = await runLabelScan(b64);
@@ -104,11 +113,11 @@ async function runOne(mode: Mode, path: string, file: string, flat = false): Pro
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Vertex answers "resource exhausted" when calls come too fast. Wait and try again (up to 3 times). */
-async function runWithRetry(mode: Mode, path: string, file: string, flat: boolean): Promise<Row> {
-  let r = await runOne(mode, path, file, flat);
+async function runWithRetry(c: Case): Promise<Row> {
+  let r = await runOne(c);
   for (let i = 0; i < 3 && r.actual === "unavailable" && /exhausted|429|quota/i.test(r.text); i++) {
     await sleep(10_000 * (i + 1));
-    r = await runOne(mode, path, file, flat);
+    r = await runOne(c);
   }
   return r;
 }
@@ -126,17 +135,28 @@ async function main() {
 
   const rows: Row[] = [];
   const isImage = (folder: string, f: string) => IMAGE_EXT.has(extname(f).toLowerCase()) && statSync(join(folder, f)).isFile();
-  for (const mode of MODES) {
-    if (only && only !== mode) continue;
-    const folder = join(dir, mode);
-    const inFolder = existsSync(folder) ? readdirSync(folder).filter((f) => isImage(folder, f)).sort().map((f) => ({ path: join(folder, f), file: f, flat: false })) : [];
-    const flat = readdirSync(dir).filter((f) => f.toLowerCase().startsWith(`${mode}-`) && isImage(dir, f)).sort().map((f) => ({ path: join(dir, f), file: f, flat: true }));
-    for (const { path, file, flat: isFlat } of [...inFolder, ...flat]) {
-      const r = await runWithRetry(mode, path, file, isFlat);
-      rows.push(r);
-      const mark = r.ok === null ? " " : r.ok ? "✓" : "✗";
-      console.log(`${mark} ${mode.padEnd(5)} ${cut(file, 34).padEnd(34)} → ${r.actual.padEnd(26)} ${r.confidence.padEnd(4)} ${cut(r.text, 90)}`);
+  const cases: Case[] = [];
+  if (casesFile) {
+    const list = JSON.parse(readFileSync(resolve(casesFile), "utf8")) as { file: string; mode: Mode; expect?: string }[];
+    for (const c of list) {
+      const path = join(dir, c.file);
+      if (existsSync(path)) cases.push({ path, file: c.file, mode: c.mode, flat: false, expect: c.expect });
+      else console.log(`  (missing, skipped: ${c.file})`);
     }
+  } else {
+    for (const mode of MODES) {
+      const folder = join(dir, mode);
+      const inFolder = existsSync(folder) ? readdirSync(folder).filter((f) => isImage(folder, f)).sort().map((f) => ({ path: join(folder, f), file: f, mode, flat: false })) : [];
+      const flat = readdirSync(dir).filter((f) => f.toLowerCase().startsWith(`${mode}-`) && isImage(dir, f)).sort().map((f) => ({ path: join(dir, f), file: f, mode, flat: true }));
+      cases.push(...inFolder, ...flat);
+    }
+  }
+  for (const c of cases) {
+    if (only && only !== c.mode) continue;
+    const r = await runWithRetry(c);
+    rows.push(r);
+    const mark = r.ok === null ? " " : r.ok ? "✓" : "✗";
+    console.log(`${mark} ${c.mode.padEnd(5)} ${cut(c.file, 34).padEnd(34)} → ${r.actual.padEnd(26)} ${r.confidence.padEnd(4)} ${cut(r.text, 90)}`);
   }
 
   if (rows.length === 0) {
@@ -155,6 +175,7 @@ async function main() {
   const lines = ["| mode | file | expected | result | confidence | text |", "|---|---|---|---|---|---|"].concat(
     rows.map((r) => `| ${r.mode} | ${r.file} | ${r.expected || "-"} | ${r.actual}${r.ok === false ? " ✗" : r.ok ? " ✓" : ""} | ${r.confidence} | ${r.text.replace(/\|/g, "/")} |`),
   );
+  console.log(`\n${lines.join("\n")}`);
   writeFileSync(join(dir, "_results.md"), `${lines.join("\n")}\n`, "utf8");
   console.log(`Table saved to ${join(dir, "_results.md")}`);
 }
