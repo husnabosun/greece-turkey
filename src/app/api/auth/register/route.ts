@@ -12,12 +12,13 @@ const bodySchema = z.object({
   locale: z.enum(LOCALES).default("el"),
   display_name: z.string().trim().min(1).optional(),
   company_name: z.string().trim().optional().nullable(),
-  invite_code: z.string().trim().optional().nullable(),
 });
 
 /**
  * Creates a confirmed user immediately (no email verification gate).
  * Client then signs in with the same credentials.
+ * Anyone may register as farmer or processor (no invite code); the role is still
+ * validated here (USER_ROLES) and written server-side to app_metadata.
  */
 export async function POST(request: Request) {
   const url = publicEnv.NEXT_PUBLIC_SUPABASE_URL;
@@ -43,18 +44,11 @@ export async function POST(request: Request) {
   }
 
   const email = parsed.data.email.trim().toLowerCase();
-  const { password, role, locale, display_name, company_name, invite_code } = parsed.data;
+  const { password, role, locale, display_name, company_name } = parsed.data;
 
   if (role === "processor") {
     if (!company_name?.trim()) {
       return NextResponse.json({ error: "Company name is required for processors." }, { status: 400 });
-    }
-    const expected = getServerEnv().PROCESSOR_INVITE_CODE?.trim();
-    if (!expected || invite_code?.trim() !== expected) {
-      return NextResponse.json(
-        { error: "Processor registration requires a valid invite code." },
-        { status: 403 },
-      );
     }
   }
 

@@ -26,8 +26,6 @@ const serverEnvSchema = z.object({
   HF_TOKEN: z.string().optional().or(z.literal("")),
   /** Gradio Space id that serves leaf_disease.tflite. Default: hupus/agropulse-leaf */
   LEAF_HF_SPACE: z.string().default("hupus/agropulse-leaf"),
-  /** Invite code required to register as processor (C7). Empty = processor signup blocked. */
-  PROCESSOR_INVITE_CODE: z.string().optional().or(z.literal("")),
 });
 
 export const publicEnv = publicEnvSchema.parse({
@@ -49,7 +47,6 @@ export function getServerEnv() {
     AGROMONITORING_API_KEY: process.env.AGROMONITORING_API_KEY,
     HF_TOKEN: process.env.HF_TOKEN,
     LEAF_HF_SPACE: process.env.LEAF_HF_SPACE,
-    PROCESSOR_INVITE_CODE: process.env.PROCESSOR_INVITE_CODE,
   });
 }
 
