@@ -18,6 +18,9 @@ import {
  * The API routes and `scripts/scan-eval.ts` both use these, so they always behave the same.
  * The leaf scan (gate and leaf model) is not here on purpose.
  */
+/** 0 = as repeatable as the model allows. Not a guarantee: the model can still vary a little. */
+const SCAN_TEMPERATURE = 0;
+
 export type ScanFlowResult<T> =
   | { ok: true; verdict: Verdict; result: T }
   | { ok: false; reason: string; detail?: string };
@@ -32,16 +35,16 @@ function contextLine({ language, context }: Pick<Args, "language" | "context">):
 }
 
 export async function runFruitScan(args: Args): Promise<ScanFlowResult<FruitResult>> {
-  const live = await geminiJsonDetailed({ prompt: FRUIT_PROMPT + contextLine(args), schema: fruitResult, imageBase64List: args.images });
+  const live = await geminiJsonDetailed({ temperature: SCAN_TEMPERATURE, prompt: FRUIT_PROMPT + contextLine(args), schema: fruitResult, imageBase64List: args.images });
   return live.ok ? { ok: true, verdict: judgeFruit(live.data), result: live.data } : { ok: false, reason: live.reason, detail: live.detail };
 }
 
 export async function runTrapScan(args: Args): Promise<ScanFlowResult<TrapResult>> {
-  const live = await geminiJsonDetailed({ prompt: TRAP_PROMPT + contextLine(args), schema: trapResult, imageBase64List: args.images });
+  const live = await geminiJsonDetailed({ temperature: SCAN_TEMPERATURE, prompt: TRAP_PROMPT + contextLine(args), schema: trapResult, imageBase64List: args.images });
   return live.ok ? { ok: true, verdict: judgeTrap(live.data), result: live.data } : { ok: false, reason: live.reason, detail: live.detail };
 }
 
 export async function runLabelScan(imageBase64: string): Promise<ScanFlowResult<LabelResult>> {
-  const live = await geminiJsonDetailed({ prompt: LABEL_PROMPT, schema: labelResult, imageBase64 });
+  const live = await geminiJsonDetailed({ temperature: SCAN_TEMPERATURE, prompt: LABEL_PROMPT, schema: labelResult, imageBase64 });
   return live.ok ? { ok: true, verdict: judgeLabel(live.data), result: live.data } : { ok: false, reason: live.reason, detail: live.detail };
 }

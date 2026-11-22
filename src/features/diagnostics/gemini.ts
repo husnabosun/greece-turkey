@@ -123,6 +123,8 @@ export async function geminiJsonDetailed<T>(args: {
   imageBase64?: string;
   imageBase64List?: string[];
   timeoutMs?: number;
+  /** Default 0.2. The fruit, trap and label scans use 0 so the same photo gives the same answer. */
+  temperature?: number;
 }): Promise<GeminiJsonResult<T>> {
   const env = getServerEnv();
   const project = env.GOOGLE_CLOUD_PROJECT;
@@ -144,7 +146,7 @@ export async function geminiJsonDetailed<T>(args: {
     contents: [{ role: "user", parts }],
     generationConfig: {
       responseMimeType: "application/json",
-      temperature: 0.2,
+      temperature: args.temperature ?? 0.2,
     },
   });
 
