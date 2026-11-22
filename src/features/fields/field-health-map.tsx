@@ -17,6 +17,7 @@ import {
   SATELLITE_MAX_ZOOM,
   SATELLITE_STYLE,
 } from "@/features/fields/satellite-style";
+import type { StartView } from "@/features/fields/start-view";
 import {
   fitBoundsFor,
   treeFrameBounds,
@@ -63,6 +64,8 @@ type Props = {
   points?: FitPoint[];
   /** Field area, used to size the tree-dot frame when the field only has a pin. */
   areaHa?: number | null;
+  /** Where to open when no field can be framed (profile region or language default). */
+  startView?: StartView;
   trees: MapTree[];
   selectedId: number | null;
   onSelect: (id: number) => void;
@@ -93,6 +96,7 @@ export function FieldHealthMap({
   outlines,
   points,
   areaHa,
+  startView,
   trees,
   selectedId,
   onSelect,
@@ -111,6 +115,8 @@ export function FieldHealthMap({
   const [staticZoom, setStaticZoom] = useState(1);
   // Always the latest props, so async map callbacks never frame a stale field.
   const latest = useRef({ lat, lon, geom, outlines, points });
+  const startViewRef = useRef(startView);
+  startViewRef.current = startView;
   latest.current = { lat, lon, geom, outlines, points };
 
   useEffect(() => {
@@ -125,7 +131,7 @@ export function FieldHealthMap({
 
     const first = latest.current;
     const initialBounds = fitBoundsFor(first);
-    const saved = initialMapView();
+    const saved = startViewRef.current ?? initialMapView();
 
     const boot = () => {
       if (removed || mapRef.current) return;

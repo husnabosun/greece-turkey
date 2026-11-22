@@ -24,6 +24,7 @@ import {
 } from "@/features/fields/tree-count-source";
 import { formatRelativeAge, relativeAge } from "@/features/fields/field-summary";
 import { useFieldSummary } from "@/features/fields/use-field-summary";
+import { useMapStartView } from "@/features/fields/use-map-start-view";
 import { deleteFarmerField, updateFarmerField } from "@/features/fields/field-mutations";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 // Mapbox (~1 MB) is only fetched when a map is actually on screen.
@@ -56,6 +57,7 @@ export function FieldsScreen() {
   const locale = useLocale();
   const router = useRouter();
   const { fields, loading, reload } = useFarmerFields();
+  const { view: startView, ready: startReady } = useMapStartView(locale, fields);
   const [showHealth, setShowHealth] = useState(true);
   const [selectedId, setSelectedId] = useState<string | "all">("all");
   const [selectedTreeId, setSelectedTreeId] = useState<number | null>(null);
@@ -369,7 +371,7 @@ export function FieldsScreen() {
 
         <div className="relative h-[50dvh] max-h-[520px] min-h-[260px] w-full shrink-0 overflow-hidden md:h-[62dvh] md:max-h-[640px] md:px-6">
           <div className="absolute inset-0 md:inset-x-6 md:inset-y-0">
-            {loading ? (
+            {loading || !startReady ? (
               <div className="flex h-full w-full items-center justify-center bg-[#1a1a1a] md:rounded-[18px]">
                 <p className="text-ap-body font-semibold text-white/70">{t("mapLoading")}</p>
               </div>
@@ -382,6 +384,7 @@ export function FieldsScreen() {
                 geom={active?.geom}
                 outlines={mapOutlines}
                 points={mapPoints}
+                startView={startView}
                 areaHa={active?.ha != null ? Number(active.ha) : null}
                 trees={showAll ? [] : trees}
                 selectedId={selectedTreeId}

@@ -7,22 +7,9 @@ import { ArrowLeft, ArrowRight, Check, Globe, Loader2, MapPin, Sprout } from "lu
 import { DEFAULT_LOCALE, LOCALES, type Locale } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
+import { REGIONS_GR, REGIONS_TR } from "@/features/fields/start-view";
 import { cn } from "@/shared/lib/utils";
 import { useErrorMessage } from "@/shared/lib/error-message";
-
-const REGIONS_GR = [
-  { id: "north-aegean", el: "Βόρειο Αιγαίο", en: "North Aegean", tr: "Kuzey Ege" },
-  { id: "crete", el: "Κρήτη", en: "Crete", tr: "Girit" },
-  { id: "peloponnese", el: "Πελοπόννησος", en: "Peloponnese", tr: "Mora" },
-  { id: "central-greece", el: "Στερεά Ελλάδα", en: "Central Greece", tr: "Orta Yunanistan" },
-] as const;
-
-const REGIONS_TR = [
-  { id: "izmir", el: "Σμύρνη", en: "İzmir", tr: "İzmir" },
-  { id: "aydin", el: "Αϊδίνιο", en: "Aydın", tr: "Aydın" },
-  { id: "mugla", el: "Μούγλα", en: "Muğla", tr: "Muğla" },
-  { id: "balikesir", el: "Μπαλικεσίρ", en: "Balıkesir", tr: "Balıkesir" },
-] as const;
 
 type Step = 1 | 2 | 3;
 

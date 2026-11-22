@@ -8,7 +8,7 @@ import { ArrowRight, ChevronLeft, Mic, Minus, Plus, Sparkles } from "lucide-reac
 import { hasSupabaseConfig, publicEnv } from "@/core/config/env";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import type { FieldPolygon } from "@/features/fields/field-map-editor";
-import { initialMapView } from "@/features/fields/map-location";
+import { useMapStartView } from "@/features/fields/use-map-start-view";
 import {
   defaultVarietySlug,
   isVarietyAllowed,
@@ -57,10 +57,13 @@ export function AddFieldScreen() {
   const [name, setName] = useState("");
   const [polygon, setPolygon] = useState<FieldPolygon | null>(null);
   const [areaHa, setAreaHa] = useState<number | null>(null);
-  const [mapLon, setMapLon] = useState<number | null>(() => {
-    const last = initialMapView();
-    return last.center[0] ?? null;
-  });
+  const { view: startView, ready: startReady } = useMapStartView(locale);
+  const [mapLon, setMapLon] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Country-aware varieties follow where the map opens until the user draws or moves it.
+    if (startReady) setMapLon((prev) => prev ?? startView.center[0]);
+  }, [startReady, startView.center]);
   const [profileCountry, setProfileCountry] = useState<OliveCountry | null>(null);
   const [treesText, setTreesText] = useState("80");
   const [ageYears, setAgeYears] = useState(35);
@@ -304,8 +307,11 @@ export function AddFieldScreen() {
           <p className="mx-4 rounded-[18px] border border-line bg-soft px-3 py-6 text-center text-ap-body text-muted-foreground md:mx-6">
             {t("needMapboxBody")}
           </p>
+        ) : !startReady ? (
+          <div className="h-[58dvh] min-h-[320px] w-full animate-pulse bg-soft md:h-[62dvh]" />
         ) : (
           <FieldMapEditor
+            startView={startView}
             token={token}
             onPolygonChange={onPolygon}
             onCenterChange={(lon) => setMapLon(lon)}

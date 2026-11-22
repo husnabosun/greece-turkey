@@ -8,6 +8,7 @@ import { useLocale, useTranslations } from "next-intl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 import { formatArea } from "@/features/fields/area";
+import type { StartView } from "@/features/fields/start-view";
 import {
   DRAW_LOCATE_ZOOM,
   initialMapView,
@@ -29,6 +30,8 @@ type Props = {
   placeLabel?: string;
   /** Edge-to-edge map (no side radius / border). */
   fullBleed?: boolean;
+  /** Where to open (user's fields, profile region or language default). Falls back to the last saved view. */
+  startView?: StartView;
 };
 
 /** Interactive satellite polygon drawer for olive grove boundaries. */
@@ -39,6 +42,7 @@ export function FieldMapEditor({
   className,
   placeLabel,
   fullBleed,
+  startView,
 }: Props) {
   const t = useTranslations("farmerFields");
   const locale = useLocale();
@@ -46,6 +50,7 @@ export function FieldMapEditor({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const drawRef = useRef<MapboxDraw | null>(null);
+  const startViewRef = useRef(startView);
   const onPolygonChangeRef = useRef(onPolygonChange);
   const onCenterChangeRef = useRef(onCenterChange);
   const [areaHa, setAreaHa] = useState<number | null>(null);
@@ -111,12 +116,14 @@ export function FieldMapEditor({
       if (container.clientWidth < 2 || container.clientHeight < 2) return;
 
       mapboxgl.accessToken = token;
-      const start = initialMapView();
+      const start = startViewRef.current ?? initialMapView();
+      const startBounds = startViewRef.current?.bounds;
       map = new mapboxgl.Map({
         container,
         style: SATELLITE_STYLE,
-        center: start.center,
-        zoom: Math.min(start.zoom, SATELLITE_MAX_ZOOM),
+        ...(startBounds
+          ? { bounds: startBounds, fitBoundsOptions: { padding: 48, maxZoom: 16 } }
+          : { center: start.center, zoom: Math.min(start.zoom, SATELLITE_MAX_ZOOM) }),
         maxZoom: SATELLITE_MAX_ZOOM,
         attributionControl: false,
         collectResourceTiming: false,
