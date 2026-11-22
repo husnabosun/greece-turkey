@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, Check, Globe, Loader2, MapPin, Sprout } from "lucide-react";
-import { LOCALES, type Locale } from "@/core/config/constants";
+import { DEFAULT_LOCALE, LOCALES, type Locale } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
@@ -61,7 +61,7 @@ export function WelcomeScreen() {
   const [notifyRisk, setNotifyRisk] = useState(true);
   const [saving, setSaving] = useState(false);
   const [prefLocale, setPrefLocale] = useState<Locale>(
-    locale === "tr" || locale === "en" || locale === "el" ? locale : "el",
+    locale === "tr" || locale === "en" || locale === "el" ? locale : DEFAULT_LOCALE,
   );
 
   useEffect(() => {
