@@ -26,7 +26,6 @@ const LotsMap = dynamic(() => import("@/features/marketplace/lots-map").then((m)
   ssr: false,
   loading: () => <div className="w-full animate-pulse rounded-[18px] bg-soft" style={{ height: 240 }} />,
 });
-import { regionLabel } from "@/features/marketplace/regions";
 import {
   DayChipPicker,
   Dialog,
@@ -226,10 +225,12 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
     ? lotPlaceLabel(
         {
           town: lot.town,
-          region: regionLabel(lot.region, locale),
+          region: lot.region,
           farmerDisplayName: lot.farmerDisplayName,
         },
         t("anonymousGrove"),
+        undefined,
+        locale,
       )
     : t("anonymousGrove");
   const variety = lot

@@ -106,7 +106,13 @@ export function NewListingScreen({
   const publishLock = useRef(false);
 
   const startDays = useMemo(() => nextDays(defaultStart, 14), [defaultStart]);
-  const endDays = useMemo(() => nextDays(harvestStart, 14), [harvestStart]);
+  // The TO grid starts at FROM and always reaches the chosen TO, so keeping TO never makes it vanish from the grid.
+  const endDays = useMemo(() => {
+    const reach = Math.round(
+      (new Date(`${harvestEnd}T12:00:00`).getTime() - new Date(`${harvestStart}T12:00:00`).getTime()) / 86_400_000,
+    );
+    return nextDays(harvestStart, Math.max(14, reach + 1));
+  }, [harvestStart, harvestEnd]);
 
   const score = field ? fieldCards[field.id]?.qualityScore ?? null : null;
   const boundsMsg = useBoundsMessage();
@@ -302,7 +308,8 @@ export function NewListingScreen({
               value={harvestStart}
               onChange={(next) => {
                 setHarvestStart(next);
-                if (harvestEnd < next) setHarvestEnd(addDaysIso(next, 7));
+                // Keep TO; only move it when it would fall before the new FROM.
+                if (harvestEnd < next) setHarvestEnd(next);
               }}
               todayLabel={t("today")}
               formatDay={(iso) =>

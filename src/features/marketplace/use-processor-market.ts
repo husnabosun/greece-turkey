@@ -569,8 +569,8 @@ export async function cancelDelivery(
 export function lotPlaceLabel(
   lot: Pick<ProcessorLot, "town" | "region" | "farmerDisplayName">,
   anonymous: string,
-  geocoded?: string | null,
-  locale = "el",
+  geocoded: string | null | undefined,
+  locale: string,
 ) {
   if (lot.farmerDisplayName) return lot.farmerDisplayName;
   if (geocoded?.trim()) return geocoded.trim();

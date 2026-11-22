@@ -135,6 +135,17 @@
   html {
     @apply font-sans;
   }
+  /* Tailwind v4 no longer shows the pointer cursor on buttons: put it back for everything clickable. */
+  button:not(:disabled),
+  [role="button"],
+  a,
+  label[for],
+  select {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
 }
 
 /* Legacy-like utility aliases */

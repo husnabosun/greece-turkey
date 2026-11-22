@@ -15,6 +15,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { ApButton } from "@/shared/components/brand/ap-button";
 import { ApCard } from "@/shared/components/brand/ap-card";
 import { Chip } from "@/shared/components/brand/chip";
+import { todayIsoDate } from "@/features/marketplace/schedule";
 import { Link } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 
@@ -401,6 +402,8 @@ export function DayChipPicker({
   formatDay: (iso: string, index: number) => string;
   todayLabel: string;
 }) {
+  // Only the real today gets the "Today" label (a grid can start on another day).
+  const today = todayIsoDate();
   return (
     <div className="flex flex-col gap-1.5">
       <p className="text-[12px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{label}</p>
@@ -418,7 +421,7 @@ export function DayChipPicker({
               )}
             >
               <span className={cn("text-[12px] font-semibold", on ? "text-white/70" : "text-muted-foreground")}>
-                {i === 0 ? todayLabel : formatDay(iso, i)}
+                {iso === today ? todayLabel : formatDay(iso, i)}
               </span>
               <span className="text-[15px] font-extrabold leading-5">{Number(iso.slice(8, 10))}</span>
             </button>
