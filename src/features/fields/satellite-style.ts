@@ -17,7 +17,8 @@ export const SATELLITE_STYLE: StyleSpecification = {
       tileSize: 256,
       attribution:
         "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
-      maxzoom: 19,
+      // Cap at 18 — beyond this Esri overzooms and crowns blur in rural GR/TR.
+      maxzoom: 18,
     },
     // Place / road names on top of imagery (no Mapbox vector tiles → avoids 429).
     "esri-boundaries-places": {
@@ -27,7 +28,7 @@ export const SATELLITE_STYLE: StyleSpecification = {
       ],
       tileSize: 256,
       attribution: "Esri Reference",
-      maxzoom: 19,
+      maxzoom: 18,
     },
     "esri-reference-overlay": {
       type: "raster",
@@ -36,7 +37,7 @@ export const SATELLITE_STYLE: StyleSpecification = {
       ],
       tileSize: 256,
       attribution: "Esri Reference",
-      maxzoom: 19,
+      maxzoom: 18,
     },
   },
   layers: [
@@ -45,14 +46,14 @@ export const SATELLITE_STYLE: StyleSpecification = {
       type: "raster",
       source: "esri-world-imagery",
       minzoom: 0,
-      maxzoom: 22,
+      maxzoom: 18.5,
     },
     {
       id: "esri-boundaries-places",
       type: "raster",
       source: "esri-boundaries-places",
       minzoom: 0,
-      maxzoom: 22,
+      maxzoom: 18.5,
       paint: { "raster-opacity": 0.95 },
     },
     {
@@ -60,11 +61,14 @@ export const SATELLITE_STYLE: StyleSpecification = {
       type: "raster",
       source: "esri-reference-overlay",
       minzoom: 0,
-      maxzoom: 22,
+      maxzoom: 18.5,
       paint: { "raster-opacity": 0.9 },
     },
   ],
 };
+
+/** Hard stop for Mapbox GL overzoom blur on rural orthophotos. */
+export const SATELLITE_MAX_ZOOM = 18.5;
 
 /** Mainland Greece fallback (near Athens) — never default to Türkiye. */
 export const DEFAULT_FIELD_CENTER: [number, number] = [23.7275, 37.9838];

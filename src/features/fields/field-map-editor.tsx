@@ -15,7 +15,7 @@ import {
   requestDeviceLocation,
   writeLastMapCenter,
 } from "@/features/fields/map-location";
-import { SATELLITE_STYLE, type FieldPolygon } from "@/features/fields/satellite-style";
+import { SATELLITE_MAX_ZOOM, SATELLITE_STYLE, type FieldPolygon } from "@/features/fields/satellite-style";
 import { cn } from "@/shared/lib/utils";
 
 export type { FieldPolygon };
@@ -97,7 +97,7 @@ export function FieldMapEditor({
         const center: [number, number] = [pos.coords.longitude, pos.coords.latitude];
         writeLastMapCenter(center[0], center[1], zoom);
         onCenterChangeRef.current?.(center[0], center[1]);
-        mapRef.current.easeTo({ center, zoom, duration: 900 });
+        mapRef.current.easeTo({ center, zoom: Math.min(zoom, SATELLITE_MAX_ZOOM), duration: 900 });
       } catch {
         /* keep last / Greece fallback */
       } finally {
@@ -116,7 +116,8 @@ export function FieldMapEditor({
         container,
         style: SATELLITE_STYLE,
         center: start.center,
-        zoom: start.zoom,
+        zoom: Math.min(start.zoom, SATELLITE_MAX_ZOOM),
+        maxZoom: SATELLITE_MAX_ZOOM,
         attributionControl: false,
         collectResourceTiming: false,
         failIfMajorPerformanceCaveat: false,
@@ -179,7 +180,11 @@ export function FieldMapEditor({
         const center: [number, number] = [pos.coords.longitude, pos.coords.latitude];
         writeLastMapCenter(center[0], center[1], DRAW_LOCATE_ZOOM);
         onCenterChangeRef.current?.(center[0], center[1]);
-        mapRef.current?.easeTo({ center, zoom: DRAW_LOCATE_ZOOM, duration: 700 });
+        mapRef.current?.easeTo({
+          center,
+          zoom: Math.min(DRAW_LOCATE_ZOOM, SATELLITE_MAX_ZOOM),
+          duration: 700,
+        });
       })
       .finally(() => setLocating(false));
   }

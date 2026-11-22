@@ -14,6 +14,7 @@ import {
 } from "@/features/fields/map-location";
 import {
   parseFieldPolygon,
+  SATELLITE_MAX_ZOOM,
   SATELLITE_STYLE,
 } from "@/features/fields/satellite-style";
 import {
@@ -143,6 +144,7 @@ export function FieldHealthMap({
         ...(startBounds
           ? { bounds: startBounds, fitBoundsOptions: { padding: framePadding(container), maxZoom: 17 } }
           : { center: startCenter, zoom: initialBounds ? FIELD_POINT_ZOOM : saved.zoom }),
+        maxZoom: SATELLITE_MAX_ZOOM,
         attributionControl: true,
         collectResourceTiming: false,
         failIfMajorPerformanceCaveat: false,
