@@ -16,6 +16,12 @@ import {
   Star,
 } from "lucide-react";
 import { formatAreaValue } from "@/features/fields/area";
+import {
+  TREE_SOURCE_MESSAGE_KEY,
+  parseTreeCountSource,
+  sourceAfterEdit,
+  withTreeCountSource,
+} from "@/features/fields/tree-count-source";
 import { formatRelativeAge, relativeAge } from "@/features/fields/field-summary";
 import { useFieldSummary } from "@/features/fields/use-field-summary";
 import { deleteFarmerField, updateFarmerField } from "@/features/fields/field-mutations";
@@ -157,7 +163,13 @@ export function FieldsScreen() {
     }
     setBusy(true);
     try {
+      const nextSource = sourceAfterEdit(
+        activeRaw.tree_count,
+        trees == null ? null : Math.round(trees),
+        parseTreeCountSource(activeRaw.notes),
+      );
       const res = await updateFarmerField({
+        notes: nextSource ? withTreeCountSource(activeRaw.notes, nextSource) : undefined,
         fieldId: activeRaw.id,
         name: editName,
         treeCount: trees == null ? null : Math.round(trees),
@@ -224,6 +236,7 @@ export function FieldsScreen() {
   );
 
   const displayTrees = showAll ? totals.trees : active?.trees;
+  const activeTreeSource = parseTreeCountSource(activeRaw?.notes);
   const displayHa = showAll ? (totals.ha > 0 ? totals.ha : null) : active?.ha != null ? Number(active.ha) : null;
   const displayScore = showAll ? totals.avgScore : active?.score ?? null;
   const area = displayHa != null ? formatAreaValue(displayHa, locale) : null;
@@ -296,6 +309,11 @@ export function FieldsScreen() {
               <p className="text-[11px] leading-tight font-medium text-muted-foreground">
                 {showAll ? t("treesTotal") : t("treeCount")}
               </p>
+              {!showAll && activeTreeSource && displayTrees != null && displayTrees > 0 ? (
+                <p className="mt-0.5 text-[10px] leading-tight font-semibold text-ap-accent">
+                  {t(TREE_SOURCE_MESSAGE_KEY[activeTreeSource])}
+                </p>
+              ) : null}
             </div>
             <div className="flex min-w-0 flex-col items-center justify-center border-x border-line px-1 text-center">
               <p className="text-ap-body font-extrabold whitespace-nowrap text-ink">
@@ -409,6 +427,20 @@ export function FieldsScreen() {
                           .filter(Boolean)
                           .join(" · ")}
                       </p>
+                      {activeRaw.tree_count != null && activeTreeSource ? (
+                        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-ap-small font-semibold text-muted-foreground">
+                          <span className={activeTreeSource === "farmer" ? "text-good" : undefined}>
+                            {t(TREE_SOURCE_MESSAGE_KEY[activeTreeSource])}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={openEdit}
+                            className="min-h-11 font-bold text-ap-accent"
+                          >
+                            {t("editTreeCount")}
+                          </button>
+                        </p>
+                      ) : null}
                     </div>
                     <button
                       type="button"
@@ -580,6 +612,18 @@ export function FieldsScreen() {
             aria-invalid={editTrees.trim() !== "" && parseTreeCount(editTrees) == null}
             className="mt-1 h-11 w-full rounded-xl border border-line px-3 text-ap-body font-bold text-ink outline-none"
           />
+          {activeRaw && parseTreeCount(editTrees) != null ? (
+            <span className="mt-1 block text-ap-small font-bold text-muted-foreground">
+              {(() => {
+                const s = sourceAfterEdit(
+                  activeRaw.tree_count,
+                  Math.round(parseTreeCount(editTrees) as number),
+                  parseTreeCountSource(activeRaw.notes),
+                );
+                return s ? t(TREE_SOURCE_MESSAGE_KEY[s]) : null;
+              })()}
+            </span>
+          ) : null}
           {editTrees.trim() !== "" && parseTreeCount(editTrees) == null ? (
             <span className="mt-1 block text-ap-small font-semibold text-risk" role="alert">
               {t("invalidTrees")}

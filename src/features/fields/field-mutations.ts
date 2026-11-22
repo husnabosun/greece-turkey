@@ -6,6 +6,8 @@ export async function updateFarmerField(input: {
   treeCount: number | null;
   varietySlug: string | null;
   irrigated: boolean;
+  /** Full notes text to store (e.g. with the tree-count source merged in). Left untouched when omitted. */
+  notes?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
@@ -21,6 +23,7 @@ export async function updateFarmerField(input: {
       variety: input.varietySlug === "other" ? null : input.varietySlug,
       variety_slug: input.varietySlug,
       irrigated: input.irrigated,
+      ...(input.notes !== undefined ? { notes: input.notes } : {}),
     })
     .eq("id", input.fieldId);
 

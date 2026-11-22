@@ -23,6 +23,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { formatArea } from "@/features/fields/area";
+import { TREE_SOURCE_MESSAGE_KEY, parseTreeCountSource } from "@/features/fields/tree-count-source";
 import { reverseGeocodePlace } from "@/features/fields/reverse-geocode";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { scanCameraHref, scanCameraHrefForTask } from "@/features/diagnostics/open-scan-camera";
@@ -777,6 +778,9 @@ export function DashboardScreen() {
                           <p className="truncate text-ap-card text-ink">{f.name}</p>
                           <p className="text-ap-small text-muted-foreground">
                             {f.tree_count != null ? tFields("treesCount", { n: f.tree_count }) : "—"}
+                            {f.tree_count != null && parseTreeCountSource(f.notes)
+                              ? ` · ${tFields(TREE_SOURCE_MESSAGE_KEY[parseTreeCountSource(f.notes)!])}`
+                              : ""}
                             {f.area_ha != null
                               ? ` · ${formatArea(Number(f.area_ha), locale)}`
                               : ""}
