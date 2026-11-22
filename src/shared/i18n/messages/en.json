@@ -913,7 +913,10 @@
     "organicOil": "Organic",
     "quantityKg": "Kilograms",
     "bulkOil": "Bulk oil — no field",
-    "yourStock": "Your stock"
+    "yourStock": "Your stock",
+    "oilVariety": "Variety",
+    "oilRegion": "Region",
+    "oilRegionRequired": "Pick a region for the oil."
   },
   "processorNav": {
     "overview": "Overview",

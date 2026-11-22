@@ -462,6 +462,20 @@ function RequestMenu({
     </div>
   );
 }
+
+/** Max free acidity (% oleic) per grade; lampante has no upper cap. */
+const ACIDITY_CAP: Record<OilCategory, number | null> = {
+  extra_virgin: 0.8,
+  virgin: 2.0,
+  lampante: null,
+};
+
+function acidityCapLabel(c: OilCategory, locale: string): string {
+  const cap = ACIDITY_CAP[c];
+  if (cap == null) return "";
+  return cap.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+}
+
 export function ProcessorRequestsScreen() {
   const t = useTranslations("processor");
   const errMsg = useErrorMessage();
@@ -579,7 +593,12 @@ export function ProcessorRequestsScreen() {
       return;
     }
     const tonsN = isOil ? kgToTons(tc.value) : tc.value;
-    const acidityN = isOil && maxAcidity.trim() ? parseLocaleNumber(maxAcidity) : null;
+    const acidityN =
+      isOil && maxAcidity.trim()
+        ? parseLocaleNumber(maxAcidity)
+        : isOil && oilCategory
+          ? ACIDITY_CAP[oilCategory]
+          : null;
     if (isOil && maxAcidity.trim() && acidityN == null) {
       toast.error(t("maxAcidity"));
       return;
@@ -975,7 +994,12 @@ export function ProcessorRequestsScreen() {
                       <ChipGroup
                         label={t("oilCategory")}
                         value={oilCategory ?? "all"}
-                        onChange={(v) => setOilCategory(v === "all" ? null : (v as OilCategory))}
+                        onChange={(v) => {
+                          const next = v === "all" ? null : (v as OilCategory);
+                          setOilCategory(next);
+                          // Acidity cap follows the grade (EU 2022/2104): EVOO 0.8, virgin 2.0.
+                          setMaxAcidity(next ? acidityCapLabel(next, locale) : "");
+                        }}
                         options={[
                           { value: "all", label: t("filterAll") },
                           ...OIL_CATEGORIES.map((c) => ({
@@ -990,7 +1014,7 @@ export function ProcessorRequestsScreen() {
                         onChange={setMaxAcidity}
                         suffix="%"
                         inputMode="decimal"
-                        placeholder="0,8"
+                        placeholder={oilCategory ? acidityCapLabel(oilCategory, locale) : "—"}
                       />
                     </>
                   ) : null}

@@ -1,5 +1,6 @@
 "use client";
 
+import { todayIsoDate } from "@/features/marketplace/schedule";
 import { useCallback, useEffect, useState } from "react";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import type { TaskKind } from "@/shared/types/database";
@@ -162,7 +163,7 @@ export async function createFarmerTask(input: {
       kind: input.kind ?? "plain",
       why: input.why ?? null,
       urgent: input.urgent ?? false,
-      due_on: input.dueOn ?? new Date().toISOString().slice(0, 10),
+      due_on: input.dueOn ?? todayIsoDate(),
       done: false,
     })
     .select("id, field_id, tree_id, title, meta, kind, why, urgent, due_on, done, fields(name)")

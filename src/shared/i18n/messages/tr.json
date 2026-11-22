@@ -913,7 +913,10 @@
     "organicOil": "Organik",
     "quantityKg": "Kilogram",
     "bulkOil": "Dökme yağ — tarlasız",
-    "yourStock": "Stokların"
+    "yourStock": "Stokların",
+    "oilVariety": "Çeşit",
+    "oilRegion": "Bölge",
+    "oilRegionRequired": "Yağ için bir bölge seç."
   },
   "processorNav": {
     "overview": "Özet",

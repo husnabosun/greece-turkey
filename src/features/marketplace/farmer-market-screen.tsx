@@ -356,7 +356,12 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
 
   function openAccept(offer: MarketOffer) {
     if (offer.initiatedBy !== "processor") return;
-    setAcceptDate(addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
+    const today = todayIsoDate();
+    const proposed = offer.proposedDate;
+    // Keep the day the mill proposed (never in the past); fall back to the default delay.
+    setAcceptDate(
+      proposed && proposed >= today ? proposed : addDaysIso(today, DEFAULT_DELIVERY_IN_DAYS),
+    );
     setAcceptTarget(offer);
   }
 

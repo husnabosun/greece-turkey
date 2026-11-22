@@ -6,7 +6,14 @@ import { toast } from "sonner";
 import { ArrowRight, ChevronLeft, Trees } from "lucide-react";
 import { formatStremmata } from "@/features/fields/area";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
-import { varietyAgronomyContext, varietyLabelFromStored } from "@/features/fields/olive-varieties";
+import {
+  defaultVarietySlug,
+  marketplaceVarietyOptions,
+  resolveOliveCountry,
+  varietyAgronomyContext,
+  varietyLabelFromStored,
+} from "@/features/fields/olive-varieties";
+import { marketRegionCountry, marketRegionOptions } from "@/features/marketplace/regions";
 import {
   MARKET_LIMITS,
   allowedOilCategories,
@@ -128,6 +135,18 @@ export function NewListingScreen({
   const [acidityText, setAcidityText] = useState("0,3");
   const [oilCategory, setOilCategory] = useState<OilCategory>("extra_virgin");
   const [harvestSeason, setHarvestSeason] = useState(SEASON_OPTIONS[1]!);
+  const ownCountry = resolveOliveCountry({ locale }).country;
+  const [oilVariety, setOilVariety] = useState<string>(() => defaultVarietySlug(ownCountry));
+  const [oilRegion, setOilRegion] = useState<string>("");
+  const oilVarietyOptions = useMemo(() => {
+    const other = ownCountry === "GR" ? "TR" : "GR";
+    const seen = new Set<string>();
+    return [
+      ...marketplaceVarietyOptions(locale, { profileCountry: ownCountry }),
+      ...marketplaceVarietyOptions(locale, { profileCountry: other }),
+    ].filter((v) => (seen.has(v.value) ? false : (seen.add(v.value), true)));
+  }, [locale, ownCountry]);
+  const oilRegionOptions = useMemo(() => marketRegionOptions(locale), [locale]);
   const [storage, setStorage] = useState<OilStorage>("tank");
   const [peroxideText, setPeroxideText] = useState("");
   const [polyphenolsText, setPolyphenolsText] = useState("");
@@ -181,6 +200,10 @@ export function NewListingScreen({
         toast.error(t("invalid"));
         return;
       }
+      if (!field && !oilRegion) {
+        toast.error(t("oilRegionRequired"));
+        return;
+      }
     } else if (!harvestStart || !harvestEnd || harvestEnd < harvestStart) {
       toast.error(t("invalidHarvestRange"));
       return;
@@ -193,8 +216,11 @@ export function NewListingScreen({
       const result = await publishLot({
         fieldId: field?.id ?? null,
         product,
-        variety: field?.variety ?? null,
-        varietySlug: field?.variety_slug ?? null,
+        variety: field?.variety ?? (isOil ? oilVariety : null),
+        varietySlug: field?.variety_slug ?? (isOil ? oilVariety : null),
+        ...(isOil && !field && oilRegion
+          ? { region: oilRegion, country: marketRegionCountry(oilRegion) }
+          : {}),
         tons: isOil ? kgToTons(tonsCheck.value) : tonsCheck.value,
         pricePerKg: priceCheck.value,
         negotiable,
@@ -415,6 +441,22 @@ export function NewListingScreen({
                 onChange={(v) => setOilCategory(v as OilCategory)}
                 options={allowedCats.map((c) => ({ value: c, label: t(oilCategoryI18nKey(c)) }))}
               />
+              {!field ? (
+                <>
+                  <ChipGroup
+                    label={t("oilVariety")}
+                    value={oilVariety}
+                    onChange={setOilVariety}
+                    options={oilVarietyOptions.map((v) => ({ value: v.value, label: v.label }))}
+                  />
+                  <ChipGroup
+                    label={t("oilRegion")}
+                    value={oilRegion}
+                    onChange={setOilRegion}
+                    options={oilRegionOptions}
+                  />
+                </>
+              ) : null}
               <div className="grid gap-4 sm:grid-cols-2">
                 <ChipGroup
                   label={t("harvestSeason")}

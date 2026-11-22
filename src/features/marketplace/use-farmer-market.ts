@@ -3,6 +3,7 @@
 import { errorCode } from "@/shared/lib/error-message";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
+import { addDaysIso, todayIsoDate } from "@/features/marketplace/schedule";
 import type { LabResult, OilCategory, ProductKind } from "@/shared/types/database";
 
 export type MarketOffer = {
@@ -18,6 +19,8 @@ export type MarketOffer = {
   pricePerKg: number;
   fieldId: string | null;
   product: ProductKind;
+  /** Delivery date the mill proposed (local YYYY-MM-DD), from created_at + delivery_in_days. */
+  proposedDate: string | null;
   fieldName: string | null;
   lotVariety: string | null;
   buyRequestId: string | null;
@@ -141,7 +144,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         supabase
           .from("offers")
           .select(
-            "id, lot_id, processor_id, initiated_by, status, tons, price_per_kg, buy_request_id, lots(status, product, variety, field_id, fields(name))",
+            "id, lot_id, processor_id, initiated_by, status, tons, price_per_kg, buy_request_id, delivery_in_days, created_at, lots(status, product, variety, field_id, fields(name))",
           )
           .eq("farmer_id", user.id)
           .order("created_at", { ascending: false }),
@@ -219,6 +222,10 @@ export function useFarmerMarket(fieldIds: string[]) {
           pricePerKg: Number(row.price_per_kg),
           fieldId: lot?.field_id ?? null,
           product: lot?.product ?? "olives",
+          proposedDate:
+            row.delivery_in_days == null || !row.created_at
+              ? null
+              : addDaysIso(todayIsoDate(new Date(row.created_at)), Number(row.delivery_in_days)),
           fieldName: fieldName ?? null,
           lotVariety: lot?.variety ?? null,
           buyRequestId: row.buy_request_id ?? null,

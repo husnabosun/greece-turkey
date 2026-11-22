@@ -192,7 +192,8 @@ export function ProcessorOverviewScreen() {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => setNow(new Date()), []);
   const greet = overviewGreeting(locale, company, now);
-  const weekDates = useMemo(() => nextSevenDays(), []);
+  // Empty during SSR (server runs in UTC) so day chips never mismatch on hydration.
+  const weekDates = useMemo(() => (now ? nextSevenDays(todayIsoDate(now)) : []), [now]);
 
   useEffect(() => {
     const supabase = tryCreateBrowserClient();

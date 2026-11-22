@@ -299,3 +299,10 @@ export function requestRegions(raw: string | null | undefined): MarketRegion[] {
     ),
   ];
 }
+
+/** Country of a market region (first nine are Greek districts). */
+export function marketRegionCountry(region: string | null | undefined): "GR" | "TR" | null {
+  const r = resolveMarketRegion(region);
+  if (!r) return null;
+  return GR_REGIONS.includes(r) ? "GR" : "TR";
+}
