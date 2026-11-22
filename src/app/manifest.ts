@@ -7,11 +7,11 @@ export default function manifest(): MetadataRoute.Manifest {
     name: APP_NAME,
     short_name: "AgroPulse",
     description: "Olive quality, risk intelligence, and B2B marketplace for Greece & Turkey.",
-    start_url: "/el",
+    start_url: "/",
     display: "standalone",
     background_color: "#FAFAF8",
     theme_color: "#FAFAF8",
-    lang: "el",
+    lang: "en",
     icons: [
       {
         src: "/brand/icon-192.png",

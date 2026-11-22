@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { getServerEnv, publicEnv } from "@/core/config/env";
-import { LOCALES, USER_ROLES } from "@/core/config/constants";
+import { DEFAULT_LOCALE, LOCALES, USER_ROLES } from "@/core/config/constants";
 import type { Database } from "@/shared/types/database";
 
 const bodySchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   role: z.enum(USER_ROLES),
-  locale: z.enum(LOCALES).default("el"),
+  locale: z.enum(LOCALES).default(DEFAULT_LOCALE),
   display_name: z.string().trim().min(1).optional(),
   company_name: z.string().trim().optional().nullable(),
 });

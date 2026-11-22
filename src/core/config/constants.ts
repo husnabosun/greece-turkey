@@ -2,7 +2,7 @@ export const APP_NAME = "AgroPulse";
 
 export const LOCALES = ["el", "tr", "en"] as const;
 export type Locale = (typeof LOCALES)[number];
-export const DEFAULT_LOCALE: Locale = "el";
+export const DEFAULT_LOCALE: Locale = "en";
 
 export const USER_ROLES = ["farmer", "processor"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
