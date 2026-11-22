@@ -1,3 +1,4 @@
+import { DEFAULT_LOCALE } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { varietyAgronomyContext } from "@/features/fields/olive-varieties";
 
@@ -104,7 +105,7 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
   const geoLocale =
     localeProfile?.locale === "tr" || localeProfile?.locale === "en" || localeProfile?.locale === "el"
       ? localeProfile.locale
-      : "el";
+      : DEFAULT_LOCALE;
 
   // Prefer a Mapbox place label when coords exist (same source as the farmer home line).
   let town: string | null = null;

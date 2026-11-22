@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_LOCALE } from "@/core/config/constants";
 import { useErrorMessage } from "@/shared/lib/error-message";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -324,7 +325,7 @@ export function ScanScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode,
-          language: locale === "tr" || locale === "en" ? locale : "el",
+          language: locale === "tr" || locale === "en" || locale === "el" ? locale : DEFAULT_LOCALE,
           imageBase64: toBase64(primary),
           imageBase64List: selected.map(toBase64),
           context,
