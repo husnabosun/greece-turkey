@@ -13,12 +13,15 @@ import {
   writeLastMapCenter,
 } from "@/features/fields/map-location";
 import {
-  DEFAULT_FIELD_ZOOM,
-  boundsFromPolygon,
   parseFieldPolygon,
   SATELLITE_STYLE,
-  type FieldPolygon,
 } from "@/features/fields/satellite-style";
+import {
+  fitBoundsFor,
+  treeFrameBounds,
+  type FitPoint,
+  type LngLatBoundsTuple,
+} from "@/features/fields/map-fit";
 
 export type MapTreeStatus = "healthy" | "suspicious" | "diseased";
 
@@ -55,6 +58,10 @@ type Props = {
   geom?: unknown;
   /** When set (e.g. “all fields”), draw every outline and fit to their bounds. */
   outlines?: FieldOutline[];
+  /** Pins of fields without a drawn polygon, used to frame "all fields". */
+  points?: FitPoint[];
+  /** Field area, used to size the tree-dot frame when the field only has a pin. */
+  areaHa?: number | null;
   trees: MapTree[];
   selectedId: number | null;
   onSelect: (id: number) => void;
@@ -83,6 +90,8 @@ export function FieldHealthMap({
   lon,
   geom,
   outlines,
+  points,
+  areaHa,
   trees,
   selectedId,
   onSelect,
@@ -99,6 +108,9 @@ export function FieldHealthMap({
   const [mapError, setMapError] = useState(false);
   const [ready, setReady] = useState(false);
   const [staticZoom, setStaticZoom] = useState(1);
+  // Always the latest props, so async map callbacks never frame a stale field.
+  const latest = useRef({ lat, lon, geom, outlines, points });
+  latest.current = { lat, lon, geom, outlines, points };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -110,31 +122,9 @@ export function FieldHealthMap({
     let ro: ResizeObserver | null = null;
     const timers: number[] = [];
 
-    const midOfBounds = (
-      b: [[number, number], [number, number]] | null,
-    ): [number, number] | null => (b ? [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2] : null);
-    const geomPoly = parseFieldPolygon(geom);
-    let outlineMid: [number, number] | null = null;
-    if (outlines?.length) {
-      for (const o of outlines) {
-        const p = parseFieldPolygon(o.geom);
-        outlineMid = p ? midOfBounds(boundsFromPolygon(p)) : null;
-        if (outlineMid) break;
-      }
-    }
+    const first = latest.current;
+    const initialBounds = fitBoundsFor(first);
     const saved = initialMapView();
-    const center: [number, number] =
-      lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat)
-        ? [lon, lat]
-        : midOfBounds(geomPoly ? boundsFromPolygon(geomPoly) : null) ??
-          outlineMid ??
-          saved.center;
-    const startZoom =
-      lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat)
-        ? DEFAULT_FIELD_ZOOM
-        : geomPoly || outlineMid
-          ? DEFAULT_FIELD_ZOOM
-          : saved.zoom;
 
     const boot = () => {
       if (removed || mapRef.current) return;
@@ -142,11 +132,17 @@ export function FieldHealthMap({
       if (container.clientWidth < 2 || container.clientHeight < 2) return;
 
       mapboxgl.accessToken = token;
+      // Start already framed on the field(s): no flash of the whole region.
+      const startBounds = initialBounds && !isPoint(initialBounds) ? initialBounds : null;
+      const startCenter: [number, number] = initialBounds
+        ? [initialBounds[0][0], initialBounds[0][1]]
+        : saved.center;
       map = new mapboxgl.Map({
         container,
         style: SATELLITE_STYLE,
-        center,
-        zoom: startZoom,
+        ...(startBounds
+          ? { bounds: startBounds, fitBoundsOptions: { padding: framePadding(container), maxZoom: 17 } }
+          : { center: startCenter, zoom: initialBounds ? FIELD_POINT_ZOOM : saved.zoom }),
         attributionControl: true,
         collectResourceTiming: false,
         failIfMajorPerformanceCaveat: false,
@@ -162,16 +158,15 @@ export function FieldHealthMap({
         setMapError(false);
         setReady(true);
         resize();
-        const poly = parseFieldPolygon(geom);
-        upsertFieldFeatures(
-          map!,
-          poly
-            ? [{ type: "Feature", properties: { id: "active", color: "#ffffff" }, geometry: poly }]
-            : [],
-        );
-        fitToField(map!, poly, center);
+        applyOverlay(map!, latest.current, false);
         timers.push(window.setTimeout(resize, 50));
-        timers.push(window.setTimeout(resize, 250));
+        // Re-frame once the flex layout has settled (container size can change right after boot).
+        timers.push(
+          window.setTimeout(() => {
+            resize();
+            if (!removed && mapRef.current) fitTo(mapRef.current, fitBoundsFor(latest.current), false);
+          }, 250),
+        );
       });
 
       map.on("error", () => {
@@ -204,7 +199,6 @@ export function FieldHealthMap({
       mapRef.current = null;
       setReady(false);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   useEffect(() => {
@@ -212,49 +206,21 @@ export function FieldHealthMap({
     if (!map || !token || !ready) return;
 
     const apply = () => {
-      const multi = outlines && outlines.length > 0;
-      if (multi) {
-        const features = outlines
-          .map((o) => {
-            const poly = parseFieldPolygon(o.geom);
-            if (!poly) return null;
-            return {
-              type: "Feature" as const,
-              properties: { id: o.id, color: o.color ?? "#ffffff" },
-              geometry: poly,
-            };
-          })
-          .filter(Boolean) as GeoJSON.Feature[];
-        upsertFieldFeatures(map, features);
-        fitToFeatures(map, features, null);
-      } else {
-        const poly = parseFieldPolygon(geom);
-        upsertFieldFeatures(
-          map,
-          poly
-            ? [{ type: "Feature", properties: { id: "active", color: "#ffffff" }, geometry: poly }]
-            : [],
-        );
-        const center: [number, number] | null =
-          lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
-        fitToField(map, poly, center);
-      }
+      applyOverlay(map, { lat, lon, geom, outlines, points }, true);
       map.resize();
     };
 
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
-  }, [token, lat, lon, geom, outlines, ready]);
+  }, [token, lat, lon, geom, outlines, points, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
-    const poly = parseFieldPolygon(geom);
-    if (!map || !ready || !showHealth || !poly || trees.length === 0) return;
+    const bounds = treeFrameBounds({ geom, lat, lon, areaHa });
+    if (!map || !ready || !showHealth || !bounds || trees.length === 0) return;
 
-    const bounds = boundsFromPolygon(poly);
-    if (!bounds) return;
     const [[minLon, minLat], [maxLon, maxLat]] = bounds;
     const width = maxLon - minLon || 1;
     const height = maxLat - minLat || 1;
@@ -282,7 +248,7 @@ export function FieldHealthMap({
       };
       markersRef.current.push(new mapboxgl.Marker({ element: el, anchor: "center" }).setLngLat([lng, latPt]).addTo(map));
     }
-  }, [showHealth, trees, selectedId, geom, labels, onSelect, ready]);
+  }, [showHealth, trees, selectedId, geom, lat, lon, areaHa, labels, onSelect, ready]);
 
   function zoomBy(delta: number) {
     const map = mapRef.current;
@@ -304,10 +270,7 @@ export function FieldHealthMap({
         onLocate();
       })
       .catch(() => {
-        const poly = parseFieldPolygon(geom);
-        const center: [number, number] | null =
-          lon != null && lat != null && Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
-        fitToField(map, poly, center);
+        fitTo(map, fitBoundsFor(latest.current), true);
         onLocate();
       });
   }
@@ -323,7 +286,7 @@ export function FieldHealthMap({
   return (
     <div
       ref={shellRef}
-      className={cn("relative h-full min-h-[58dvh] overflow-hidden bg-[#1a1a1a]", className ?? "rounded-[18px]")}
+      className={cn("relative h-full min-h-0 overflow-hidden bg-[#1a1a1a]", className ?? "rounded-[18px]")}
     >
       {useStatic ? (
         <StaticAerial
@@ -533,34 +496,58 @@ function upsertFieldFeatures(map: mapboxgl.Map, features: GeoJSON.Feature[]) {
   });
 }
 
-function fitToFeatures(
-  map: mapboxgl.Map,
-  features: GeoJSON.Feature[],
-  center: [number, number] | null,
-) {
-  const bounds = new mapboxgl.LngLatBounds();
-  let any = false;
-  for (const f of features) {
-    if (f.geometry?.type !== "Polygon") continue;
-    const poly = f.geometry as FieldPolygon;
-    const b = boundsFromPolygon(poly);
-    if (!b) continue;
-    bounds.extend(b[0]);
-    bounds.extend(b[1]);
-    any = true;
-  }
-  if (any) {
-    map.fitBounds(bounds, { padding: 56, maxZoom: 16, duration: 500 });
-    return;
-  }
-  if (center) map.easeTo({ center, zoom: DEFAULT_FIELD_ZOOM, duration: 400 });
+const FIELD_POINT_ZOOM = 15;
+
+function isPoint(b: LngLatBoundsTuple): boolean {
+  return b[0][0] === b[1][0] && b[0][1] === b[1][1];
 }
 
-function fitToField(map: mapboxgl.Map, polygon: FieldPolygon | null, center: [number, number] | null) {
-  const bounds = polygon ? boundsFromPolygon(polygon) : null;
-  if (bounds) {
-    map.fitBounds(bounds, { padding: 48, maxZoom: 18, duration: 500 });
+/** Padding that never exceeds what a small map can hold. */
+function framePadding(container: HTMLElement): number {
+  const side = Math.min(container.clientWidth, container.clientHeight);
+  return Math.max(16, Math.min(56, Math.floor(side / 6)));
+}
+
+/** Frame the map on bounds (or a single pin). No-op when there is nothing to frame. */
+function fitTo(map: mapboxgl.Map, bounds: LngLatBoundsTuple | null, animate: boolean) {
+  if (!bounds) return;
+  const duration = animate ? 500 : 0;
+  if (isPoint(bounds)) {
+    map.easeTo({ center: bounds[0], zoom: FIELD_POINT_ZOOM, duration });
     return;
   }
-  if (center) map.easeTo({ center, zoom: DEFAULT_FIELD_ZOOM, duration: 400 });
+  map.fitBounds(bounds, { padding: framePadding(map.getContainer()), maxZoom: 17, duration });
+}
+
+type OverlayInput = {
+  lat?: number | null;
+  lon?: number | null;
+  geom?: unknown;
+  outlines?: FieldOutline[];
+  points?: FitPoint[];
+};
+
+/** Draw the field polygon(s) and frame them. */
+function applyOverlay(map: mapboxgl.Map, input: OverlayInput, animate: boolean) {
+  const multi = Boolean(input.outlines && input.outlines.length > 0);
+  const features: GeoJSON.Feature[] = [];
+  if (multi) {
+    for (const o of input.outlines!) {
+      const poly = parseFieldPolygon(o.geom);
+      if (poly) {
+        features.push({
+          type: "Feature",
+          properties: { id: o.id, color: o.color ?? "#ffffff" },
+          geometry: poly,
+        });
+      }
+    }
+  } else {
+    const poly = parseFieldPolygon(input.geom);
+    if (poly) {
+      features.push({ type: "Feature", properties: { id: "active", color: "#ffffff" }, geometry: poly });
+    }
+  }
+  upsertFieldFeatures(map, features);
+  fitTo(map, fitBoundsFor(input), animate);
 }

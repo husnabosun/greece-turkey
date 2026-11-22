@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   BadgeCheck,
   Camera,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Layers,
@@ -14,7 +15,9 @@ import {
   RefreshCw,
   Star,
 } from "lucide-react";
-import { formatStremmata } from "@/features/fields/area";
+import { formatAreaValue } from "@/features/fields/area";
+import { formatRelativeAge, relativeAge } from "@/features/fields/field-summary";
+import { useFieldSummary } from "@/features/fields/use-field-summary";
 import { deleteFarmerField, updateFarmerField } from "@/features/fields/field-mutations";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 // Mapbox (~1 MB) is only fetched when a map is actually on screen.
@@ -128,6 +131,7 @@ export function FieldsScreen() {
   const active = showAll ? null : (viewFields.find((f) => f.id === selectedId) ?? viewFields[0] ?? null);
   const activeRaw: Field | null = active ? (fields.find((f) => f.id === active.id) ?? null) : null;
   const { trees, defaultSelectedId } = useFieldTrees(active?.id);
+  const summary = useFieldSummary(active?.id);
 
   const varietyGroups = useMemo(() => {
     const lon = activeRaw?.lon ?? null;
@@ -195,6 +199,7 @@ export function FieldsScreen() {
   }, [active?.id, defaultSelectedId]);
 
   const selectedTree = trees.find((tr) => tr.id === selectedTreeId) ?? null;
+  const lastScanAge = relativeAge(summary.lastScanAt);
   const followUpCount = trees.filter((tr) => tr.status !== "healthy").length;
 
   const totals = useMemo(() => {
@@ -213,9 +218,18 @@ export function FieldsScreen() {
     [showAll, viewFields],
   );
 
+  const mapPoints = useMemo(
+    () => (showAll ? viewFields.map((f) => ({ lat: f.lat, lon: f.lon })) : undefined),
+    [showAll, viewFields],
+  );
+
   const displayTrees = showAll ? totals.trees : active?.trees;
   const displayHa = showAll ? (totals.ha > 0 ? totals.ha : null) : active?.ha != null ? Number(active.ha) : null;
   const displayScore = showAll ? totals.avgScore : active?.score ?? null;
+  const area = displayHa != null ? formatAreaValue(displayHa, locale) : null;
+  // Where a score comes from: the Certify & sell flow of the selected (or first) field.
+  const scoreTargetId = active?.id ?? viewFields[0]?.id ?? null;
+  const scoreHref = displayScore != null || !scoreTargetId ? "/farmer/quality" : `/farmer/fields/${scoreTargetId}/score`;
 
   return (
     <div className="fixed inset-0 z-40 overflow-x-hidden overflow-y-auto overscroll-y-contain bg-background md:left-60">
@@ -274,48 +288,68 @@ export function FieldsScreen() {
             />
           )}
 
-          <ApCard className="flex min-h-11 items-center px-2 py-2">
-            <div className="min-w-0 flex-1 px-1 text-center">
-              <p className="truncate text-ap-body font-extrabold text-ink">
-                {displayTrees != null && displayTrees > 0 ? t("treesCount", { n: displayTrees }) : "—"}
+          <ApCard className="grid grid-cols-3 items-stretch gap-1 px-1.5 py-2">
+            <div className="flex min-w-0 flex-col items-center justify-center px-1 text-center">
+              <p className="text-ap-body font-extrabold whitespace-nowrap text-ink">
+                {displayTrees != null && displayTrees > 0 ? displayTrees.toLocaleString(locale) : "—"}
               </p>
-              <p className="truncate text-ap-small font-medium text-muted-foreground">
+              <p className="text-[11px] leading-tight font-medium text-muted-foreground">
                 {showAll ? t("treesTotal") : t("treeCount")}
               </p>
             </div>
-            <div className="h-8 w-px shrink-0 bg-line" />
-            <div className="min-w-0 flex-1 px-1 text-center">
-              <p className="truncate text-ap-body font-extrabold text-ink">
-                {displayHa != null ? t("haCount", { n: formatStremmata(displayHa, 1, locale) }) : "—"}
+            <div className="flex min-w-0 flex-col items-center justify-center border-x border-line px-1 text-center">
+              <p className="text-ap-body font-extrabold whitespace-nowrap text-ink">
+                {area ? (
+                  <>
+                    {area.value}
+                    <span className="ml-1 text-ap-small font-bold text-muted-foreground">{t(`unit_${area.unit}`)}</span>
+                  </>
+                ) : (
+                  "—"
+                )}
               </p>
-              <p className="truncate text-ap-small font-medium text-muted-foreground">
+              <p className="text-[11px] leading-tight font-medium text-muted-foreground">
                 {showAll ? t("areaTotal") : t("fieldSize")}
               </p>
             </div>
             <Link
-              href="/farmer/quality"
-              className="flex min-h-11 min-w-0 flex-[1.25] items-center justify-center gap-1.5 rounded-xl bg-soft px-2 py-1.5 transition-colors hover:bg-soft/80"
+              href={scoreHref}
+              className="flex min-w-0 flex-col items-center justify-center rounded-xl bg-soft px-1.5 py-1 text-center transition-colors hover:bg-soft/80"
             >
-              <Star
-                className="size-4 shrink-0"
-                fill={displayScore != null ? colors.good : colors.muted}
-                color={displayScore != null ? colors.good : colors.muted}
-                aria-hidden
-              />
-              <span className="min-w-0">
-                <span className="block truncate text-ap-small font-semibold text-ink">
-                  {showAll ? t("avgScore") : t("qualityScore")}
-                </span>
-                <span className="text-ap-body font-extrabold text-ink">
-                  {displayScore != null ? displayScore : "—"}
-                  <span className="text-ap-small font-medium text-muted-foreground">{t("perHundred")}</span>
-                </span>
-              </span>
+              <p className="flex items-center gap-1 text-ap-body font-extrabold whitespace-nowrap text-ink">
+                <Star
+                  className="size-3.5 shrink-0"
+                  fill={displayScore != null ? colors.good : colors.muted}
+                  color={displayScore != null ? colors.good : colors.muted}
+                  aria-hidden
+                />
+                {displayScore != null ? (
+                  <span>
+                    {displayScore}
+                    <span className="text-ap-small font-medium text-muted-foreground">{t("perHundred")}</span>
+                  </span>
+                ) : (
+                  <span className="text-ap-small font-bold text-muted-foreground">{t("noScoreYet")}</span>
+                )}
+              </p>
+              <p className="text-[11px] leading-tight font-medium text-muted-foreground">
+                {showAll ? t("avgScore") : t("qualityScore")}
+              </p>
             </Link>
           </ApCard>
+
+          {displayScore == null && viewFields.length > 0 ? (
+            <Link
+              href={scoreHref}
+              className="flex items-start gap-2 rounded-xl bg-soft px-3 py-2 text-ap-small text-muted-foreground transition-colors hover:bg-soft/70"
+            >
+              <BadgeCheck className="mt-0.5 size-4 shrink-0 text-good" aria-hidden />
+              <span>{t("noScoreHow")}</span>
+            </Link>
+          ) : null}
         </div>
 
-        <div className="relative h-[54dvh] max-h-[520px] min-h-[280px] w-full shrink-0 md:h-[62dvh] md:max-h-[640px] md:px-6">
+        <div className="relative h-[50dvh] max-h-[520px] min-h-[260px] w-full shrink-0 overflow-hidden md:h-[62dvh] md:max-h-[640px] md:px-6">
           <div className="absolute inset-0 md:inset-x-6 md:inset-y-0">
             {loading ? (
               <div className="flex h-full w-full items-center justify-center bg-[#1a1a1a] md:rounded-[18px]">
@@ -329,6 +363,8 @@ export function FieldsScreen() {
                 lon={active?.lon}
                 geom={active?.geom}
                 outlines={mapOutlines}
+                points={mapPoints}
+                areaHa={active?.ha != null ? Number(active.ha) : null}
                 trees={showAll ? [] : trees}
                 selectedId={selectedTreeId}
                 onSelect={setSelectedTreeId}
@@ -400,66 +436,102 @@ export function FieldsScreen() {
             <p className="rounded-xl bg-soft px-3.5 py-2.5 text-ap-small text-muted-foreground">{t("pickFieldForScore")}</p>
           ) : null}
 
-          <button
-            type="button"
-            className="flex min-h-11 w-full items-center rounded-xl bg-risk-soft px-3.5 py-2 text-left transition-opacity hover:opacity-95"
-            onClick={() => {
-              const next = trees.find((tr) => tr.status !== "healthy");
-              if (next) setSelectedTreeId(next.id);
-            }}
-          >
-            <RefreshCw className="size-4 shrink-0 text-risk" aria-hidden />
-            <span className="ml-2.5 min-w-0 flex-1 truncate text-ap-small font-bold text-ink">
-              {t("followUp", { n: showAll ? 0 : followUpCount })}
-            </span>
-            <span className="shrink-0 text-ap-small font-bold text-risk">{t("view")}</span>
-            <ChevronRight className="size-4 shrink-0 text-risk" aria-hidden />
-          </button>
+          {!showAll && trees.length > 0 ? (
+            followUpCount > 0 ? (
+              <button
+                type="button"
+                className="flex min-h-11 w-full items-center rounded-xl bg-risk-soft px-3.5 py-2 text-left transition-opacity hover:opacity-95"
+                onClick={() => {
+                  const next = trees.find((tr) => tr.status !== "healthy");
+                  if (next) setSelectedTreeId(next.id);
+                }}
+              >
+                <RefreshCw className="size-4 shrink-0 text-risk" aria-hidden />
+                <span className="ml-2.5 min-w-0 flex-1 text-ap-small font-bold text-ink">
+                  {t("followUp", { n: followUpCount })}
+                </span>
+                <span className="shrink-0 text-ap-small font-bold text-risk">{t("view")}</span>
+                <ChevronRight className="size-4 shrink-0 text-risk" aria-hidden />
+              </button>
+            ) : (
+              <div className="flex min-h-11 w-full items-center rounded-xl bg-good-soft px-3.5 py-2">
+                <CheckCircle2 className="size-4 shrink-0 text-good" aria-hidden />
+                <span className="ml-2.5 min-w-0 flex-1 text-ap-small font-bold text-ink">{t("allTreesHealthy")}</span>
+              </div>
+            )
+          ) : null}
 
-          <ApCard className="p-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-ap-body font-extrabold text-ink">
-                {selectedTree ? t("treeN", { id: selectedTree.id }) : t("treeN", { id: "—" })}
-              </p>
+          {active ? (
+            <ApCard className="p-3">
               {selectedTree ? (
-                <Pill tone={selectedTree.status === "diseased" ? "risk" : selectedTree.status === "suspicious" ? "warn" : "good"}>
-                  {selectedTree.status === "diseased"
-                    ? t("diseased")
-                    : selectedTree.status === "suspicious"
-                      ? t("suspicious")
-                      : t("healthy")}
-                </Pill>
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-ap-body font-extrabold text-ink">{t("treeN", { id: selectedTree.id })}</p>
+                    <Pill
+                      tone={
+                        selectedTree.status === "diseased"
+                          ? "risk"
+                          : selectedTree.status === "suspicious"
+                            ? "warn"
+                            : "good"
+                      }
+                    >
+                      {selectedTree.status === "diseased"
+                        ? t("diseased")
+                        : selectedTree.status === "suspicious"
+                          ? t("suspicious")
+                          : t("healthy")}
+                    </Pill>
+                  </div>
+                  <p className="mt-1 text-ap-small text-muted-foreground">
+                    {selectedTree.issue ? threatLabel(selectedTree.issue, tThreats) : t("healthy")}
+                  </p>
+                </>
               ) : (
-                <Pill tone="neutral">{t("selectTree")}</Pill>
+                <>
+                  <p className="text-ap-body font-extrabold text-ink">{t("fieldSummary")}</p>
+                  <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
+                    <div className="min-w-0 rounded-lg bg-soft px-1.5 py-2">
+                      <dd className="text-ap-body font-extrabold text-ink">
+                        {active.score != null ? active.score : "—"}
+                      </dd>
+                      <dt className="text-[11px] leading-tight font-medium text-muted-foreground">{t("qualityScore")}</dt>
+                    </div>
+                    <div className="min-w-0 rounded-lg bg-soft px-1.5 py-2">
+                      <dd className="text-ap-small font-extrabold text-ink">
+                        {lastScanAge ? formatRelativeAge(lastScanAge, locale) : "—"}
+                      </dd>
+                      <dt className="text-[11px] leading-tight font-medium text-muted-foreground">{t("lastScan")}</dt>
+                    </div>
+                    <div className="min-w-0 rounded-lg bg-soft px-1.5 py-2">
+                      <dd className="text-ap-body font-extrabold text-ink">
+                        {summary.openTasks != null ? summary.openTasks : "—"}
+                      </dd>
+                      <dt className="text-[11px] leading-tight font-medium text-muted-foreground">{t("openTasks")}</dt>
+                    </div>
+                  </dl>
+                  <p className="mt-2 text-ap-small text-muted-foreground">
+                    {trees.length > 0 ? t("tapTreeHint") : t("noTreeYet")}
+                  </p>
+                </>
               )}
-            </div>
-            <p className="mt-1 text-ap-small text-muted-foreground">
-              {selectedTree?.issue
-                ? threatLabel(selectedTree.issue, tThreats)
-                : selectedTree
-                  ? t("healthy")
-                  : t("noTreeYet")}
-            </p>
-            <div className="mt-2.5 flex gap-2">
-              <Link
-                href="/farmer/scan"
-                className="inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-3 text-[12px] font-bold text-white transition-colors hover:bg-primary/90"
-              >
-                <Camera className="size-4 shrink-0" />
-                <span className="truncate">{t("scanTree")}</span>
-              </Link>
-              <Link
-                href={
-                  active
-                    ? `/farmer/scan?field=${encodeURIComponent(active.id)}`
-                    : "/farmer/scan"
-                }
-                className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink transition-colors hover:bg-soft"
-              >
-                <span className="truncate">{t("seeScans")}</span>
-              </Link>
-            </div>
-          </ApCard>
+              <div className="mt-2.5 flex gap-2">
+                <Link
+                  href={`/farmer/scan?field=${encodeURIComponent(active.id)}`}
+                  className="inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-3 text-[12px] font-bold text-white transition-colors hover:bg-primary/90"
+                >
+                  <Camera className="size-4 shrink-0" />
+                  <span className="truncate">{selectedTree ? t("scanTree") : t("scanField")}</span>
+                </Link>
+                <Link
+                  href={`/farmer/scan?field=${encodeURIComponent(active.id)}`}
+                  className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink transition-colors hover:bg-soft"
+                >
+                  <span className="truncate">{t("seeScans")}</span>
+                </Link>
+              </div>
+            </ApCard>
+          ) : null}
         </div>
       </div>
 
