@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Minus, MoreHorizontal, Plus, X } from "lucide-react";
+import { ChevronRight, Minus, MoreHorizontal, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import dynamic from "next/dynamic";
-import { colors } from "@/shared/theme/tokens";
 import { useLocale, useTranslations } from "next-intl";
 import { ApButton } from "@/shared/components/brand/ap-button";
 import { ApCard } from "@/shared/components/brand/ap-card";
@@ -16,11 +15,20 @@ import {
   MARKET_LIMITS,
   euroPrice,
   euroTotal,
-  formatTons,
+  formatQuantity,
+  kgToTons,
   parseBounded,
   parseLocaleNumber,
   saleTotal,
+  tonsToKg,
 } from "@/features/marketplace/pricing";
+import {
+  OIL_CATEGORIES,
+  ProductBadge,
+  oilCategoryI18nKey,
+  productI18nKey,
+} from "@/features/marketplace/product-badge";
+import type { OilCategory, ProductKind } from "@/shared/types/database";
 import {
   defaultVarietySlug,
   marketplaceVarietyOptions,
@@ -28,15 +36,26 @@ import {
   resolveOliveVariety,
 } from "@/features/fields/olive-varieties";
 import {
+  ChipGroup,
   DayChipPicker,
   Dialog,
   Initials,
   initialsOf,
   PageHeader,
   Panel,
+  Segmented,
   Switch,
+  TextField,
   useAsyncDialog,
 } from "./processor-kit";
+import { RangeCalendar } from "./range-calendar";
+import {
+  SCORE_SLIDER_MAX,
+  SCORE_SLIDER_MIN,
+  ScoreSlider,
+  scoreBand,
+  scoreToneClassName,
+} from "./score-slider";
 import { marketRegionOptions, regionLabel, resolveMarketRegion } from "./regions";
 
 const RegionMap = dynamic(() => import("./region-map").then((m) => m.RegionMap), {
@@ -65,8 +84,8 @@ import {
 import { useVarietyLabel } from "./processor-shared";
 import { useBoundsMessage, useErrorMessage } from "@/shared/lib/error-message";
 
-const SCORE_MIN = 50;
-const SCORE_MAX = 95;
+const SCORE_MIN = SCORE_SLIDER_MIN;
+const SCORE_MAX = SCORE_SLIDER_MAX;
 
 /* ---------- local helpers (requests screen only) ---------- */
 
@@ -159,12 +178,6 @@ function varietyMonogram(stored: string, fallbackLabel: string): string {
   return letters.toLocaleUpperCase("el");
 }
 
-function scoreToneClass(score: number) {
-  if (score >= 80) return "bg-good-soft text-good";
-  if (score >= 70) return "bg-warn-soft text-warn-text";
-  return "bg-risk-soft text-risk";
-}
-
 function FieldLabel({ children }: { children: ReactNode }) {
   return <span className="text-[13px] leading-[18px] font-semibold text-muted-foreground">{children}</span>;
 }
@@ -231,17 +244,25 @@ function TonsStepper({
   onChange,
   decLabel,
   incLabel,
+  suffix = "t",
+  stepBy = 1,
+  min = 1,
+  max = MARKET_LIMITS.requestTons.max,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   decLabel: string;
   incLabel: string;
+  suffix?: string;
+  stepBy?: number;
+  min?: number;
+  max?: number;
 }) {
   const n = parseLocaleNumber(value);
   const step = (delta: number) => {
     const base = n ?? 0;
-    onChange(String(Math.min(MARKET_LIMITS.requestTons.max, Math.max(1, Math.round(base + delta)))));
+    onChange(String(Math.min(max, Math.max(min, Math.round(base + delta)))));
   };
   return (
     <div className="flex flex-col gap-1.5">
@@ -250,7 +271,7 @@ function TonsStepper({
         <button
           type="button"
           aria-label={decLabel}
-          onClick={() => step(-1)}
+          onClick={() => step(-stepBy)}
           className="flex w-12 items-center justify-center border-r border-line text-ink hover:bg-soft"
         >
           <Minus className="size-4" />
@@ -262,11 +283,11 @@ function TonsStepper({
           aria-label={label}
           className="min-w-0 flex-1 bg-transparent text-center text-[18px] font-extrabold text-ink outline-none"
         />
-        <span className="flex items-center pr-3 text-[14px] font-semibold text-muted-foreground">t</span>
+        <span className="flex items-center pr-3 text-[14px] font-semibold text-muted-foreground">{suffix}</span>
         <button
           type="button"
           aria-label={incLabel}
-          onClick={() => step(1)}
+          onClick={() => step(stepBy)}
           className="flex w-12 items-center justify-center border-l border-line text-ink hover:bg-soft"
         >
           <Plus className="size-4" />
@@ -276,243 +297,9 @@ function TonsStepper({
   );
 }
 
-/* ---------- minimum-score slider ---------- */
-
-function scoreBand(score: number): "low" | "mid" | "high" {
-  if (score >= 80) return "high";
-  if (score >= 70) return "mid";
-  return "low";
-}
-
-const BAND_COLOR = { low: colors.risk, mid: colors.warn, high: colors.good } as const;
-
-function ScoreSlider({
-  label,
-  value,
-  onChange,
-  valueLabel,
-  bandLabel,
-  hint,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  valueLabel: string;
-  bandLabel: string;
-  hint: string;
-}) {
-  const pct = ((value - SCORE_MIN) / (SCORE_MAX - SCORE_MIN)) * 100;
-  const pos = (v: number) => ((v - SCORE_MIN) / (SCORE_MAX - SCORE_MIN)) * 100;
-  const band = scoreBand(value);
-  const ticks = [50, 60, 70, 80, 90];
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-end justify-between gap-3">
-        <FieldLabel>{label}</FieldLabel>
-        <div className="text-right">
-          <p className="text-[24px] leading-7 font-extrabold" style={{ color: BAND_COLOR[band] }}>
-            {valueLabel}
-          </p>
-          <p className="text-[12px] font-semibold text-muted-foreground">{bandLabel}</p>
-        </div>
-      </div>
-      <div className="relative h-8">
-        {/* zones: <70 risk, 70–79 warn, ≥80 good — dimmed below the chosen minimum */}
-        <div className="absolute inset-x-0 top-1/2 flex h-2 -translate-y-1/2 overflow-hidden rounded-full">
-          <div style={{ width: `${pos(70)}%`, background: colors.riskSoft }} />
-          <div style={{ width: `${pos(80) - pos(70)}%`, background: colors.warnSoft }} />
-          <div style={{ flex: 1, background: colors.goodSoft }} />
-        </div>
-        <div
-          className="absolute top-1/2 right-0 h-2 -translate-y-1/2 rounded-r-full"
-          style={{ left: `${pct}%`, background: BAND_COLOR[band], opacity: 0.85 }}
-        />
-        <input
-          type="range"
-          min={SCORE_MIN}
-          max={SCORE_MAX}
-          step={1}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          aria-label={label}
-          aria-valuetext={valueLabel}
-          className={cn(
-            "absolute inset-0 h-8 w-full cursor-pointer appearance-none bg-transparent",
-            "[&::-webkit-slider-runnable-track]:h-8 [&::-webkit-slider-runnable-track]:bg-transparent",
-            "[&::-webkit-slider-thumb]:mt-1 [&::-webkit-slider-thumb]:size-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-ink [&::-webkit-slider-thumb]:shadow-[0_2px_8px_rgba(0,0,0,0.35)]",
-            "[&::-moz-range-track]:bg-transparent",
-            "[&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-[3px] [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-ink [&::-moz-range-thumb]:shadow-[0_2px_8px_rgba(0,0,0,0.35)]",
-            "focus-visible:outline-none focus-visible:[&::-webkit-slider-thumb]:ring-4 focus-visible:[&::-webkit-slider-thumb]:ring-ink/20",
-          )}
-        />
-      </div>
-      <div className="relative h-4 text-[12px] font-semibold text-muted-foreground">
-        {ticks.map((tick) => (
-          <span key={tick} className="absolute -translate-x-1/2" style={{ left: `${pos(tick)}%` }}>
-            {tick}
-          </span>
-        ))}
-      </div>
-      <p className="text-[13px] font-medium text-muted-foreground">{hint}</p>
-    </div>
-  );
-}
-
-/* ---------- booking-style date-range calendar ---------- */
-
 const isoToDate = (iso: string) => new Date(`${iso}T12:00:00`);
 const daysBetween = (a: string, b: string) =>
   Math.round((isoToDate(b).getTime() - isoToDate(a).getTime()) / 86_400_000);
-
-function monthStart(iso: string) {
-  const d = isoToDate(iso);
-  return new Date(d.getFullYear(), d.getMonth(), 1, 12);
-}
-
-function RangeCalendar({
-  start,
-  end,
-  onChange,
-  locale,
-  monthsShown,
-  minIso,
-  prevLabel,
-  nextLabel,
-}: {
-  start: string | null;
-  end: string | null;
-  onChange: (start: string | null, end: string | null) => void;
-  locale: string;
-  monthsShown: 1 | 2;
-  minIso: string;
-  prevLabel: string;
-  nextLabel: string;
-}) {
-  const [view, setView] = useState(() => monthStart(start ?? minIso));
-  const [hover, setHover] = useState<string | null>(null);
-  const minMonth = monthStart(minIso);
-
-  const weekdays = useMemo(
-    // 2026-11-16 is a Monday → Mon..Sun headers in the UI locale.
-    () => Array.from({ length: 7 }, (_, i) => new Date(2026, 10, 16 + i, 12).toLocaleDateString(locale, { weekday: "short" })),
-    [locale],
-  );
-
-  const pick = (iso: string) => {
-    if (!start || (start && end)) {
-      onChange(iso, null);
-    } else if (iso < start) {
-      onChange(iso, null);
-    } else {
-      onChange(start, iso);
-    }
-  };
-
-  // While choosing the end day, preview the range under the pointer.
-  const effEnd = end ?? (start && hover && hover >= start ? hover : null);
-  const canGoBack = view.getTime() > minMonth.getTime();
-  const shift = (delta: number) => setView((v) => new Date(v.getFullYear(), v.getMonth() + delta, 1, 12));
-
-  const months = Array.from({ length: monthsShown }, (_, i) => new Date(view.getFullYear(), view.getMonth() + i, 1, 12));
-
-  return (
-    <div className="select-none" onMouseLeave={() => setHover(null)}>
-      <div className={cn("grid gap-6", monthsShown === 2 && "md:grid-cols-2")}>
-        {months.map((m, mi) => {
-          const offset = (m.getDay() + 6) % 7;
-          const daysInMonth = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
-          const cells: (string | null)[] = [
-            ...Array.from({ length: offset }, () => null),
-            ...Array.from({ length: daysInMonth }, (_, d) => todayIsoDate(new Date(m.getFullYear(), m.getMonth(), d + 1, 12))),
-          ];
-          return (
-            <div key={m.toISOString()}>
-              <div className="mb-3 flex h-10 items-center justify-between">
-                {mi === 0 ? (
-                  <button
-                    type="button"
-                    aria-label={prevLabel}
-                    disabled={!canGoBack}
-                    onClick={() => shift(-1)}
-                    className="flex size-10 items-center justify-center rounded-full text-ink hover:bg-soft disabled:opacity-30"
-                  >
-                    <ChevronLeft className="size-5" />
-                  </button>
-                ) : (
-                  <span className="size-10" />
-                )}
-                <p className="text-[15px] font-extrabold text-ink capitalize">
-                  {m.toLocaleDateString(locale, { month: "long", year: "numeric" })}
-                </p>
-                {mi === months.length - 1 ? (
-                  <button
-                    type="button"
-                    aria-label={nextLabel}
-                    onClick={() => shift(1)}
-                    className="flex size-10 items-center justify-center rounded-full text-ink hover:bg-soft"
-                  >
-                    <ChevronRight className="size-5" />
-                  </button>
-                ) : (
-                  <span className="size-10" />
-                )}
-              </div>
-              <div className="grid grid-cols-7 text-center">
-                {weekdays.map((w) => (
-                  <span key={w} className="pb-2 text-[12px] font-semibold text-muted-foreground">
-                    {w}
-                  </span>
-                ))}
-                {cells.map((iso, ci) => {
-                  if (!iso) return <span key={`e${ci}`} />;
-                  const disabled = iso < minIso;
-                  const isStart = iso === start;
-                  const isEnd = iso === effEnd;
-                  const inside = start != null && effEnd != null && iso > start && iso < effEnd;
-                  const edgeBand =
-                    start && effEnd && start !== effEnd
-                      ? isStart
-                        ? `linear-gradient(to right, transparent 50%, ${colors.soft} 50%)`
-                        : isEnd
-                          ? `linear-gradient(to left, transparent 50%, ${colors.soft} 50%)`
-                          : undefined
-                      : undefined;
-                  const isToday = iso === minIso;
-                  return (
-                    <div
-                      key={iso}
-                      className="py-0.5"
-                      style={{ background: inside ? colors.soft : edgeBand }}
-                    >
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => pick(iso)}
-                        onMouseEnter={() => setHover(iso)}
-                        aria-pressed={isStart || isEnd}
-                        aria-label={isoToDate(iso).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" })}
-                        className={cn(
-                          "mx-auto flex size-10 items-center justify-center rounded-full text-[14px] font-semibold transition-colors",
-                          disabled && "cursor-not-allowed text-muted-foreground/40 line-through",
-                          !disabled && !isStart && !isEnd && "text-ink hover:border hover:border-ink",
-                          (isStart || (isEnd && end)) && "bg-ink font-extrabold text-white",
-                          isEnd && !end && !isStart && "border-2 border-dashed border-ink font-extrabold text-ink",
-                          isToday && !isStart && !isEnd && "underline decoration-2 underline-offset-4",
-                        )}
-                      >
-                        {isoToDate(iso).getDate()}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 /* ---------- full-screen request composer ---------- */
 
@@ -711,6 +498,9 @@ export function ProcessorRequestsScreen() {
     [],
   );
   const [noBanned, setNoBanned] = useState(true);
+  const [product, setProduct] = useState<ProductKind>("oil");
+  const [maxAcidity, setMaxAcidity] = useState("");
+  const [oilCategory, setOilCategory] = useState<OilCategory | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -730,13 +520,16 @@ export function ProcessorRequestsScreen() {
 
   const resetForm = () => {
     setVarieties([defaultVarietySlug(resolveOliveCountry({ locale }).country)]);
-    setTons("10");
+    setProduct("oil");
+    setTons("500");
     setMinScore(75);
     setRangeStart(todayIso);
     setRangeEnd(addDaysIso(todayIso, 9));
     setCalendarKey((k) => k + 1);
     setProvinces([]);
     setNoBanned(true);
+    setMaxAcidity("");
+    setOilCategory(null);
   };
 
   const openNew = () => {
@@ -755,7 +548,10 @@ export function ProcessorRequestsScreen() {
         ? parsedVarieties
         : [resolveOliveVariety(req.variety)?.slug ?? req.variety],
     );
-    setTons(String(req.tons));
+    setProduct(req.product ?? "olives");
+    setTons(req.product === "oil" ? String(tonsToKg(req.tons)) : String(req.tons));
+    setMaxAcidity(req.maxAcidity != null ? String(req.maxAcidity) : "");
+    setOilCategory(req.oilCategory);
     setMinScore(Math.min(SCORE_MAX, Math.max(SCORE_MIN, Math.round(req.minScore || 75))));
     const parsed = parseWindowLabel(req.windowLabel);
     setRangeStart(parsed ? isoOf(parsed.start) : todayIso);
@@ -776,12 +572,18 @@ export function ProcessorRequestsScreen() {
 
   const onSubmit = async () => {
     if (saving) return;
-    const tc = parseBounded(tons, MARKET_LIMITS.requestTons);
+    const isOil = product === "oil";
+    const tc = parseBounded(tons, isOil ? MARKET_LIMITS.oilRequestKg : MARKET_LIMITS.requestTons);
     if (!tc.ok) {
-      toast.error(boundsMsg(tc, "tons", locale));
+      toast.error(boundsMsg(tc, isOil ? "kg" : "tons", locale));
       return;
     }
-    const tonsN = tc.value;
+    const tonsN = isOil ? kgToTons(tc.value) : tc.value;
+    const acidityN = isOil && maxAcidity.trim() ? parseLocaleNumber(maxAcidity) : null;
+    if (isOil && maxAcidity.trim() && acidityN == null) {
+      toast.error(t("maxAcidity"));
+      return;
+    }
     if (!rangeStart || !rangeEnd) {
       toast.error(t("deliveryPickEnd"));
       return;
@@ -793,12 +595,15 @@ export function ProcessorRequestsScreen() {
     setSaving(true);
     const windowLabel = formatWindowLabel(rangeStart, rangeEnd, locale);
     const input = {
+      product,
       variety: joinStoredList(varieties),
       tons: tonsN,
       minScore,
       region: joinStoredList(provinces),
       windowLabel,
       noBanned,
+      maxAcidity: isOil ? acidityN : null,
+      oilCategory: isOil ? oilCategory : null,
     };
     const wasEditing = editingId != null;
     const res = editingId ? await updateBuyRequest(editingId, input) : await createBuyRequest(input);
@@ -916,7 +721,7 @@ export function ProcessorRequestsScreen() {
               {t("asksPrice", { price: euroPrice(acceptOffer.pricePerKg) })}
             </p>
             <p className="text-[13px] text-muted-foreground">
-              {acceptOffer.tons} t · {t("approx", { total: euroTotal(saleTotal(acceptOffer.tons, acceptOffer.pricePerKg)) })}
+              {formatQuantity(acceptOffer.lot?.product ?? "olives", acceptOffer.tons, locale)} · {t("approx", { total: euroTotal(saleTotal(acceptOffer.tons, acceptOffer.pricePerKg)) })}
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
               <ApButton
@@ -976,10 +781,13 @@ export function ProcessorRequestsScreen() {
                     size={44}
                   />
                   <div className="min-w-[200px] flex-1">
+                    <div className="mb-1">
+                      <ProductBadge product={req.product} label={t(productI18nKey(req.product))} />
+                    </div>
                     <p className="text-[16px] font-extrabold text-ink">
                       {(splitStoredList(req.variety).map((v) => varietyLabel(v)).join(" · ") ||
                         varietyLabel(req.variety))}{" "}
-                      · {formatTons(req.tons, locale)}
+                      · {formatQuantity(req.product, req.tons, locale)}
                     </p>
                     <p className="text-[13px] font-medium text-muted-foreground">
                       {[
@@ -994,7 +802,11 @@ export function ProcessorRequestsScreen() {
                       <div className="h-full rounded-full bg-ink" style={{ width: `${pct}%` }} />
                     </div>
                     <p className="mt-1 text-[12px] font-semibold text-muted-foreground">
-                      {t("filledPct", { pct })} · {t("filledOf", { filled: req.filledTons, total: req.tons })}
+                      {t("filledPct", { pct })} ·{" "}
+                      {t("filledOf", {
+                        filled: formatQuantity(req.product, req.filledTons, locale),
+                        total: formatQuantity(req.product, req.tons, locale),
+                      })}
                     </p>
                   </div>
                   {req.noBanned ? <Pill tone="good">{t("noBannedProducts")}</Pill> : null}
@@ -1021,7 +833,7 @@ export function ProcessorRequestsScreen() {
                                 <span
                                   className={cn(
                                     "rounded-md px-1.5 py-0.5 text-[12px] font-extrabold",
-                                    scoreToneClass(score),
+                                    scoreToneClassName(score),
                                   )}
                                 >
                                   {t("lotScore", { score: String(Math.round(score)) })}
@@ -1030,7 +842,7 @@ export function ProcessorRequestsScreen() {
                               <span>
                                 {[
                                   `${euroPrice(offer.pricePerKg)}/kg`,
-                                  formatTons(offer.tons, locale),
+                                  formatQuantity(req.product, offer.tons, locale),
                                   t("approx", { total: euroTotal(saleTotal(offer.tons, offer.pricePerKg)) }),
                                 ].join(" · ")}
                               </span>
@@ -1055,7 +867,7 @@ export function ProcessorRequestsScreen() {
           !saving &&
           rangeStart != null &&
           rangeEnd != null &&
-          parseBounded(tons, MARKET_LIMITS.requestTons).ok &&
+          parseBounded(tons, product === "oil" ? MARKET_LIMITS.oilRequestKg : MARKET_LIMITS.requestTons).ok &&
           varieties.length > 0 &&
           provinces.length > 0;
         const rangeText =
@@ -1065,8 +877,16 @@ export function ProcessorRequestsScreen() {
               ? `${isoToDate(rangeStart).toLocaleDateString(locale, { day: "numeric", month: "short" })} – …`
               : t("pickDeliveryDates");
         const rangeDays = rangeStart && rangeEnd ? daysBetween(rangeStart, rangeEnd) + 1 : null;
-        const tonsCheck = parseBounded(tons, MARKET_LIMITS.requestTons);
-        const tonsN = tonsCheck.ok ? tonsCheck.value : NaN;
+        const tonsCheck = parseBounded(
+          tons,
+          product === "oil" ? MARKET_LIMITS.oilRequestKg : MARKET_LIMITS.requestTons,
+        );
+        const tonsN = tonsCheck.ok
+          ? product === "oil"
+            ? kgToTons(tonsCheck.value)
+            : tonsCheck.value
+          : NaN;
+        const qtyLabel = Number.isFinite(tonsN) && tonsN > 0 ? formatQuantity(product, tonsN, locale) : "—";
         const presets = [7, 14, 30];
         const band = scoreBand(minScore);
         const varietiesText = varieties.map((v) => varietyLabel(v)).join(" · ") || "—";
@@ -1100,7 +920,7 @@ export function ProcessorRequestsScreen() {
               <div className="flex items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[14px] font-extrabold text-ink">
-                    {varietiesText} · {Number.isFinite(tonsN) && tonsN > 0 ? formatTons(tonsN, locale) : "—"}
+                    {varietiesText} · {qtyLabel}
                   </p>
                   <p className="truncate text-[12px] font-semibold text-muted-foreground">
                     {rangeText} · {t("requestScoreMin", { score: String(minScore) })}
@@ -1113,6 +933,21 @@ export function ProcessorRequestsScreen() {
             <div className="mx-auto grid max-w-[1180px] gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:py-8">
               <div className="flex min-w-0 flex-col gap-5">
                 <SectionCard step={1} title={t("requestFormProduct")}>
+                  <Segmented
+                    value={product}
+                    onChange={(next) => {
+                      setProduct(next);
+                      setTons(next === "oil" ? "500" : "10");
+                      if (next !== "oil") {
+                        setMaxAcidity("");
+                        setOilCategory(null);
+                      }
+                    }}
+                    options={[
+                      { value: "oil", label: t("productOil") },
+                      { value: "olives", label: t("productOlives") },
+                    ]}
+                  />
                   <FormChips
                     label={t("variety")}
                     values={varieties}
@@ -1120,29 +955,59 @@ export function ProcessorRequestsScreen() {
                     options={varietyOptions.map((v) => ({ value: v.value, label: v.label }))}
                   />
                   <TonsStepper
-                    label={t("tonnesNeeded")}
+                    label={product === "oil" ? t("quantityKg") : t("tonnesNeeded")}
                     value={tons}
                     onChange={setTons}
                     decLabel={t("decreaseTons")}
                     incLabel={t("increaseTons")}
+                    suffix={product === "oil" ? "kg" : "t"}
+                    stepBy={product === "oil" ? 50 : 1}
+                    min={product === "oil" ? MARKET_LIMITS.oilRequestKg.min : 1}
+                    max={product === "oil" ? MARKET_LIMITS.oilRequestKg.max : MARKET_LIMITS.requestTons.max}
                   />
                   {!tonsCheck.ok && tons.trim() ? (
                     <p className="text-[13px] font-semibold text-risk" role="alert">
-                      {boundsMsg(tonsCheck, "tons", locale)}
+                      {boundsMsg(tonsCheck, product === "oil" ? "kg" : "tons", locale)}
                     </p>
+                  ) : null}
+                  {product === "oil" ? (
+                    <>
+                      <ChipGroup
+                        label={t("oilCategory")}
+                        value={oilCategory ?? "all"}
+                        onChange={(v) => setOilCategory(v === "all" ? null : (v as OilCategory))}
+                        options={[
+                          { value: "all", label: t("filterAll") },
+                          ...OIL_CATEGORIES.map((c) => ({
+                            value: c,
+                            label: t(oilCategoryI18nKey(c)),
+                          })),
+                        ]}
+                      />
+                      <TextField
+                        label={t("maxAcidity")}
+                        value={maxAcidity}
+                        onChange={setMaxAcidity}
+                        suffix="%"
+                        inputMode="decimal"
+                        placeholder="0,8"
+                      />
+                    </>
                   ) : null}
                 </SectionCard>
 
                 <SectionCard step={2} title={t("requestFormQuality")}>
-                  <ScoreSlider
-                    label={t("minScore")}
-                    value={minScore}
-                    onChange={setMinScore}
-                    valueLabel={t("requestScoreMin", { score: String(minScore) })}
-                    bandLabel={t(band === "high" ? "scoreBandHigh" : band === "mid" ? "scoreBandMid" : "scoreBandLow")}
-                    hint={t("scoreSliderHint", { score: String(minScore) })}
-                  />
-                  <div className="border-t border-line pt-4">
+                  {product === "olives" ? (
+                    <ScoreSlider
+                      label={t("minScore")}
+                      value={minScore}
+                      onChange={setMinScore}
+                      valueLabel={t("requestScoreMin", { score: String(minScore) })}
+                      bandLabel={t(band === "high" ? "scoreBandHigh" : band === "mid" ? "scoreBandMid" : "scoreBandLow")}
+                      hint={t("scoreSliderHint", { score: String(minScore) })}
+                    />
+                  ) : null}
+                  <div className={cn(product === "olives" && "border-t border-line pt-4")}>
                     <FormSwitch label={t("noBannedOnly")} checked={noBanned} onChange={setNoBanned} />
                   </div>
                 </SectionCard>
@@ -1226,9 +1091,7 @@ export function ProcessorRequestsScreen() {
                     />
                     <div className="min-w-0">
                       <p className="truncate text-[16px] font-extrabold text-ink">{varietiesText}</p>
-                      <p className="text-[13px] font-semibold text-muted-foreground">
-                        {Number.isFinite(tonsN) && tonsN > 0 ? formatTons(tonsN, locale) : "—"}
-                      </p>
+                      <p className="text-[13px] font-semibold text-muted-foreground">{qtyLabel}</p>
                     </div>
                   </div>
                   <SummaryRow label={t("minScore")} value={t("requestScoreMin", { score: String(minScore) })} />

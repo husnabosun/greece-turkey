@@ -152,3 +152,94 @@ select
 from public.profiles p
 where p.role = 'processor'
   and not exists (select 1 from public.buy_requests b where b.processor_id = p.id);
+
+-- Demo oil lots (idempotent-ish: skip when any listed oil lot already exists).
+insert into public.lots (
+  farmer_id, field_id, status, product, use_type, variety, tons, price_per_kg,
+  negotiable, delivery_mode, town, region, country, lat, lon,
+  harvest_start, harvest_end, quality_score,
+  oil_category, acidity, harvest_season, storage, peroxide, polyphenols, pdo_pgi, organic,
+  listed_at
+)
+select
+  p.id,
+  null,
+  'listed',
+  'oil',
+  'oil',
+  v.variety,
+  v.tons,
+  v.price,
+  true,
+  'pickup',
+  null,
+  coalesce(nullif(p.place, ''), v.region),
+  p.country,
+  v.lat,
+  v.lon,
+  current_date,
+  current_date + 14,
+  v.score,
+  v.oil_category,
+  v.acidity,
+  '2026/27',
+  v.storage,
+  v.peroxide,
+  v.polyphenols,
+  v.pdo_pgi,
+  v.organic,
+  now()
+from (
+  values
+    (1, 'koroneiki', 0.250, 6.50, 'extra_virgin'::text, 0.30, 'tank'::text, 8.0, 250, 'Kalamata PDO'::text, true, 86, 37.038::numeric, 22.114::numeric, 'Peloponnese'),
+    (2, 'koroneiki', 0.500, 5.80, 'extra_virgin', 0.45, 'ibc', 10.0, 180, null, false, 78, 37.508, 22.373, 'Peloponnese'),
+    (3, 'manaki', 0.800, 5.20, 'virgin', 1.10, 'tins', 12.0, 120, null, false, 72, 38.246, 21.735, 'Western Greece'),
+    (4, 'athinolia', 0.350, 7.20, 'extra_virgin', 0.25, 'bottles', 7.0, 320, 'PGI Lakonia', true, 90, 36.760, 22.566, 'Peloponnese'),
+    (5, 'kolovi', 1.200, 4.40, 'virgin', 1.60, 'tank', 14.0, 90, null, false, 70, 39.110, 26.555, 'North Aegean'),
+    (6, 'ayvalik', 0.600, 3.80, 'lampante', 2.40, 'ibc', 18.0, 60, null, false, 64, 39.319, 26.695, 'Northern Aegean')
+) as v(n, variety, tons, price, oil_category, acidity, storage, peroxide, polyphenols, pdo_pgi, organic, score, lat, lon, region)
+join lateral (
+  select id, place, country
+  from public.profiles
+  where role = 'farmer'
+  order by created_at
+  offset (v.n - 1) % greatest((select count(*) from public.profiles where role = 'farmer'), 1)
+  limit 1
+) p on true
+where exists (select 1 from public.profiles where role = 'farmer')
+  and not exists (select 1 from public.lots l where l.product = 'oil' and l.status = 'listed');
+
+-- Two demo oil buy requests (skip if any oil request already exists).
+insert into public.buy_requests (
+  processor_id, product, variety, tons, filled_tons, min_score, region, window_label,
+  no_banned, shared_with_farmers, active, max_acidity, oil_category
+)
+select
+  p.id,
+  'oil',
+  v.variety,
+  v.tons,
+  0,
+  v.min_score,
+  v.region,
+  '15–25 Nov',
+  true,
+  true,
+  true,
+  v.max_acidity,
+  v.oil_category
+from (
+  values
+    (1, 'koroneiki', 0.500, 70, 'Peloponnese', 0.80, 'extra_virgin'::text),
+    (2, 'olive', 1.000, 60, 'North Aegean', 2.00, 'virgin')
+) as v(n, variety, tons, min_score, region, max_acidity, oil_category)
+join lateral (
+  select id
+  from public.profiles
+  where role = 'processor'
+  order by created_at
+  offset (v.n - 1) % greatest((select count(*) from public.profiles where role = 'processor'), 1)
+  limit 1
+) p on true
+where exists (select 1 from public.profiles where role = 'processor')
+  and not exists (select 1 from public.buy_requests b where b.product = 'oil');

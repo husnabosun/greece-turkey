@@ -18,6 +18,10 @@ export type ProofLevel = "self_reported" | "evidence_based" | "lab_verified";
 export type ScanMode = "leaf" | "fruit" | "trap" | "label";
 export type TreeStatus = "healthy" | "suspicious" | "diseased";
 export type LotUse = "oil" | "table";
+/** Marketplace product — distinct from LotUse (olives-for-oil vs table olives). */
+export type ProductKind = "oil" | "olives";
+export type OilCategory = "extra_virgin" | "virgin" | "lampante";
+export type OilStorage = "tank" | "ibc" | "tins" | "bottles";
 export type LotStatus = "draft" | "listed" | "reserved" | "sold" | "withdrawn";
 export type OfferStatus = "pending" | "accepted" | "rejected" | "countered" | "withdrawn";
 export type DeliveryStatus = "scheduled" | "weighed" | "lab_checked" | "paid" | "cancelled";
@@ -185,6 +189,7 @@ export type Lot = {
   farmer_id: string;
   field_id: string | null;
   status: LotStatus;
+  product: ProductKind;
   use_type: LotUse;
   variety: string;
   tons: number;
@@ -206,6 +211,14 @@ export type Lot = {
   lab_result: LabResult | null;
   lab_acidity: number | null;
   lab_tested_at: string | null;
+  oil_category: OilCategory | null;
+  acidity: number | null;
+  harvest_season: string | null;
+  storage: OilStorage | null;
+  peroxide: number | null;
+  polyphenols: number | null;
+  pdo_pgi: string | null;
+  organic: boolean;
   identity_unlocked_for: string[];
   listed_at: string | null;
 } & Timestamps;
@@ -213,6 +226,7 @@ export type Lot = {
 export type BuyRequest = {
   id: string;
   processor_id: string;
+  product: ProductKind;
   variety: string;
   tons: number;
   filled_tons: number;
@@ -222,6 +236,8 @@ export type BuyRequest = {
   no_banned: boolean;
   shared_with_farmers: boolean;
   active: boolean;
+  max_acidity: number | null;
+  oil_category: OilCategory | null;
 } & Timestamps;
 
 export type Offer = {
@@ -262,6 +278,7 @@ export type Delivery = {
 export type MarketplaceLot = {
   id: string;
   status: LotStatus;
+  product: ProductKind;
   use_type: LotUse;
   variety: string;
   tons: number;
@@ -282,6 +299,14 @@ export type MarketplaceLot = {
   lab_result: LabResult | null;
   lab_acidity: number | null;
   lab_tested_at: string | null;
+  oil_category: OilCategory | null;
+  acidity: number | null;
+  harvest_season: string | null;
+  storage: OilStorage | null;
+  peroxide: number | null;
+  polyphenols: number | null;
+  pdo_pgi: string | null;
+  organic: boolean;
   listed_at: string | null;
   created_at: string;
   field_id: string | null;

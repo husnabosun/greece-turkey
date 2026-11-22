@@ -3,19 +3,34 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { ArrowRight, Check, ChevronLeft, Trees } from "lucide-react";
+import { ArrowRight, ChevronLeft, Trees } from "lucide-react";
 import { formatStremmata } from "@/features/fields/area";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { varietyAgronomyContext, varietyLabelFromStored } from "@/features/fields/olive-varieties";
-import { DayChipPicker } from "@/features/marketplace/processor-kit";
 import {
   MARKET_LIMITS,
+  allowedOilCategories,
+  formatDateRange,
   formatEuro,
   formatEuroPerKg,
-  formatTons,
+  formatQuantity,
+  kgToTons,
+  oilCategoryFromAcidity,
   parseBounded,
+  parseLocaleNumber,
   saleTotal,
 } from "@/features/marketplace/pricing";
+import {
+  OIL_STORAGES,
+  ProductBadge,
+  oilCategoryI18nKey,
+  oilStorageI18nKey,
+  productI18nKey,
+} from "@/features/marketplace/product-badge";
+import { ChipGroup, Segmented, Switch, TextField } from "@/features/marketplace/processor-kit";
+import { RangeCalendar } from "@/features/marketplace/range-calendar";
+import type { OilCategory, OilStorage, ProductKind } from "@/shared/types/database";
+import { scoreToneClasses } from "@/features/marketplace/score-slider";
 import { useBoundsMessage } from "@/shared/lib/error-message";
 import { publishLot } from "@/features/marketplace/save-lot";
 import { useFarmerMarket } from "@/features/marketplace/use-farmer-market";
@@ -40,25 +55,24 @@ function addDaysIso(iso: string, days: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-
-function nextDays(fromIso: string, count: number) {
-  return Array.from({ length: count }, (_, i) => addDaysIso(fromIso, i));
-}
-
 type Step = 1 | 2 | 3;
 
 function isCommitted(st: string | null | undefined) {
   return st === "sold" || st === "reserved";
 }
 
+const SEASON_OPTIONS = ["2025/26", "2026/27"];
+
 export function NewListingScreen({
   fieldId,
   factoryId,
   buyRequestId,
+  product: productParam,
 }: {
   fieldId?: string;
   factoryId?: string;
   buyRequestId?: string;
+  product?: ProductKind;
 }) {
   const t = useTranslations("farmerMarket");
   const locale = useLocale();
@@ -67,11 +81,19 @@ export function NewListingScreen({
   const fieldIds = useMemo(() => fields.map((f) => f.id), [fields]);
   const { fieldCards } = useFarmerMarket(fieldIds);
   const [step, setStep] = useState<Step>(1);
+  const [product, setProduct] = useState<ProductKind>(() =>
+    productParam === "oil" || productParam === "olives" ? productParam : fieldId ? "olives" : "oil",
+  );
+  const isOil = product === "oil";
   const [currentId, setCurrentId] = useState(fieldId ?? "");
-  const field = fields.find((f) => f.id === currentId) ?? fields[0];
+  const field = currentId ? (fields.find((f) => f.id === currentId) ?? null) : null;
   const targetProcessorId = factoryId?.trim() || null;
   const targetRequestId = buyRequestId?.trim() || null;
   const isOfferToMill = Boolean(targetProcessorId);
+
+  useEffect(() => {
+    if (productParam === "oil" || productParam === "olives") setProduct(productParam);
+  }, [productParam]);
 
   useEffect(() => {
     if (!fields.length) return;
@@ -79,12 +101,13 @@ export function NewListingScreen({
       setCurrentId(fieldId);
       return;
     }
-    if (!fields.some((f) => f.id === currentId)) {
+    if (isOil && !currentId) return;
+    if (currentId && !fields.some((f) => f.id === currentId)) {
       // Suggest a field whose harvest isn't already sold / in delivery.
       const free = fields.find((f) => !isCommitted(fieldCards[f.id]?.lotStatus));
-      setCurrentId((free ?? fields[0]!).id);
+      setCurrentId(isOil ? "" : (free ?? fields[0]!).id);
     }
-  }, [fields, fieldId, currentId, fieldCards]);
+  }, [fields, fieldId, currentId, fieldCards, isOil]);
   const orderedFields = useMemo(
     () =>
       [...fields].sort(
@@ -102,55 +125,90 @@ export function NewListingScreen({
   const [negotiable, setNegotiable] = useState(false);
   const [delivery, setDelivery] = useState<"pickup" | "deliver">("pickup");
   const [priceText, setPriceText] = useState("");
+  const [acidityText, setAcidityText] = useState("0,3");
+  const [oilCategory, setOilCategory] = useState<OilCategory>("extra_virgin");
+  const [harvestSeason, setHarvestSeason] = useState(SEASON_OPTIONS[1]!);
+  const [storage, setStorage] = useState<OilStorage>("tank");
+  const [peroxideText, setPeroxideText] = useState("");
+  const [polyphenolsText, setPolyphenolsText] = useState("");
+  const [pdoPgi, setPdoPgi] = useState("");
+  const [organic, setOrganic] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const publishLock = useRef(false);
 
-  const startDays = useMemo(() => nextDays(defaultStart, 14), [defaultStart]);
-  // The TO grid starts at FROM and always reaches the chosen TO, so keeping TO never makes it vanish from the grid.
-  const endDays = useMemo(() => {
-    const reach = Math.round(
-      (new Date(`${harvestEnd}T12:00:00`).getTime() - new Date(`${harvestStart}T12:00:00`).getTime()) / 86_400_000,
-    );
-    return nextDays(harvestStart, Math.max(14, reach + 1));
-  }, [harvestStart, harvestEnd]);
-
   const score = field ? fieldCards[field.id]?.qualityScore ?? null : null;
+  const harvestRangeText =
+    harvestStart && harvestEnd
+      ? formatDateRange(harvestStart, harvestEnd, locale)
+      : harvestStart
+        ? t("pickHarvestEnd")
+        : t("harvestPeriod");
   const boundsMsg = useBoundsMessage();
-  const tonsCheck = parseBounded(tonsText, MARKET_LIMITS.lotTons);
-  const priceCheck = parseBounded(priceText, MARKET_LIMITS.pricePerKg);
-  const tons = tonsCheck.ok ? tonsCheck.value : null;
+  const qtyBounds = isOil ? MARKET_LIMITS.oilKg : MARKET_LIMITS.lotTons;
+  const tonsCheck = parseBounded(tonsText, qtyBounds);
+  const priceCheck = parseBounded(priceText, isOil ? MARKET_LIMITS.oilPricePerKg : MARKET_LIMITS.pricePerKg);
+  const acidityCheck = parseBounded(acidityText, MARKET_LIMITS.acidity);
+  const acidityN = acidityCheck.ok ? acidityCheck.value : parseLocaleNumber(acidityText);
+  const allowedCats = acidityN != null ? allowedOilCategories(acidityN) : allowedOilCategories(0.3);
+  const tons = tonsCheck.ok ? (isOil ? kgToTons(tonsCheck.value) : tonsCheck.value) : null;
   const price = priceCheck.ok ? priceCheck.value : null;
-  const tonsError = tonsText.trim() && !tonsCheck.ok ? boundsMsg(tonsCheck, "tons", locale) : null;
+  const tonsError =
+    tonsText.trim() && !tonsCheck.ok ? boundsMsg(tonsCheck, isOil ? "kg" : "tons", locale) : null;
   const priceError =
     priceText.trim() && !priceCheck.ok ? boundsMsg(priceCheck, "price", locale) : null;
 
   async function publish() {
-    if (!field || publishing || publishLock.current) return;
+    if (publishing || publishLock.current) return;
+    if (!isOil && !field) return;
     if (!tonsCheck.ok) {
-      toast.error(boundsMsg(tonsCheck, "tons", locale));
+      toast.error(boundsMsg(tonsCheck, isOil ? "kg" : "tons", locale));
       return;
     }
     if (!priceCheck.ok) {
       toast.error(boundsMsg(priceCheck, "price", locale));
       return;
     }
-    if (!harvestStart || !harvestEnd || harvestEnd < harvestStart) {
+    if (isOil) {
+      if (!acidityCheck.ok) {
+        toast.error(t("acidity"));
+        return;
+      }
+      if (!allowedCats.includes(oilCategory)) {
+        toast.error(t("oilCategory"));
+        return;
+      }
+      if (!harvestSeason.trim() || !storage) {
+        toast.error(t("invalid"));
+        return;
+      }
+    } else if (!harvestStart || !harvestEnd || harvestEnd < harvestStart) {
       toast.error(t("invalidHarvestRange"));
       return;
     }
     publishLock.current = true;
     setPublishing(true);
     try {
+      const peroxideN = peroxideText.trim() ? parseLocaleNumber(peroxideText) : null;
+      const polyphenolsN = polyphenolsText.trim() ? parseLocaleNumber(polyphenolsText) : null;
       const result = await publishLot({
-        fieldId: field.id,
-        variety: field.variety,
-        varietySlug: field.variety_slug ?? null,
-        tons: tonsCheck.value,
+        fieldId: field?.id ?? null,
+        product,
+        variety: field?.variety ?? null,
+        varietySlug: field?.variety_slug ?? null,
+        tons: isOil ? kgToTons(tonsCheck.value) : tonsCheck.value,
         pricePerKg: priceCheck.value,
         negotiable,
         delivery,
         harvestStart,
         harvestEnd,
+        oilCategory: isOil ? oilCategory : null,
+        acidity: isOil && acidityCheck.ok ? acidityCheck.value : null,
+        harvestSeason: isOil ? harvestSeason : null,
+        storage: isOil ? storage : null,
+        peroxide: isOil ? peroxideN : null,
+        polyphenols: isOil ? (polyphenolsN != null ? Math.round(polyphenolsN) : null) : null,
+        pdoPgi: isOil ? pdoPgi.trim() || null : null,
+        organic: isOil ? organic : false,
         processorId: targetProcessorId,
         buyRequestId: targetRequestId,
       });
@@ -186,7 +244,7 @@ export function NewListingScreen({
     );
   }
 
-  if (fields.length === 0) {
+  if (!isOil && fields.length === 0) {
     return (
       <div className="w-full flex-1">
         <Header title={t("newListing")} step={1} />
@@ -212,8 +270,35 @@ export function NewListingScreen({
 
       {step === 1 ? (
         <>
-          <Label>{t("fieldLabel")}</Label>
+          <Label>{t("productOil")}</Label>
+          <Segmented
+            fullWidth
+            value={product}
+            onChange={(next) => {
+              setProduct(next);
+              if (next === "olives" && !currentId && fields[0]) setCurrentId(fields[0].id);
+              if (next === "oil" && !fieldId) setCurrentId("");
+            }}
+            options={[
+              { value: "oil", label: t("productOil") },
+              { value: "olives", label: t("productOlives") },
+            ]}
+          />
+          <Label>{isOil ? t("bulkOil") : t("fieldLabel")}</Label>
           <div className="space-y-2">
+            {isOil ? (
+              <button
+                type="button"
+                onClick={() => setCurrentId("")}
+                className={cn(
+                  "flex min-h-14 w-full items-center gap-3 rounded-[18px] border px-3.5 py-3 text-left transition-colors",
+                  !currentId ? "border-ink bg-soft" : "border-line bg-card hover:bg-soft/50",
+                )}
+              >
+                <ProductBadge product="oil" label={t("productOil")} />
+                <span className="min-w-0 flex-1 text-[15px] font-extrabold leading-5 text-ink">{t("bulkOil")}</span>
+              </button>
+            ) : null}
             {orderedFields.map((f) => {
               const on = f.id === field?.id;
               const sc = fieldCards[f.id]?.qualityScore;
@@ -224,36 +309,43 @@ export function NewListingScreen({
                   type="button"
                   onClick={() => setCurrentId(f.id)}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-[18px] border p-3 text-left",
-                    on ? "border-good/40 bg-good-soft" : "border-line bg-card",
+                    "flex min-h-14 w-full items-center gap-3 rounded-[18px] border px-3 py-3 text-left transition-colors",
+                    on ? "border-ink bg-soft" : "border-line bg-card hover:bg-soft/50",
                   )}
                 >
-                  <span className="flex size-12 shrink-0 items-center justify-center rounded-[10px] bg-soft">
-                    <Trees className="size-5 text-good" />
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-card">
+                    <Trees className="size-4 text-good" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-ap-card font-extrabold text-ink">{f.name}</span>
-                    <span className="mt-0.5 flex flex-wrap gap-1">
+                    <span className="block truncate text-[15px] font-extrabold leading-5 text-ink">{f.name}</span>
+                    <span className="mt-1 flex flex-wrap gap-1">
                       {f.variety || f.variety_slug ? (
-                        <span className="rounded-full bg-white/80 px-2 py-0.5 text-ap-pill font-bold text-ink">
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-ink">
                           {varietyLabelFromStored(f.variety_slug ?? f.variety, locale)}
                         </span>
                       ) : null}
                       {isCommitted(st) ? (
-                        <span className="rounded-full bg-warn-soft px-2 py-0.5 text-ap-pill font-bold text-warn-text">
+                        <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-bold text-warn-text">
                           {st === "sold" ? t("fieldSold") : t("fieldInDelivery")}
                         </span>
                       ) : null}
                       {f.area_ha != null ? (
-                        <span className="rounded-full bg-white/80 px-2 py-0.5 text-ap-pill font-bold text-ink">
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-ink">
                           {t("haPill", { n: formatStremmata(Number(f.area_ha), 1, locale) })}
                         </span>
                       ) : null}
                     </span>
                   </span>
                   <span className="shrink-0 text-center">
-                    <span className="block text-ap-small text-muted-foreground">{t("qualityScore")}</span>
-                    <span className="text-[22px] leading-none font-extrabold text-ink">
+                    <span className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t("qualityScore")}
+                    </span>
+                    <span
+                      className={cn(
+                        "mt-0.5 block text-[20px] leading-none font-extrabold",
+                        sc != null ? scoreToneClasses(sc).text : "text-ink",
+                      )}
+                    >
                       {sc != null ? sc : "—"}
                     </span>
                   </span>
@@ -263,9 +355,9 @@ export function NewListingScreen({
           </div>
           <button
             type="button"
-            disabled={!field}
+            disabled={!isOil && !field}
             onClick={() => setStep(2)}
-            className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white disabled:opacity-50"
+            className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white disabled:opacity-50"
           >
             {t("continue")}
             <ArrowRight className="size-4" />
@@ -276,22 +368,22 @@ export function NewListingScreen({
       {step === 2 ? (
         <>
           <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
-            <p className="text-ap-body text-muted-foreground">{t("howMuch")}</p>
-            <div className="mt-1.5 flex h-12 items-center gap-2 rounded-xl border border-line bg-background px-3">
+            <p className="text-ap-body text-muted-foreground">{isOil ? t("quantityKg") : t("howMuch")}</p>
+            <div className="mt-1.5 flex h-11 items-center gap-2 rounded-xl border border-line bg-background px-3">
               <input
                 type="text"
                 inputMode="decimal"
                 value={tonsText}
                 onChange={(e) => setTonsText(e.target.value)}
-                placeholder="0,0"
-                className="min-w-0 flex-1 bg-transparent text-ap-card font-extrabold text-ink outline-none placeholder:text-muted-foreground/50"
-                aria-label={t("howMuch")}
+                placeholder={isOil ? "500" : "0,0"}
+                className="min-w-0 flex-1 bg-transparent text-[16px] font-extrabold text-ink outline-none placeholder:text-muted-foreground/50"
+                aria-label={isOil ? t("quantityKg") : t("howMuch")}
               />
-              <span className="text-ap-body font-bold text-muted-foreground">t</span>
+              <span className="text-[13px] font-bold text-muted-foreground">{isOil ? "kg" : "t"}</span>
             </div>
             {tonsError ? (
               <p className="mt-1 text-ap-small font-semibold text-risk" role="alert">{tonsError}</p>
-            ) : tons != null ? (
+            ) : tons != null && !isOil ? (
               <p className="mt-1 text-ap-small font-semibold text-ink">
                 = {Math.round(tons * 1000).toLocaleString(locale)} kg
               </p>
@@ -300,39 +392,95 @@ export function NewListingScreen({
             )}
           </div>
 
+          {isOil ? (
+            <div className="mt-3 space-y-4 rounded-[18px] border border-line bg-card p-3.5">
+              <TextField
+                label={t("acidity")}
+                value={acidityText}
+                onChange={(v) => {
+                  setAcidityText(v);
+                  const n = parseLocaleNumber(v);
+                  if (n == null) return;
+                  const best = oilCategoryFromAcidity(n);
+                  const allowed = allowedOilCategories(n);
+                  setOilCategory((prev) => (allowed.includes(prev) ? prev : best));
+                }}
+                suffix="%"
+                inputMode="decimal"
+                placeholder="0,3"
+              />
+              <ChipGroup
+                label={t("oilCategory")}
+                value={oilCategory}
+                onChange={(v) => setOilCategory(v as OilCategory)}
+                options={allowedCats.map((c) => ({ value: c, label: t(oilCategoryI18nKey(c)) }))}
+              />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ChipGroup
+                  label={t("harvestSeason")}
+                  value={harvestSeason}
+                  onChange={setHarvestSeason}
+                  options={SEASON_OPTIONS.map((s) => ({ value: s, label: s }))}
+                />
+                <ChipGroup
+                  label={t("storage")}
+                  value={storage}
+                  onChange={(v) => setStorage(v as OilStorage)}
+                  options={OIL_STORAGES.map((s) => ({ value: s, label: t(oilStorageI18nKey(s)) }))}
+                />
+              </div>
+              <label className="flex h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-xl border border-line bg-background px-3">
+                <span className="text-[14px] font-semibold text-ink">{t("organicOil")}</span>
+                <Switch checked={organic} onCheckedChange={setOrganic} label={t("organicOil")} />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <TextField
+                  label={t("peroxide")}
+                  value={peroxideText}
+                  onChange={setPeroxideText}
+                  inputMode="decimal"
+                />
+                <TextField
+                  label={t("polyphenols")}
+                  value={polyphenolsText}
+                  onChange={setPolyphenolsText}
+                  inputMode="numeric"
+                />
+              </div>
+              <TextField label={t("pdoPgi")} value={pdoPgi} onChange={setPdoPgi} />
+            </div>
+          ) : (
+            <>
           <Label>{t("harvestPeriod")}</Label>
           <div className="space-y-3 rounded-[18px] border border-line bg-card p-3">
-            <DayChipPicker
-              label={t("fromDate")}
-              days={startDays}
-              value={harvestStart}
-              onChange={(next) => {
-                setHarvestStart(next);
-                // Keep TO; only move it when it would fall before the new FROM.
-                if (harvestEnd < next) setHarvestEnd(next);
+            <div className="rounded-xl bg-soft px-4 py-3">
+              <p className="text-[16px] font-extrabold text-ink">{harvestRangeText}</p>
+              {!(harvestStart && harvestEnd) ? (
+                <p className="text-[12px] font-semibold text-muted-foreground">{t("pickHarvestEnd")}</p>
+              ) : null}
+            </div>
+            <RangeCalendar
+              start={harvestStart}
+              end={harvestEnd}
+              onChange={(a, b) => {
+                if (a) setHarvestStart(a);
+                setHarvestEnd(b ?? a ?? harvestEnd);
               }}
-              todayLabel={t("today")}
-              formatDay={(iso) =>
-                new Date(`${iso}T12:00:00`).toLocaleDateString(locale, { weekday: "short" })
-              }
-            />
-            <DayChipPicker
-              label={t("toDate")}
-              days={endDays}
-              value={harvestEnd}
-              onChange={setHarvestEnd}
-              todayLabel={t("today")}
-              formatDay={(iso) =>
-                new Date(`${iso}T12:00:00`).toLocaleDateString(locale, { weekday: "short" })
-              }
+              locale={locale}
+              monthsShown={1}
+              minIso={defaultStart}
+              prevLabel={t("prevMonth")}
+              nextLabel={t("nextMonth")}
             />
           </div>
+            </>
+          )}
 
-          <div className="mt-4 flex gap-2">
+          <div className="mt-5 flex gap-2">
             <button
               type="button"
               onClick={() => setStep(1)}
-              className="flex h-12 flex-1 items-center justify-center rounded-full border border-line bg-card text-ap-btn font-bold text-ink"
+              className="flex h-11 flex-1 items-center justify-center rounded-full border border-line bg-card text-ap-btn font-bold text-ink"
             >
               {t("back")}
             </button>
@@ -340,12 +488,16 @@ export function NewListingScreen({
               type="button"
               onClick={() => {
                 if (!tonsCheck.ok) {
-                  toast.error(boundsMsg(tonsCheck, "tons", locale));
+                  toast.error(boundsMsg(tonsCheck, isOil ? "kg" : "tons", locale));
+                  return;
+                }
+                if (isOil && !acidityCheck.ok) {
+                  toast.error(t("acidity"));
                   return;
                 }
                 setStep(3);
               }}
-              className="flex h-12 flex-[2] items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white"
+              className="flex h-11 flex-[1.6] items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white"
             >
               {t("continue")}
               <ArrowRight className="size-4" />
@@ -356,61 +508,41 @@ export function NewListingScreen({
 
       {step === 3 ? (
         <>
-          <button
-            type="button"
-            role="checkbox"
-            aria-checked={negotiable}
-            onClick={() => setNegotiable((v) => !v)}
-            className="mt-2 flex h-12 w-full items-center gap-3 rounded-[18px] border border-line bg-card px-3 text-left"
-          >
-            <span
-              className={cn(
-                "flex size-5 items-center justify-center rounded-md border-2",
-                negotiable ? "border-primary bg-primary text-white" : "border-ink/60",
-              )}
-            >
-              {negotiable ? <Check className="size-3" strokeWidth={3} /> : null}
-            </span>
-            <span className="text-ap-btn font-semibold text-ink">{t("openNegotiation")}</span>
-          </button>
+          <label className="mt-2 flex h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-[18px] border border-line bg-card px-3.5">
+            <span className="text-[14px] font-semibold text-ink">{t("openNegotiation")}</span>
+            <Switch
+              checked={negotiable}
+              onCheckedChange={setNegotiable}
+              label={t("openNegotiation")}
+            />
+          </label>
 
           <Label>{t("deliveryLabel")}</Label>
-          <div className="grid h-11 grid-cols-2 gap-1 rounded-xl bg-soft p-1">
-            {(
-              [
-                ["pickup", t("factoryPickup")],
-                ["deliver", t("iDeliver")],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setDelivery(id)}
-                className={cn(
-                  "rounded-lg text-ap-body font-bold",
-                  delivery === id ? "border border-ink bg-card text-ink" : "text-muted-foreground",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            fullWidth
+            value={delivery}
+            onChange={setDelivery}
+            options={[
+              { value: "pickup", label: t("factoryPickup") },
+              { value: "deliver", label: t("iDeliver") },
+            ]}
+          />
 
           <Label>{t("priceLabel")}</Label>
           <div className="rounded-[18px] border border-line bg-card p-3">
             <p className="text-ap-body text-muted-foreground">{t("yourPrice")}</p>
-            <div className="mt-1.5 flex h-12 items-center gap-2 rounded-xl border border-line px-3">
-              <span className="text-ap-card font-extrabold text-muted-foreground">€</span>
+            <div className="mt-1.5 flex h-11 items-center gap-2 rounded-xl border border-line px-3">
+              <span className="text-[16px] font-extrabold text-muted-foreground">€</span>
               <input
                 type="text"
                 inputMode="decimal"
                 value={priceText}
                 onChange={(e) => setPriceText(e.target.value)}
                 placeholder="0,00"
-                className="min-w-0 flex-1 bg-transparent text-[22px] font-extrabold text-ink outline-none placeholder:text-muted-foreground/50"
+                className="min-w-0 flex-1 bg-transparent text-[20px] font-extrabold text-ink outline-none placeholder:text-muted-foreground/50"
                 aria-label={t("yourPrice")}
               />
-              <span className="text-ap-small font-medium text-muted-foreground">{t("perKg")}</span>
+              <span className="text-[12px] font-medium text-muted-foreground">{t("perKg")}</span>
             </div>
             {priceError ? (
               <p className="mt-1 text-ap-small font-semibold text-risk" role="alert">{priceError}</p>
@@ -419,21 +551,33 @@ export function NewListingScreen({
 
           <div className="mt-3 rounded-[18px] bg-soft p-3">
             <p className="text-ap-small font-bold text-muted-foreground uppercase">{t("summary")}</p>
-            <p className="mt-1 text-ap-body font-extrabold text-ink">{field?.name}</p>
+            <div className="mt-1">
+              <ProductBadge product={product} label={t(productI18nKey(product))} />
+            </div>
+            <p className="mt-1 text-ap-body font-extrabold text-ink">{field?.name ?? t("bulkOil")}</p>
             <p className="text-ap-small text-muted-foreground">
-              {tons != null ? formatTons(tons, locale) : "—"}
+              {tons != null ? formatQuantity(product, tons, locale) : "—"}
               {" · "}
               {price != null ? formatEuroPerKg(price, locale) : "—"}
               {tons != null && price != null
                 ? ` · ≈ ${formatEuro(saleTotal(tons, price), locale)}`
                 : null}
             </p>
+            {isOil ? (
+              <p className="mt-1 text-ap-small text-muted-foreground">
+                {t(oilCategoryI18nKey(oilCategory))}
+                {acidityCheck.ok ? ` · ${t("acidity")} ${acidityCheck.value}%` : ""}
+                {` · ${harvestSeason}`}
+                {` · ${t(oilStorageI18nKey(storage))}`}
+                {organic ? ` · ${t("organicOil")}` : ""}
+              </p>
+            ) : null}
             {score != null ? (
               <p className="mt-1 text-ap-small text-muted-foreground">
                 {t("qualityScore")}: {score}
               </p>
             ) : null}
-            {field?.variety || field?.variety_slug ? (
+            {!isOil && field && (field.variety || field.variety_slug) ? (
               <p className="text-ap-small text-muted-foreground">
                 {varietyLabelFromStored(field.variety_slug ?? field.variety, locale)}
                 {(() => {
@@ -444,19 +588,19 @@ export function NewListingScreen({
             ) : null}
           </div>
 
-          <div className="mt-4 flex gap-2">
+          <div className="mt-5 flex gap-2">
             <button
               type="button"
               onClick={() => setStep(2)}
-              className="flex h-12 flex-1 items-center justify-center rounded-full border border-line bg-card text-ap-btn font-bold text-ink"
+              className="flex h-11 flex-1 items-center justify-center rounded-full border border-line bg-card text-ap-btn font-bold text-ink"
             >
               {t("back")}
             </button>
             <button
               type="button"
-              disabled={publishing || !field}
+              disabled={publishing || (!isOil && !field)}
               onClick={() => void publish()}
-              className="flex h-12 flex-[2] items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white disabled:opacity-50"
+              className="flex h-11 flex-[1.6] items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white disabled:opacity-50"
             >
               {publishing
                 ? isOfferToMill

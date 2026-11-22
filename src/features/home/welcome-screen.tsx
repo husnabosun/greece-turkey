@@ -8,6 +8,7 @@ import { LOCALES, type Locale } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
+import { Switch } from "@/features/marketplace/processor-kit";
 import { useErrorMessage } from "@/shared/lib/error-message";
 
 const REGIONS_GR = [
@@ -412,28 +413,9 @@ function ToggleRow({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={() => onChange(!on)}
-      className="flex h-11 w-full items-center justify-between rounded-xl px-1 text-left"
-    >
+    <label className="flex h-11 w-full cursor-pointer items-center justify-between rounded-xl px-1 text-left">
       <span className="text-ap-body font-semibold text-ink">{label}</span>
-      <span
-        className={cn(
-          "relative h-6 w-11 rounded-full transition-colors",
-          on ? "bg-good" : "bg-line",
-        )}
-      >
-        <i
-          className={cn(
-            "absolute top-0.5 size-5 rounded-full bg-white transition-transform",
-            on ? "translate-x-5" : "translate-x-0.5",
-          )}
-          aria-hidden
-        />
-      </span>
-    </button>
+      <Switch checked={on} onCheckedChange={onChange} label={label} />
+    </label>
   );
 }

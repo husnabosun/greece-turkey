@@ -3,7 +3,7 @@
 import { errorCode } from "@/shared/lib/error-message";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
-import type { LabResult } from "@/shared/types/database";
+import type { LabResult, OilCategory, ProductKind } from "@/shared/types/database";
 
 export type MarketOffer = {
   id: string;
@@ -26,6 +26,7 @@ export type MarketRequest = {
   id: string;
   processorId: string;
   processorName: string;
+  product: ProductKind;
   variety: string;
   tons: number;
   filledTons: number;
@@ -33,6 +34,8 @@ export type MarketRequest = {
   region: string | null;
   windowLabel: string | null;
   noBanned: boolean;
+  maxAcidity: number | null;
+  oilCategory: OilCategory | null;
 };
 
 export type MarketDelivery = {
@@ -53,6 +56,7 @@ export type MarketDelivery = {
 export type FieldLot = {
   id: string;
   status: "listed" | "reserved" | "sold";
+  product: ProductKind;
   pricePerKg: number | null;
   tons: number | null;
   /** Open mill bids on this lot (only counted while it is still listed). */
@@ -83,6 +87,8 @@ type State = {
   requests: MarketRequest[];
   deliveries: MarketDelivery[];
   fieldCards: Record<string, FieldMarketCard>;
+  /** Oil (or other) lots listed without a field_id — bulk stock. */
+  stockLots: FieldLot[];
   /** Farmer's country from profile (GR/TR) — used for region matching. */
   farmerCountry: "GR" | "TR" | null;
   loading: boolean;
@@ -95,6 +101,7 @@ const EMPTY: State = {
   requests: [],
   deliveries: [],
   fieldCards: {},
+  stockLots: [],
   farmerCountry: null,
   loading: true,
   error: null,
@@ -139,7 +146,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         supabase
           .from("buy_requests")
           .select(
-            "id, processor_id, variety, tons, filled_tons, min_score, region, window_label, no_banned",
+            "id, processor_id, product, variety, tons, filled_tons, min_score, region, window_label, no_banned, max_acidity, oil_category",
           )
           .eq("active", true)
           .eq("shared_with_farmers", true)
@@ -153,7 +160,7 @@ export function useFarmerMarket(fieldIds: string[]) {
           .order("created_at", { ascending: false }),
         supabase
           .from("lots")
-          .select("id, field_id, price_per_kg, tons, status")
+          .select("id, field_id, product, price_per_kg, tons, status")
           .eq("farmer_id", user.id)
           .in("status", ["listed", "reserved", "sold"]),
         ids.length
@@ -218,6 +225,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         id: row.id,
         processorId: row.processor_id,
         processorName: nameByProcessor.get(row.processor_id) ?? "Buyer",
+        product: ((row as { product?: ProductKind }).product as ProductKind) ?? "olives",
         variety: row.variety,
         tons: Number(row.tons),
         filledTons: Number(row.filled_tons),
@@ -225,6 +233,11 @@ export function useFarmerMarket(fieldIds: string[]) {
         region: row.region,
         windowLabel: row.window_label,
         noBanned: row.no_banned,
+        maxAcidity:
+          (row as { max_acidity?: number | null }).max_acidity == null
+            ? null
+            : Number((row as { max_acidity?: number | null }).max_acidity),
+        oilCategory: ((row as { oil_category?: OilCategory | null }).oil_category as OilCategory | null) ?? null,
       }));
 
       const deliveries: MarketDelivery[] = (deliveriesRes.data ?? []).map((row) => {
@@ -274,17 +287,23 @@ export function useFarmerMarket(fieldIds: string[]) {
       const listedLotsByField = new Map<string, FieldMarketCard["listedLots"]>();
       const committedTonsByField = new Map<string, number>();
       const lotsByField = new Map<string, FieldLot[]>();
+      const stockLots: FieldLot[] = [];
       for (const lot of lotsRes.data ?? []) {
-        if (!lot.field_id) continue;
         const st = lot.status as "listed" | "reserved" | "sold";
-        const all = lotsByField.get(lot.field_id) ?? [];
-        all.push({
+        const mapped: FieldLot = {
           id: lot.id,
           status: st,
+          product: ((lot as { product?: ProductKind }).product as ProductKind) ?? "olives",
           pricePerKg: lot.price_per_kg == null ? null : Number(lot.price_per_kg),
           tons: lot.tons == null ? null : Number(lot.tons),
           offerCount: offerCountByLot.get(lot.id) ?? 0,
-        });
+        };
+        if (!lot.field_id) {
+          stockLots.push(mapped);
+          continue;
+        }
+        const all = lotsByField.get(lot.field_id) ?? [];
+        all.push(mapped);
         lotsByField.set(lot.field_id, all);
         const prev = lotStatusByField.get(lot.field_id);
         if (!prev || statusRank[st] > statusRank[prev]) {
@@ -333,6 +352,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         requests,
         deliveries,
         fieldCards,
+        stockLots,
         farmerCountry,
         loading: false,
         error: offersRes.error?.message || requestsRes.error?.message || null,
