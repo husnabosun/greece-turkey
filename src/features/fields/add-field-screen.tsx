@@ -17,6 +17,7 @@ import {
   varietiesGrouped,
   type OliveCountry,
 } from "@/features/fields/olive-varieties";
+import { ApCard } from "@/shared/components/brand";
 import { useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 import { parseTreeCount, useErrorMessage } from "@/shared/lib/error-message";
@@ -189,23 +190,25 @@ export function AddFieldScreen() {
   }
 
   return (
-    <div className="fixed inset-0 z-40 overflow-y-auto overscroll-y-contain bg-background md:left-60">
-      <div className="flex min-h-full w-full flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-8">
+    <div className="fixed inset-0 z-40 overflow-x-hidden overflow-y-auto overscroll-y-contain bg-background md:left-60">
+      <div className="flex min-h-full w-full flex-col pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-8">
         <div className="flex shrink-0 items-center gap-3 px-4 pt-2 md:px-6">
           <button
             type="button"
             aria-label={t("back")}
             onClick={() => router.push("/farmer/fields")}
-            className="flex size-10 items-center justify-center rounded-full border border-line bg-card"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full border border-line bg-card transition-colors hover:bg-soft"
           >
             <ChevronLeft className="size-5" aria-hidden />
           </button>
-          <h1 className="flex-1 text-[22px] font-extrabold tracking-tight text-ink">{t("addTitle")}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-[22px] font-extrabold tracking-tight text-ink">
+            {t("addTitle")}
+          </h1>
         </div>
 
         <div className="px-4 md:px-6">
           <Label>{t("fieldName")}</Label>
-          <div className="flex h-12 items-center rounded-[14px] border-[1.5px] border-ink bg-card px-3.5">
+          <div className="flex h-12 items-center rounded-[14px] border-[1.5px] border-ink bg-card pr-1 pl-3.5">
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -217,7 +220,7 @@ export function AddFieldScreen() {
               type="button"
               aria-label={t("voiceSoon")}
               onClick={() => toast(t("voiceSoon"))}
-              className="flex size-9 items-center justify-center"
+              className="flex size-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-soft"
             >
               <Mic className="size-[18px] text-muted-foreground" aria-hidden />
             </button>
@@ -242,16 +245,16 @@ export function AddFieldScreen() {
 
         <div className="px-4 md:px-6">
           {satelliteTrees != null ? (
-            <p className="mt-2 flex items-center gap-1.5 text-ap-body font-semibold text-good">
+            <p className="mt-2.5 flex items-center gap-1.5 text-ap-body font-semibold text-good">
               <Sparkles className="size-4 shrink-0" aria-hidden />
               {t("satelliteTrees", { n: satelliteTrees })}
             </p>
           ) : (
-            <p className="mt-2 text-ap-small text-muted-foreground">{t("drawHint")}</p>
+            <p className="mt-2.5 text-ap-small text-muted-foreground">{t("drawHint")}</p>
           )}
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <div className="rounded-[18px] border border-line bg-card p-3">
+          <div className="mt-3 grid grid-cols-1 gap-2.5 min-[400px]:grid-cols-2">
+            <ApCard className="p-3.5">
               <p className="text-ap-small font-medium text-muted-foreground">{t("numberOfTrees")}</p>
               <div className="mt-2 flex items-center justify-between gap-1">
                 <RoundBtn
@@ -274,7 +277,7 @@ export function AddFieldScreen() {
                     setTreesText(e.target.value.slice(0, 7));
                   }}
                   aria-invalid={treesText.trim() !== "" && parseTrees() == null}
-                  className="w-16 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none"
+                  className="min-w-0 flex-1 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none"
                 />
                 <RoundBtn
                   label={t("more")}
@@ -299,13 +302,14 @@ export function AddFieldScreen() {
                     setTreesText(String(satelliteTrees));
                     setTreesTouched(false);
                   }}
-                  className="mt-2 text-left text-ap-small font-bold text-ap-accent"
+                  className="mt-2 min-h-11 text-left text-ap-small font-bold text-ap-accent"
                 >
                   {t("useEstimate", { n: satelliteTrees })}
                 </button>
               ) : null}
-            </div>
-            <div className="rounded-[18px] border border-line bg-card p-3">
+            </ApCard>
+
+            <ApCard className="p-3.5">
               <p className="text-ap-small font-medium text-muted-foreground">{t("treeAgeExact")}</p>
               <div className="mt-2 flex items-center justify-between gap-2">
                 <RoundBtn label={t("less")} onClick={() => setAgeYears((n) => Math.max(1, n - 1))}>
@@ -331,34 +335,34 @@ export function AddFieldScreen() {
                   <Plus className="size-4" />
                 </RoundBtn>
               </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
                 {AGE_PRESETS.map((p) => (
                   <PillBtn key={p.key} on={ageYears === p.years} onClick={() => setAgeYears(p.years)}>
                     {t(p.key)}
                   </PillBtn>
                 ))}
               </div>
-            </div>
+            </ApCard>
           </div>
 
-          <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
+          <ApCard className="mt-2.5 p-3.5">
             <div className="flex items-center justify-between gap-2">
               <p className="text-ap-small font-medium text-muted-foreground">{t("oliveVariety")}</p>
               <button
                 type="button"
                 onClick={() => setShowAllVarieties((v) => !v)}
-                className="text-ap-small font-bold text-ap-accent"
+                className="min-h-11 text-ap-small font-bold text-ap-accent"
               >
                 {showAllVarieties ? t("showLocalVarieties") : t("showAllVarieties")}
               </button>
             </div>
-            <div className="mt-2 space-y-2.5">
+            <div className="mt-2.5 space-y-3">
               {varietyGroups.map((group) => (
                 <div key={group.origin}>
-                  <p className="mb-1 text-[12px] font-bold tracking-[0.6px] text-muted-foreground uppercase">
+                  <p className="mb-1.5 text-[12px] font-bold tracking-[0.6px] text-muted-foreground uppercase">
                     {t(group.labelKey)}
                   </p>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-2">
                     {group.items.map((v) => (
                       <PillBtn key={v.slug} on={varietySlug === v.slug} onClick={() => setVarietySlug(v.slug)}>
                         {varietyLabel(v, locale)}
@@ -368,11 +372,11 @@ export function AddFieldScreen() {
                 </div>
               ))}
             </div>
-          </div>
+          </ApCard>
 
-          <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
+          <ApCard className="mt-2.5 p-3.5">
             <p className="text-ap-small font-medium text-muted-foreground">{t("irrigatedQ")}</p>
-            <div className="mt-2 flex gap-1.5">
+            <div className="mt-2 flex gap-2">
               <PillBtn on={irrigated} onClick={() => setIrrigated(true)}>
                 {t("yes")}
               </PillBtn>
@@ -380,13 +384,13 @@ export function AddFieldScreen() {
                 {t("no")}
               </PillBtn>
             </div>
-          </div>
+          </ApCard>
 
           <button
             type="button"
             disabled={saving}
             onClick={() => void saveField()}
-            className="mt-5 mb-2 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white disabled:opacity-50"
+            className="mt-5 mb-2 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white transition-opacity disabled:opacity-50"
           >
             <ArrowRight className="size-[18px]" aria-hidden />
             {saving ? t("saving") : t("saveField")}
@@ -407,8 +411,8 @@ function PillBtn({ on, onClick, children }: { on: boolean; onClick: () => void; 
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-11 items-center rounded-full border px-3 text-ap-pill font-bold",
-        on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
+        "inline-flex min-h-11 items-center rounded-full border px-4 text-ap-pill font-bold transition-colors",
+        on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink hover:bg-soft",
       )}
     >
       {children}
@@ -422,7 +426,7 @@ function RoundBtn({ label, onClick, children }: { label: string; onClick: () => 
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="flex size-11 shrink-0 items-center justify-center rounded-full bg-soft"
+      className="flex size-11 shrink-0 items-center justify-center rounded-full bg-soft transition-colors hover:bg-soft/80"
     >
       {children}
     </button>

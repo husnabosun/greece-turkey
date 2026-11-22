@@ -32,7 +32,7 @@ import {
 import { BottomSheet } from "@/features/marketplace/processor-kit";
 import { publicEnv } from "@/core/config/env";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
-import { Chip, FieldChips, Pill } from "@/shared/components/brand";
+import { ApCard, Chip, FieldChips, Pill } from "@/shared/components/brand";
 import { Link, useRouter } from "@/shared/i18n/navigation";
 import type { Field } from "@/shared/types/database";
 import { FIELD_DOTS, colors } from "@/shared/theme/tokens";
@@ -218,18 +218,18 @@ export function FieldsScreen() {
   const displayScore = showAll ? totals.avgScore : active?.score ?? null;
 
   return (
-    <div className="fixed inset-0 z-40 overflow-y-auto overscroll-y-contain bg-background md:left-60">
+    <div className="fixed inset-0 z-40 overflow-x-hidden overflow-y-auto overscroll-y-contain bg-background md:left-60">
       <div className="flex min-h-full flex-col">
-        <div className="shrink-0 space-y-1.5 px-4 pt-2 pb-1.5 md:px-6 md:pt-3">
+        <div className="shrink-0 space-y-2 px-4 pt-2 pb-2 md:px-6 md:pt-3">
           <div className="flex items-center gap-3">
             <Link
               href="/farmer/dashboard"
               aria-label={t("back")}
-              className="flex size-9 items-center justify-center rounded-full border border-line bg-card"
+              className="flex size-11 shrink-0 items-center justify-center rounded-full border border-line bg-card transition-colors hover:bg-soft"
             >
               <ChevronLeft className="size-5" aria-hidden />
             </Link>
-            <h1 className="flex-1 text-[20px] font-extrabold tracking-tight text-ink">
+            <h1 className="min-w-0 flex-1 truncate text-[20px] font-extrabold tracking-tight text-ink">
               {showAll ? t("allFieldsTitle") : t("myField")}
             </h1>
             {activeRaw ? (
@@ -237,7 +237,7 @@ export function FieldsScreen() {
                 type="button"
                 aria-label={t("fieldMenu")}
                 onClick={() => setMenuOpen(true)}
-                className="flex size-11 items-center justify-center rounded-full border border-line bg-card"
+                className="flex size-11 shrink-0 items-center justify-center rounded-full border border-line bg-card transition-colors hover:bg-soft"
               >
                 <MoreHorizontal className="size-[18px]" aria-hidden />
               </button>
@@ -250,7 +250,7 @@ export function FieldsScreen() {
                   setShowHealth((v) => !v);
                   toast(showHealth ? t("layersOff") : t("layersOn"));
                 }}
-                className="flex size-11 items-center justify-center rounded-full border border-line bg-card"
+                className="flex size-11 shrink-0 items-center justify-center rounded-full border border-line bg-card transition-colors hover:bg-soft"
               >
                 <Layers className="size-[18px]" aria-hidden />
               </button>
@@ -267,43 +267,43 @@ export function FieldsScreen() {
               selected={selectedId === "" ? "all" : selectedId}
               onSelect={(id) => setSelectedId(id)}
               trailing={
-                <Chip on={false} onClick={() => router.push("/farmer/fields/new")}>
+                <Chip on={false} onClick={() => router.push("/farmer/fields/new")} className="min-h-9">
                   <span className="text-ap-pill font-bold text-ink">{t("add")}</span>
                 </Chip>
               }
             />
           )}
 
-          <div className="flex min-h-11 items-center rounded-2xl border border-line bg-card px-2.5 py-1.5">
-            <div className="flex-1 text-center">
-              <p className="text-ap-body font-extrabold text-ink">
+          <ApCard className="flex min-h-11 items-center px-2 py-2">
+            <div className="min-w-0 flex-1 px-1 text-center">
+              <p className="truncate text-ap-body font-extrabold text-ink">
                 {displayTrees != null && displayTrees > 0 ? t("treesCount", { n: displayTrees }) : "—"}
               </p>
-              <p className="text-ap-small font-medium text-muted-foreground">
+              <p className="truncate text-ap-small font-medium text-muted-foreground">
                 {showAll ? t("treesTotal") : t("treeCount")}
               </p>
             </div>
-            <div className="h-7 w-px bg-line" />
-            <div className="flex-1 text-center">
-              <p className="text-ap-body font-extrabold text-ink">
+            <div className="h-8 w-px shrink-0 bg-line" />
+            <div className="min-w-0 flex-1 px-1 text-center">
+              <p className="truncate text-ap-body font-extrabold text-ink">
                 {displayHa != null ? t("haCount", { n: formatStremmata(displayHa, 1, locale) }) : "—"}
               </p>
-              <p className="text-ap-small font-medium text-muted-foreground">
+              <p className="truncate text-ap-small font-medium text-muted-foreground">
                 {showAll ? t("areaTotal") : t("fieldSize")}
               </p>
             </div>
             <Link
               href="/farmer/quality"
-              className="flex min-h-11 flex-[1.3] items-center justify-center gap-1.5 rounded-xl bg-soft px-1 py-1"
+              className="flex min-h-11 min-w-0 flex-[1.25] items-center justify-center gap-1.5 rounded-xl bg-soft px-2 py-1.5 transition-colors hover:bg-soft/80"
             >
               <Star
-                className="size-4"
+                className="size-4 shrink-0"
                 fill={displayScore != null ? colors.good : colors.muted}
                 color={displayScore != null ? colors.good : colors.muted}
                 aria-hidden
               />
-              <span>
-                <span className="block text-ap-small font-semibold text-ink">
+              <span className="min-w-0">
+                <span className="block truncate text-ap-small font-semibold text-ink">
                   {showAll ? t("avgScore") : t("qualityScore")}
                 </span>
                 <span className="text-ap-body font-extrabold text-ink">
@@ -312,10 +312,10 @@ export function FieldsScreen() {
                 </span>
               </span>
             </Link>
-          </div>
+          </ApCard>
         </div>
 
-        <div className="relative h-[58dvh] max-h-[520px] min-h-[280px] w-full shrink-0 md:h-[62dvh] md:max-h-[640px] md:px-6">
+        <div className="relative h-[54dvh] max-h-[520px] min-h-[280px] w-full shrink-0 md:h-[62dvh] md:max-h-[640px] md:px-6">
           <div className="absolute inset-0 md:inset-x-6 md:inset-y-0">
             {loading ? (
               <div className="flex h-full w-full items-center justify-center bg-[#1a1a1a] md:rounded-[18px]">
@@ -353,11 +353,11 @@ export function FieldsScreen() {
           </div>
         </div>
 
-        <div className="shrink-0 space-y-1.5 border-t border-line bg-background px-4 pt-2 pb-[calc(5rem+env(safe-area-inset-bottom))] md:px-6 md:pb-6">
+        <div className="shrink-0 space-y-2 border-t border-line bg-background px-4 pt-2.5 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:px-6 md:pb-6">
           {active ? (
             <>
               {activeRaw ? (
-                <div className="rounded-xl border border-line bg-card px-3 py-2.5">
+                <div className="rounded-xl border border-line bg-card px-3.5 py-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-ap-body font-extrabold text-ink">{activeRaw.name}</p>
@@ -377,7 +377,7 @@ export function FieldsScreen() {
                     <button
                       type="button"
                       onClick={openEdit}
-                      className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-line px-3 text-ap-pill font-bold text-ink"
+                      className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-line px-3 text-ap-pill font-bold text-ink transition-colors hover:bg-soft"
                     >
                       {t("editField")}
                     </button>
@@ -386,7 +386,7 @@ export function FieldsScreen() {
               ) : null}
               <Link
                 href={`/farmer/fields/${active.id}/score`}
-                className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-line bg-card px-3 text-left"
+                className="flex min-h-11 w-full items-center gap-2.5 rounded-xl border border-line bg-card px-3.5 py-2 text-left transition-colors hover:bg-soft/50"
               >
                 <BadgeCheck className="size-4 shrink-0 text-good" aria-hidden />
                 <span className="min-w-0 flex-1">
@@ -397,26 +397,26 @@ export function FieldsScreen() {
               </Link>
             </>
           ) : showAll && viewFields[0] ? (
-            <p className="rounded-xl bg-soft px-3 py-2 text-ap-small text-muted-foreground">{t("pickFieldForScore")}</p>
+            <p className="rounded-xl bg-soft px-3.5 py-2.5 text-ap-small text-muted-foreground">{t("pickFieldForScore")}</p>
           ) : null}
 
           <button
             type="button"
-            className="flex min-h-11 w-full items-center rounded-xl bg-risk-soft px-3 text-left"
+            className="flex min-h-11 w-full items-center rounded-xl bg-risk-soft px-3.5 py-2 text-left transition-opacity hover:opacity-95"
             onClick={() => {
               const next = trees.find((tr) => tr.status !== "healthy");
               if (next) setSelectedTreeId(next.id);
             }}
           >
-            <RefreshCw className="size-4 text-risk" aria-hidden />
-            <span className="ml-2 flex-1 text-ap-small font-bold text-ink">
+            <RefreshCw className="size-4 shrink-0 text-risk" aria-hidden />
+            <span className="ml-2.5 min-w-0 flex-1 truncate text-ap-small font-bold text-ink">
               {t("followUp", { n: showAll ? 0 : followUpCount })}
             </span>
-            <span className="text-ap-small font-bold text-risk">{t("view")}</span>
-            <ChevronRight className="size-4 text-risk" aria-hidden />
+            <span className="shrink-0 text-ap-small font-bold text-risk">{t("view")}</span>
+            <ChevronRight className="size-4 shrink-0 text-risk" aria-hidden />
           </button>
 
-          <div className="rounded-2xl border border-line bg-card p-2.5">
+          <ApCard className="p-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-ap-body font-extrabold text-ink">
                 {selectedTree ? t("treeN", { id: selectedTree.id }) : t("treeN", { id: "—" })}
@@ -430,9 +430,7 @@ export function FieldsScreen() {
                       : t("healthy")}
                 </Pill>
               ) : (
-                <span className="rounded-full bg-soft px-2 py-0.5 text-ap-pill font-bold text-muted-foreground">
-                  {t("selectTree")}
-                </span>
+                <Pill tone="neutral">{t("selectTree")}</Pill>
               )}
             </div>
             <p className="mt-1 text-ap-small text-muted-foreground">
@@ -442,13 +440,13 @@ export function FieldsScreen() {
                   ? t("healthy")
                   : t("noTreeYet")}
             </p>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2.5 flex gap-2">
               <Link
                 href="/farmer/scan"
-                className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-primary text-ap-pill font-bold text-white"
+                className="inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-3 text-[12px] font-bold text-white transition-colors hover:bg-primary/90"
               >
-                <Camera className="size-4" />
-                {t("scanTree")}
+                <Camera className="size-4 shrink-0" />
+                <span className="truncate">{t("scanTree")}</span>
               </Link>
               <Link
                 href={
@@ -456,12 +454,12 @@ export function FieldsScreen() {
                     ? `/farmer/scan?field=${encodeURIComponent(active.id)}`
                     : "/farmer/scan"
                 }
-                className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border border-line bg-card text-ap-pill font-bold text-ink"
+                className="inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink transition-colors hover:bg-soft"
               >
-                {t("seeScans")}
+                <span className="truncate">{t("seeScans")}</span>
               </Link>
             </div>
-          </div>
+          </ApCard>
         </div>
       </div>
 

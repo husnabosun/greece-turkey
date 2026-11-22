@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   Bell,
   Camera,
+  ChevronRight,
   Cloud,
   CloudRain,
   Droplet,
@@ -457,7 +458,7 @@ export function DashboardScreen() {
           : null;
 
   return (
-    <div className="w-full flex-1">
+    <div className="w-full flex-1 overflow-x-hidden">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-ap-title text-ink" suppressHydrationWarning>
@@ -466,23 +467,23 @@ export function DashboardScreen() {
             {displayName || t("farmerFallback")}
           </h1>
           <p className="mt-1 flex items-center gap-1 text-ap-body font-medium text-muted-foreground">
-            <MapPin className="size-3.5" aria-hidden />
-            {location}
+            <MapPin className="size-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{location}</span>
           </p>
         </div>
-        <div className="relative flex items-center gap-2">
+        <div className="relative flex shrink-0 items-center gap-2">
           <button
             type="button"
             aria-label={t("settings")}
             aria-expanded={menu}
             onClick={() => setMenu((v) => !v)}
-            className="flex size-11 items-center justify-center rounded-full border border-line bg-card"
+            className="flex size-11 items-center justify-center rounded-full border border-line bg-card transition-colors hover:bg-soft"
           >
             <Settings className="size-[18px]" aria-hidden />
           </button>
           <Link
             href="/farmer/notifications"
-            className="relative flex size-11 items-center justify-center rounded-full border border-line bg-card"
+            className="relative flex size-11 items-center justify-center rounded-full border border-line bg-card transition-colors hover:bg-soft"
             aria-label={t("alerts")}
           >
             <Bell className="size-[18px] text-good" aria-hidden />
@@ -491,51 +492,59 @@ export function DashboardScreen() {
             ) : null}
           </Link>
           {menu ? (
-            <div className="absolute top-12 right-0 z-20 w-[230px] rounded-2xl border border-line bg-card p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-              <Link
-                href="/farmer/fields/new"
+            <>
+              <button
+                type="button"
+                aria-label={t("settings")}
                 onClick={() => setMenu(false)}
-                className="flex h-11 items-center gap-2.5 rounded-xl px-2.5 text-ap-body font-semibold text-ink"
-              >
-                <Plus className="size-[18px]" aria-hidden />
-                {t("addField")}
-              </Link>
-              <Link
-                href="/farmer/welcome"
-                onClick={() => setMenu(false)}
-                className="flex h-11 items-center gap-2.5 rounded-xl px-2.5 text-ap-body font-semibold text-ink"
-              >
-                <MapPin className="size-[18px]" aria-hidden />
-                {t("profileSettings")}
-              </Link>
-              <div className="px-2.5 pt-1 pb-1.5">
-                <p className="mb-1.5 flex items-center gap-2 text-ap-body font-semibold text-ink">
-                  <Globe className="size-4" aria-hidden />
-                  {t("advisorLanguage")}
-                </p>
-                <div className="flex gap-1.5">
-                  {LOCALES.map((code) => (
-                    <button
-                      key={code}
-                      type="button"
-                      onClick={() => {
-                        router.replace(pathname, { locale: code as Locale });
-                        setMenu(false);
-                      }}
-                      className={cn(
-                        "min-h-11 flex-1 rounded-full border text-ap-pill font-bold uppercase",
-                        locale === code ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
-                      )}
-                    >
-                      {code}
-                    </button>
-                  ))}
+                className="fixed inset-0 z-10 cursor-default"
+              />
+              <div className="absolute top-12 right-0 z-20 w-[236px] rounded-2xl border border-line bg-card p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                <Link
+                  href="/farmer/fields/new"
+                  onClick={() => setMenu(false)}
+                  className="flex h-11 items-center gap-2.5 rounded-xl px-2.5 text-ap-body font-semibold text-ink hover:bg-soft"
+                >
+                  <Plus className="size-[18px]" aria-hidden />
+                  {t("addField")}
+                </Link>
+                <Link
+                  href="/farmer/welcome"
+                  onClick={() => setMenu(false)}
+                  className="flex h-11 items-center gap-2.5 rounded-xl px-2.5 text-ap-body font-semibold text-ink hover:bg-soft"
+                >
+                  <MapPin className="size-[18px]" aria-hidden />
+                  {t("profileSettings")}
+                </Link>
+                <div className="px-2.5 pt-1.5 pb-1.5">
+                  <p className="mb-1.5 flex items-center gap-2 text-ap-body font-semibold text-ink">
+                    <Globe className="size-4" aria-hidden />
+                    {t("advisorLanguage")}
+                  </p>
+                  <div className="flex gap-1.5">
+                    {LOCALES.map((code) => (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => {
+                          router.replace(pathname, { locale: code as Locale });
+                          setMenu(false);
+                        }}
+                        className={cn(
+                          "h-11 flex-1 rounded-full border text-ap-pill font-bold uppercase transition-colors",
+                          locale === code ? "border-ink bg-ink text-white" : "border-line bg-card text-ink hover:bg-soft",
+                        )}
+                      >
+                        {code}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="border-t border-line pt-1">
+                  <SignOutButton className="h-11 w-full justify-start rounded-xl px-2.5" />
                 </div>
               </div>
-              <div className="border-t border-line pt-1">
-                <SignOutButton className="h-11 w-full justify-start rounded-xl px-2.5" />
-              </div>
-            </div>
+            </>
           ) : null}
         </div>
       </div>
@@ -584,50 +593,61 @@ export function DashboardScreen() {
       {contentLoading ? (
         <div className="mt-3.5 space-y-3">
           <Skeleton className="h-11 w-full rounded-2xl" />
-          <Skeleton className="h-40 w-full rounded-[22px]" />
+          <Skeleton className="h-44 w-full rounded-[22px]" />
         </div>
       ) : (
         <div className="mt-3.5 md:grid md:grid-cols-2 md:items-start md:gap-6">
           <div className="min-w-0">
-          <div className="flex h-11 items-center gap-2 rounded-2xl border border-line bg-card px-3 text-ap-body font-semibold">
-            <WeatherIcon className="size-[18px] shrink-0 text-warn" aria-hidden />
-            <span>{weather ? `${Math.round(weather.current.temp)}°C` : "—"}</span>
-            <span className="truncate font-medium text-muted-foreground">{weatherLabel}</span>
-            <span className="mx-1 h-5 w-px shrink-0 bg-line" />
-            <span className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
-              <Droplet className="size-4 shrink-0 text-ap-accent" aria-hidden />
-              <span className="truncate font-medium text-muted-foreground">{rainText}</span>
-            </span>
+          <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-2xl border border-line bg-card px-3.5 py-2 text-ap-body font-semibold">
+            <div className="flex items-center gap-2">
+              <WeatherIcon className="size-[18px] shrink-0 text-warn" aria-hidden />
+              <span>{weather ? `${Math.round(weather.current.temp)}°C` : "—"}</span>
+              {weatherLabel ? (
+                <span className="font-medium text-muted-foreground">{weatherLabel}</span>
+              ) : null}
+            </div>
+            {rainText ? (
+              <div className="flex items-center gap-1.5">
+                <Droplet className="size-4 shrink-0 text-ap-accent" aria-hidden />
+                <span className="font-medium text-muted-foreground">{rainText}</span>
+              </div>
+            ) : null}
           </div>
 
-          <div className={cn("relative mt-3.5 rounded-[22px] p-4", tone.card)}>
-            <div className="inline-flex items-center gap-1.5 rounded-xl bg-white px-2.5 py-1 text-[12px] font-bold text-ink">
-              <MapPin className="size-3" style={{ color: tone.iconColor }} aria-hidden />
-              {fieldBadge}
+          <div className={cn("mt-3.5 rounded-[22px] p-4", tone.card)}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="inline-flex max-w-full items-center gap-1.5 rounded-xl bg-white px-2.5 py-1 text-[12px] font-bold text-ink">
+                  <MapPin className="size-3.5 shrink-0" style={{ color: tone.iconColor }} aria-hidden />
+                  <span className="truncate">{fieldBadge}</span>
+                </div>
+                <p className={cn("mt-3 text-[12px] font-bold tracking-[1.2px] uppercase", tone.kicker)}>
+                  {kickerText}
+                </p>
+                <h2 className="mt-1.5 text-[22px] leading-tight font-extrabold tracking-tight text-ink">
+                  {elevated && threat
+                    ? t("riskIs", {
+                        threat: threatLabel(elevated.threat, tThreats),
+                        level: riskLevelLabel(elevated.level, tThreats),
+                      })
+                    : weather
+                      ? t("noBigRisks")
+                      : t("noWeatherYet")}
+                </h2>
+              </div>
+              <div
+                className={cn(
+                  "flex size-12 shrink-0 items-center justify-center rounded-full",
+                  tone.iconBg,
+                )}
+              >
+                <CardIcon className="size-5" style={{ color: tone.iconColor }} aria-hidden />
+              </div>
             </div>
-            <p className={cn("mt-3 text-[12px] font-bold tracking-[1.4px] uppercase", tone.kicker)}>
-              {kickerText}
-            </p>
-            <h2 className="mt-1.5 max-w-[240px] text-[23px] leading-tight font-extrabold tracking-tight text-ink">
-              {elevated && threat
-                ? t("riskIs", {
-                    threat: threatLabel(elevated.threat, tThreats),
-                    level: riskLevelLabel(elevated.level, tThreats),
-                  })
-                : weather
-                  ? t("noBigRisks")
-                  : t("noWeatherYet")}
-            </h2>
-            <p className="mt-1.5 max-w-[260px] text-ap-body text-[#5a5a5a]">{tipText}</p>
-            <div
-              className={cn(
-                "absolute top-14 right-4 flex size-12 items-center justify-center rounded-full",
-                tone.iconBg,
-              )}
-            >
-              <CardIcon className="size-5" style={{ color: tone.iconColor }} aria-hidden />
-            </div>
-            <div className="mt-4 flex items-center justify-between gap-2">
+
+            <p className="mt-1.5 text-ap-body text-[#5a5a5a]">{tipText}</p>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
               {elevated && scanMode ? (
                 <ApButton
                   label={t("ctaScan")}
@@ -650,33 +670,39 @@ export function DashboardScreen() {
                   onClick={() => router.push("/farmer/alerts")}
                 />
               )}
-              <Link href="/farmer/tasks" className={cn("text-ap-small font-semibold", tone.kicker)}>
+              <Link
+                href="/farmer/tasks"
+                className={cn("inline-flex min-h-11 items-center text-ap-small font-semibold", tone.kicker)}
+              >
                 {t("tasksRatio", { done: taskStats.done, total: taskStats.total })}
               </Link>
             </div>
           </div>
 
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2.5 flex gap-2">
             <QuickPill href="/farmer/alerts" tone="risk" label={t("risksCount", { n: riskCount })}>
-              <TriangleAlert className="size-4" aria-hidden />
+              <TriangleAlert className="size-4 shrink-0" aria-hidden />
             </QuickPill>
             <QuickPill href="/farmer/scan" tone="warn" label={t("recheckCount", { n: recheckCount })}>
-              <Leaf className="size-4" aria-hidden />
+              <Leaf className="size-4 shrink-0" aria-hidden />
             </QuickPill>
             <QuickPill href="/farmer/market?tab=offers" tone="good" label={t("offersCount", { n: offerCount })}>
-              <Tag className="size-4" aria-hidden />
+              <Tag className="size-4 shrink-0" aria-hidden />
             </QuickPill>
           </div>
 
           <SectionHeader
             title={t("todayTasks")}
             action={
-              <Link href="/farmer/tasks" className="inline-flex min-h-11 min-w-11 items-center justify-end text-ap-body font-medium text-muted-foreground">
+              <Link
+                href="/farmer/tasks"
+                className="inline-flex min-h-11 min-w-11 items-center justify-end text-ap-body font-medium text-muted-foreground"
+              >
                 {t("seeAll")}
               </Link>
             }
           />
-          <div className="mt-2">
+          <div className="mt-1.5">
             <AddTaskForm
               fields={fields.map((f) => ({ id: f.id, name: f.name }))}
               onCreated={(task) => prependLocal(task)}
@@ -719,7 +745,10 @@ export function DashboardScreen() {
           <SectionHeader
             title={t("yourFields")}
             action={
-              <Link href="/farmer/fields" className="inline-flex min-h-11 min-w-11 items-center justify-end text-ap-body font-medium text-muted-foreground">
+              <Link
+                href="/farmer/fields"
+                className="inline-flex min-h-11 min-w-11 items-center justify-end text-ap-body font-medium text-muted-foreground"
+              >
                 {t("seeAll")}
               </Link>
             }
@@ -732,35 +761,39 @@ export function DashboardScreen() {
           ) : fields.length === 0 ? (
             <p className="mt-2 text-ap-body text-muted-foreground">{t("noFieldsBody")}</p>
           ) : (
-            <div className="mt-2.5 flex gap-2.5 overflow-x-auto pb-1 md:flex-col md:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="mt-2 flex gap-2.5 overflow-x-auto pb-1 md:flex-col md:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {shown.map((f) => {
                 const live = elevated && primary?.id === f.id ? elevated : null;
                 const liveThreat = live ? THREAT_BY_ID[live.threat] : null;
                 const score = fieldScores[f.id];
                 return (
-                  <Link key={f.id} href="/farmer/fields" className="w-[236px] shrink-0 md:w-full">
-                    <ApCard className="p-3">
+                  <Link key={f.id} href="/farmer/fields" className="w-[240px] shrink-0 md:w-full">
+                    <ApCard className="p-3.5 transition-colors hover:border-ink/30">
                       <div className="flex items-center gap-2.5">
-                        <span className="flex size-11 shrink-0 items-center justify-center rounded-[10px] bg-good-soft">
+                        <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-good-soft">
                           <Trees className="size-5 text-good" aria-hidden />
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-ap-card text-ink">{f.name}</p>
                           <p className="text-ap-small text-muted-foreground">
-                            {f.tree_count != null ? `${f.tree_count}` : "—"}
+                            {f.tree_count != null ? tFields("treesCount", { n: f.tree_count }) : "—"}
                             {f.area_ha != null
                               ? ` · ${tFields("haCount", { n: formatStremmata(Number(f.area_ha), 1, locale) })}`
                               : ""}
                           </p>
                         </div>
-                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-soft text-ap-body font-extrabold text-muted-foreground">
-                          {score != null ? score : "—"}
-                        </span>
+                        {score != null ? (
+                          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-good-soft text-ap-body font-extrabold text-good">
+                            {score}
+                          </span>
+                        ) : (
+                          <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                        )}
                       </div>
                       {live && liveThreat ? (
-                        <div className="mt-2 flex h-6 items-center gap-2">
+                        <div className="mt-2.5 flex min-h-6 items-center gap-2">
                           <span
-                            className="size-2 rounded-full"
+                            className="size-2 shrink-0 rounded-full"
                             style={{ backgroundColor: live.level === "High" ? colors.risk : colors.warn }}
                           />
                           <span className="flex-1 truncate text-ap-body font-semibold text-ink">
@@ -804,12 +837,12 @@ function QuickPill({
     <Link
       href={href}
       className={cn(
-        "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border-[1.5px] bg-card text-ap-pill font-bold",
+        "flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border-[1.5px] bg-card px-2 py-1.5 text-center text-ap-pill leading-tight font-bold transition-colors hover:bg-soft/60",
         style,
       )}
     >
       {children}
-      {label}
+      <span className="truncate">{label}</span>
     </Link>
   );
 }

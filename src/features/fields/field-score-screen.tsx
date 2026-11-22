@@ -28,6 +28,7 @@ import { isPhotoProof, uploadFieldProof } from "@/features/fields/upload-proof";
 import { resolveOliveCountry, type OliveCountry } from "@/features/fields/olive-varieties";
 import { refreshFieldQuality } from "@/features/quality/refresh-field-quality";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
+import { ApCard } from "@/shared/components/brand";
 import type { ProofLevel } from "@/shared/types/database";
 import { useRouter } from "@/shared/i18n/navigation";
 import { colors } from "@/shared/theme/tokens";
@@ -288,14 +289,14 @@ export function FieldScoreScreen({ fieldId }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-40 overflow-y-auto overscroll-y-contain bg-background md:left-60">
-      <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pt-2 pb-[calc(5rem+env(safe-area-inset-bottom))] md:max-w-2xl md:px-6 md:pb-8">
+    <div className="fixed inset-0 z-40 overflow-x-hidden overflow-y-auto overscroll-y-contain bg-background md:left-60">
+      <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pt-2 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:max-w-2xl md:px-6 md:pb-8">
         <div className="flex shrink-0 items-center gap-3">
           <button
             type="button"
             aria-label={t("back")}
             onClick={() => router.push("/farmer/fields")}
-            className="flex size-10 items-center justify-center rounded-full border border-line bg-card"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full border border-line bg-card transition-colors hover:bg-soft"
           >
             <ChevronLeft className="size-5" aria-hidden />
           </button>
@@ -315,8 +316,8 @@ export function FieldScoreScreen({ fieldId }: Props) {
                 type="button"
                 onClick={() => setStage(key)}
                 className={cn(
-                  "flex h-[68px] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl border px-1",
-                  on ? "border-good/40 bg-good-soft" : "border-line bg-card",
+                  "flex min-h-[72px] min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl border px-1.5 py-2 transition-colors",
+                  on ? "border-good/40 bg-good-soft" : "border-line bg-card hover:bg-soft/50",
                 )}
               >
                 <Icon className="size-5 shrink-0" color={on ? colors.good : colors.ink} aria-hidden />
@@ -334,33 +335,33 @@ export function FieldScoreScreen({ fieldId }: Props) {
         </div>
 
         <Label>{t("prevSeason")}</Label>
-        <p className="mb-1.5 text-ap-small text-muted-foreground">{t("prevSeasonHint")}</p>
-        <div className="flex min-h-12 flex-col gap-2 rounded-[18px] border border-line bg-card px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <p className="mb-2 text-ap-small text-muted-foreground">{t("prevSeasonHint")}</p>
+        <ApCard className="flex min-h-12 flex-col gap-2 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <span className="shrink-0 text-ap-body font-extrabold text-ink">{t("sprays")}</span>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {sprayOpts.map((opt) => (
               <PillBtn key={opt.key} on={sprays === opt.key} onClick={() => setSprays(opt.key)}>
                 {opt.label}
               </PillBtn>
             ))}
           </div>
-        </div>
-        <div className="mt-2 flex min-h-12 flex-col gap-2 rounded-[18px] border border-line bg-card px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        </ApCard>
+        <ApCard className="mt-2 flex min-h-12 flex-col gap-2 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <span className="shrink-0 text-ap-body font-extrabold text-ink">{t("records")}</span>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {recordOpts.map((opt) => (
               <PillBtn key={opt.key} on={records === opt.key} onClick={() => setRecords(opt.key)}>
                 {opt.label}
               </PillBtn>
             ))}
           </div>
-        </div>
-        <p className="mt-1 px-1 text-ap-small font-medium text-muted-foreground">
+        </ApCard>
+        <p className="mt-1.5 px-1 text-ap-small font-medium text-muted-foreground">
           {country === "TR" ? t("bNoteTr") : t("bNoteGr")}
         </p>
 
         <Label>{t("proofFor", { stage: t(STAGE_TITLE_KEY[stage]) })}</Label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 min-[390px]:grid-cols-2">
           {proofsForStage.map((p) => {
             const on = added.includes(p.id);
             const photo = isPhotoProof(p.id);
@@ -396,8 +397,8 @@ export function FieldScoreScreen({ fieldId }: Props) {
                     }
                   }}
                   className={cn(
-                    "flex h-[52px] w-full items-center gap-2 rounded-xl px-3 text-left disabled:opacity-60",
-                    on ? "border border-[#A9BE9C] bg-[#F2F8EE]" : "border border-dashed border-[#C9C6BE] bg-card",
+                    "flex min-h-[56px] w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors disabled:opacity-60",
+                    on ? "border border-[#A9BE9C] bg-[#F2F8EE]" : "border border-dashed border-[#C9C6BE] bg-card hover:bg-soft/40",
                   )}
                 >
                   {on ? (
@@ -411,7 +412,7 @@ export function FieldScoreScreen({ fieldId }: Props) {
                     </span>
                     <span
                       className={cn(
-                        "text-[12px] font-bold tracking-[0.5px]",
+                        "block text-[12px] font-bold tracking-[0.4px]",
                         on ? "text-good" : p.note === "REQUIRED" ? "text-risk" : "text-muted-foreground",
                       )}
                     >
@@ -436,7 +437,7 @@ export function FieldScoreScreen({ fieldId }: Props) {
           })}
         </div>
 
-        <div className="mt-3 rounded-[18px] bg-good-soft p-3">
+        <div className="mt-3.5 rounded-[18px] bg-good-soft p-3.5">
           <div className="flex items-center">
             <p className="text-[34px] leading-[38px] font-extrabold text-good">
               {displayScore != null ? displayScore : "—"}
@@ -450,7 +451,7 @@ export function FieldScoreScreen({ fieldId }: Props) {
               </p>
             </div>
           </div>
-          <div className="mt-2 flex gap-1.5">
+          <div className="mt-2.5 flex gap-1.5">
             {(
               [
                 ["self_reported", t("selfReported")],
@@ -463,17 +464,17 @@ export function FieldScoreScreen({ fieldId }: Props) {
                 <span
                   key={key}
                   className={cn(
-                    "flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-0.5 text-[12px] font-bold sm:text-[10.5px]",
+                    "flex min-h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-1.5 text-[12px] font-bold",
                     on ? "bg-warn-soft text-warn-text" : "bg-black/5 text-muted-foreground",
                   )}
                 >
-                  {on ? <Check className="size-3 shrink-0" strokeWidth={3} aria-hidden /> : null}
+                  {on ? <Check className="size-3.5 shrink-0" strokeWidth={3} aria-hidden /> : null}
                   <span className="truncate">{label}</span>
                 </span>
               );
             })}
           </div>
-          <p className="mt-2 flex items-center gap-1.5 text-ap-small font-medium text-good">
+          <p className="mt-2.5 flex items-center gap-1.5 text-ap-small font-medium text-good">
             <Sparkles className="size-3.5 shrink-0" aria-hidden />
             {publish ? t("shownBuyers") : t("scorePrivateHint")}
           </p>
@@ -483,7 +484,7 @@ export function FieldScoreScreen({ fieldId }: Props) {
           type="button"
           disabled={saving || uploadingId != null}
           onClick={() => void submit()}
-          className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white disabled:opacity-50"
+          className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white transition-opacity disabled:opacity-50"
         >
           <ArrowRight className="size-[18px]" aria-hidden />
           {saving ? t("saving") : publish ? t("ctaPublishLot") : t("ctaSaveScore")}
@@ -503,8 +504,8 @@ function PillBtn({ on, onClick, children }: { on: boolean; onClick: () => void; 
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex h-[30px] shrink-0 items-center rounded-full border px-3 text-ap-pill font-bold",
-        on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
+        "inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 text-ap-pill font-bold transition-colors",
+        on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink hover:bg-soft",
       )}
     >
       {children}
