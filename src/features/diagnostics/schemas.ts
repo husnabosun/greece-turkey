@@ -13,6 +13,14 @@ export const MAX_IMAGE_BASE64 = Math.ceil((MAX_IMAGE_BYTES * 4) / 3);
 
 const image = z.string().min(100).max(MAX_IMAGE_BASE64);
 const confidence = z.number().min(0).max(1);
+/**
+ * For the fruit, trap and label answers. When the photo is bad the model often answers `null` for numbers and text
+ * instead of 0 and "". That is still a valid "retake" answer, so null is read as 0 or "" here (not for the leaf scan).
+ */
+const nullAs = <T,>(empty: T) => (v: unknown) => (v === null || v === undefined ? empty : v);
+const looseConfidence = z.preprocess(nullAs(0), confidence);
+const looseCount = z.preprocess(nullAs(0), z.number().int().min(0).max(500));
+const looseText = (n: number) => z.preprocess(nullAs(""), z.string().max(n));
 const short = (n: number) => z.string().max(n);
 
 export const readLabelRequest = z.object({ imageBase64: image });
@@ -97,14 +105,21 @@ export const ndviRequest = z.object({
   end: z.number().int().positive().optional(),
 });
 
+/** What is wrong with the photo itself. Anything but "ok" means: ask for a new photo, give no diagnosis. */
+export const PHOTO_ISSUES = ["ok", "not_olive", "wrong_scan_type", "blurry", "too_dark"] as const;
+/** Trap photos have one more problem: a McPhail trap (bottle) seen from outside, where the catch inside cannot be counted. */
+export const TRAP_PHOTO_ISSUES = [...PHOTO_ISSUES, "catch_not_visible"] as const;
+export const LABEL_PHOTO_ISSUES = ["ok", "not_a_label", "cut_off", "blurry", "too_dark"] as const;
+
 export const labelResult = z.object({
-  productName: z.string().max(120),
-  activeSubstances: z.array(z.string().max(80)).max(8),
+  photo: z.enum(LABEL_PHOTO_ISSUES),
+  productName: looseText(120),
+  activeSubstances: z.preprocess(nullAs([]), z.array(z.string().max(80)).max(8)),
   licenceNumber: z.string().max(60).nullable(),
   maxDosePerHa: z.string().max(60).nullable(),
   preHarvestDays: z.number().int().min(0).max(365).nullable(),
-  cropsListed: z.array(z.string().max(60)).max(20),
-  confidence,
+  cropsListed: z.preprocess(nullAs([]), z.array(z.string().max(60)).max(20)),
+  confidence: looseConfidence,
 });
 
 /** Quick gate: is this an olive leaf photo? */
@@ -115,7 +130,18 @@ export const leafGateResult = z.object({
 });
 export type LeafGateResult = z.infer<typeof leafGateResult>;
 
-export const FRUIT_DIAGNOSES = ["olive fly sting", "other damage", "healthy", "unclear"] as const;
+/** Fruit problems. Names follow the risk engine threats: olive-fly, anthracnose, olive-moth, drought. */
+export const FRUIT_DIAGNOSES = [
+  "olive fly",
+  "anthracnose",
+  "olive moth",
+  "hail or mechanical damage",
+  "sunscald",
+  "drought shrivel",
+  "sooty mould or scale",
+  "healthy",
+  "unclear",
+] as const;
 export const LEAF_LABELS = ["Healthy", "Olive Peacock Spot", "Aculus Olearius"] as const;
 
 function coerceLeafLabel(raw: unknown): (typeof LEAF_LABELS)[number] | unknown {
@@ -131,16 +157,33 @@ function coerceLeafLabel(raw: unknown): (typeof LEAF_LABELS)[number] | unknown {
 
 const leafLabel = z.preprocess(coerceLeafLabel, z.enum(LEAF_LABELS));
 
+/** The model may still say "olive fly sting" or "exit hole": that is the olive fly. */
+function coerceFruitDiagnosis(raw: unknown): unknown {
+  if (typeof raw !== "string") return raw;
+  const n = raw.trim().toLowerCase();
+  if (n.startsWith("olive fly")) return "olive fly";
+  return n;
+}
+
 export const fruitResult = z.object({
-  diagnosis: z.enum(FRUIT_DIAGNOSES),
-  confidence,
-  symptoms: z.array(z.string().max(120)).max(5),
+  photo: z.enum(PHOTO_ISSUES),
+  diagnosis: z.preprocess((v) => coerceFruitDiagnosis(nullAs("unclear")(v)), z.enum(FRUIT_DIAGNOSES)),
+  confidence: looseConfidence,
+  /** One short sentence for the farmer, in the language of the request. Empty when the photo is not usable. */
+  summary: looseText(220),
 });
 
 export const trapResult = z.object({
-  flyCount: z.number().int().min(0).max(500),
-  confidence,
-  notes: z.string().max(200),
+  photo: z.enum(TRAP_PHOTO_ISSUES),
+  /** Olive flies (Bactrocera oleae) only. */
+  flyCount: looseCount,
+  /** Olive moths (Prays oleae) only. */
+  mothCount: looseCount,
+  /** Other insects (bycatch) are on the trap. */
+  otherInsects: z.preprocess(nullAs(false), z.boolean()),
+  confidence: looseConfidence,
+  /** One short sentence for the farmer, in the language of the request. Empty when the photo is not usable. */
+  summary: looseText(220),
 });
 
 export const leafResult = z.object({

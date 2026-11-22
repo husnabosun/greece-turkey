@@ -1,7 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { GoogleAuth, JWT } from "google-auth-library";
 import { getServerEnv } from "@/core/config/env";
+import { loadServiceAccount, type ServiceAccount } from "@/features/diagnostics/service-account";
 import type { z } from "zod";
 
 const DEFAULT_MODEL = "gemini-3.5-flash";
@@ -15,25 +14,10 @@ function stripDataUrl(imageBase64: string): { mime: string; data: string } {
   return { mime: "image/jpeg", data: imageBase64 };
 }
 
-/**
- * Always resolve the service-account JSON from the project root so Next.js
- * working-directory differences cannot break ADC.
- */
-export function resolveServiceAccountPath(): string | null {
-  const candidates = [
-    resolve(process.cwd(), "gcp-service-account.json"),
-    resolve(process.cwd(), getServerEnv().GOOGLE_APPLICATION_CREDENTIALS || ""),
-  ].filter(Boolean);
-  for (const path of candidates) {
-    if (path && existsSync(path)) return path;
-  }
-  return null;
-}
-
-/** True when Vertex AI project + service-account file are configured. */
+/** True when Vertex AI project + service account (env JSON or key file) are configured. */
 export function hasGeminiKey(): boolean {
   const env = getServerEnv();
-  return Boolean(env.GOOGLE_CLOUD_PROJECT && resolveServiceAccountPath());
+  return Boolean(env.GOOGLE_CLOUD_PROJECT && loadServiceAccount(env));
 }
 
 type VertexPart =
@@ -72,13 +56,7 @@ function vertexGenerateContentUrl(project: string, location: string, model: stri
   return `https://${loc}-aiplatform.googleapis.com/v1/projects/${project}/locations/${loc}/publishers/google/models/${model}:generateContent`;
 }
 
-type ServiceAccountJson = {
-  client_email: string;
-  private_key: string;
-};
-
-async function getVertexAccessToken(keyFilename: string): Promise<string> {
-  const credentials = JSON.parse(readFileSync(keyFilename, "utf8")) as ServiceAccountJson;
+async function getVertexAccessToken(credentials: ServiceAccount): Promise<string> {
   // GoogleAuth keyFilename/credentials are deprecated in google-auth-library v11;
   // pass an explicit JWT authClient built from the SA JSON at the project root.
   const auth = new GoogleAuth({
@@ -123,12 +101,14 @@ export async function geminiJsonDetailed<T>(args: {
   imageBase64?: string;
   imageBase64List?: string[];
   timeoutMs?: number;
+  /** Default 0.2. The fruit, trap and label scans use 0 so the same photo gives the same answer. */
+  temperature?: number;
 }): Promise<GeminiJsonResult<T>> {
   const env = getServerEnv();
   const project = env.GOOGLE_CLOUD_PROJECT;
   const location = env.GOOGLE_CLOUD_LOCATION || DEFAULT_LOCATION;
-  const keyFilename = resolveServiceAccountPath();
-  if (!project || !keyFilename) return { ok: false, reason: "no_key" };
+  const credentials = loadServiceAccount(env);
+  if (!project || !credentials) return { ok: false, reason: "no_key" };
 
   const parts: VertexPart[] = [{ text: args.prompt }];
   const images = [...(args.imageBase64List ?? []), ...(args.imageBase64 ? [args.imageBase64] : [])];
@@ -144,12 +124,12 @@ export async function geminiJsonDetailed<T>(args: {
     contents: [{ role: "user", parts }],
     generationConfig: {
       responseMimeType: "application/json",
-      temperature: 0.2,
+      temperature: args.temperature ?? 0.2,
     },
   });
 
   try {
-    const accessToken = await getVertexAccessToken(keyFilename);
+    const accessToken = await getVertexAccessToken(credentials);
     let lastFail: GeminiJsonResult<T> | null = null;
 
     for (let i = 0; i < models.length; i++) {

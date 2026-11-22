@@ -2,7 +2,19 @@ import type { PillTone } from "@/shared/components/brand";
 
 export type CaptureMode = "leaf" | "fruit" | "trap";
 export type PillKey = "healthy" | "watch" | "highRisk";
-export type ActionKind = "care" | "healthy" | "trap";
+/** Which "What you can do now" list a result gets. */
+export type ActionKind =
+  | "care" // leaf problems
+  | "healthy"
+  | "trap" // trap with a few flies
+  | "trapClear" // no flies
+  | "trapBusy" // many flies
+  | "fruitFly"
+  | "fruitFungus"
+  | "fruitMoth"
+  | "fruitDamage"
+  | "fruitDry"
+  | "fruitScale";
 
 export type Presented = {
   mode: CaptureMode;
@@ -17,6 +29,12 @@ export type Presented = {
     | "oliveFly"
     | "otherDamage"
     | "notClear"
+    | "anthracnose"
+    | "oliveMoth"
+    | "mechanicalDamage"
+    | "sunscald"
+    | "droughtShrivel"
+    | "sootyMould"
     | "trapTitle";
   latin?: string;
   summary: string;
@@ -39,6 +57,10 @@ export type SavedScan = {
   preview: string;
   storagePath: string | null;
   presented: Presented;
+  /** Flies counted on a trap photo (`scans.fly_count`). Feeds the risk engine. */
+  flyCount?: number | null;
+  /** Raw `scans.diagnosis` JSON, read by the risk signals when an old row has no title key. */
+  diagnosis?: unknown;
 };
 
 export type ScanDiagnosisJson = {

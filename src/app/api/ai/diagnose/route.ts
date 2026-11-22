@@ -1,25 +1,18 @@
 import { ZodError } from "zod";
-import {
-  diagnoseRequest,
-  fruitResult,
-  geminiJsonDetailed,
-  FRUIT_PROMPT,
-  TRAP_PROMPT,
-  trapResult,
-} from "@/features/diagnostics";
+import { diagnoseRequest } from "@/features/diagnostics";
+import { runFruitScan, runTrapScan } from "@/features/diagnostics/scan-flows";
 import { gateOliveLeaf } from "@/features/diagnostics/leaf-gate";
 import { predictLeafModel } from "@/features/diagnostics/leaf-space";
 import { aiRateLimiter } from "@/shared/lib/api/rate-limit";
 import { fromZodError, jsonError, jsonOk } from "@/shared/lib/api/http";
 import { requireApiUser } from "@/shared/lib/api/require-user";
 import { checkImageBase64 } from "@/features/diagnostics/image-check";
-import { LANGUAGE_NAME } from "@/features/diagnostics/schemas";
 
 export const runtime = "nodejs";
 
 /**
  * Leaf → olive-leaf gate (Gemini) then TFLite model on Hugging Face Space.
- * Fruit / trap → Gemini with demo fallback (credits permitting).
+ * Fruit / trap → Gemini checks the photo and answers (see scan-flows.ts). No demo result: if the AI is down the app says so.
  */
 export async function POST(request: Request) {
   try {
@@ -71,35 +64,17 @@ export async function POST(request: Request) {
       });
     }
 
-    const contextLine =
-      (body.context ? `\nField context: ${JSON.stringify(body.context)}` : "") +
-      (body.language
-        ? `\nWrite every free-text field (symptoms, notes) in ${LANGUAGE_NAME[body.language]}. Keep the enum values (diagnosis) in English exactly as listed.`
-        : "");
-
-    if (body.mode === "fruit") {
-      const live = await geminiJsonDetailed({
-        prompt: FRUIT_PROMPT + contextLine,
-        schema: fruitResult,
-        imageBase64List: images,
-      });
-      if (!live.ok) {
-        console.warn("[diagnose] fruit model unavailable", live.reason);
-        return jsonOk({ mode: "fruit" as const, unavailable: true as const, source: "unavailable" as const, reason: live.reason });
-      }
-      return jsonOk({ mode: "fruit" as const, result: live.data, source: "gemini" as const });
+    // Fruit and trap: one AI call that also checks the photo. Only a confident, safe answer carries a result.
+    const flow = body.mode === "fruit" ? runFruitScan : runTrapScan;
+    const run = await flow({ images, language: body.language, context: body.context });
+    if (!run.ok) {
+      console.warn(`[diagnose] ${body.mode} model unavailable`, run.reason);
+      return jsonOk({ mode: body.mode, unavailable: true as const, source: "unavailable" as const, reason: run.reason });
     }
-
-    const live = await geminiJsonDetailed({
-      prompt: TRAP_PROMPT + contextLine,
-      schema: trapResult,
-      imageBase64List: images,
-    });
-    if (!live.ok) {
-      console.warn("[diagnose] trap model unavailable", live.reason);
-      return jsonOk({ mode: "trap" as const, unavailable: true as const, source: "unavailable" as const, reason: live.reason });
+    if (run.verdict.kind !== "ok") {
+      return jsonOk({ mode: body.mode, verdict: run.verdict, source: "gemini" as const });
     }
-    return jsonOk({ mode: "trap" as const, result: live.data, source: "gemini" as const });
+    return jsonOk({ mode: body.mode, result: run.result, verdict: run.verdict, source: "gemini" as const });
   } catch (err) {
     if (err instanceof ZodError) return fromZodError(err);
     return jsonError("diagnosis_failed", 500);

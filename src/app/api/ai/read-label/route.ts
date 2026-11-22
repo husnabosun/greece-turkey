@@ -1,5 +1,6 @@
 import { ZodError } from "zod";
-import { DEMO_LABEL, geminiJson, LABEL_PROMPT, labelResult, readLabelRequest } from "@/features/diagnostics";
+import { readLabelRequest } from "@/features/diagnostics";
+import { runLabelScan } from "@/features/diagnostics/scan-flows";
 import { euCheck } from "@/features/logbook";
 import { aiRateLimiter } from "@/shared/lib/api/rate-limit";
 import { fromZodError, jsonError, jsonOk } from "@/shared/lib/api/http";
@@ -7,7 +8,11 @@ import { requireApiUser } from "@/shared/lib/api/require-user";
 
 export const runtime = "nodejs";
 
-/** Gemini label OCR + EU compliance check for the spray logbook draft. */
+/**
+ * Label OCR + EU compliance check for the spray logbook draft.
+ * Only a confident read carries a label. A bad photo gives a retake reason, and an AI outage says so:
+ * the form is never filled from a made-up label.
+ */
 export async function POST(request: Request) {
   try {
     const auth = await requireApiUser();
@@ -18,19 +23,19 @@ export async function POST(request: Request) {
     }
 
     const body = readLabelRequest.parse(await request.json());
-    const live = await geminiJson({
-      prompt: LABEL_PROMPT,
-      schema: labelResult,
-      imageBase64: body.imageBase64,
-    });
-
-    const label = live ?? DEMO_LABEL;
-    const compliance = euCheck(label.activeSubstances);
-
+    const run = await runLabelScan(body.imageBase64);
+    if (!run.ok) {
+      console.warn("[read-label] model unavailable", run.reason);
+      return jsonOk({ unavailable: true as const, source: "unavailable" as const, reason: run.reason });
+    }
+    if (run.verdict.kind !== "ok") {
+      return jsonOk({ verdict: run.verdict, source: "gemini" as const });
+    }
     return jsonOk({
-      label,
-      eu: compliance,
-      source: live ? ("gemini" as const) : ("demo" as const),
+      verdict: run.verdict,
+      label: run.result,
+      eu: euCheck(run.result.activeSubstances),
+      source: "gemini" as const,
     });
   } catch (err) {
     if (err instanceof ZodError) return fromZodError(err);

@@ -10,6 +10,12 @@ export type ScanTitleKey =
   | "oliveFly"
   | "otherDamage"
   | "notClear"
+  | "anthracnose"
+  | "oliveMoth"
+  | "mechanicalDamage"
+  | "sunscald"
+  | "droughtShrivel"
+  | "sootyMould"
   | "trapTitle";
 
 const LEGACY_TO_KEY: Record<string, ScanTitleKey> = {

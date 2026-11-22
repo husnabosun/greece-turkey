@@ -19,6 +19,8 @@ const serverEnvSchema = z.object({
   GOOGLE_CLOUD_PROJECT: z.string().optional().or(z.literal("")),
   GOOGLE_CLOUD_LOCATION: z.string().default("global"),
   GOOGLE_APPLICATION_CREDENTIALS: z.string().optional().or(z.literal("")),
+  /** The service-account key JSON itself (for hosts without files, e.g. Vercel). Wins over the file. */
+  GOOGLE_SERVICE_ACCOUNT_JSON: z.string().optional().or(z.literal("")),
   AGROMONITORING_API_KEY: z.string().optional().or(z.literal("")),
   /** Optional Hugging Face token (needed if the leaf Space is private). */
   HF_TOKEN: z.string().optional().or(z.literal("")),
@@ -43,6 +45,7 @@ export function getServerEnv() {
     GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
     GOOGLE_CLOUD_LOCATION: process.env.GOOGLE_CLOUD_LOCATION,
     GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    GOOGLE_SERVICE_ACCOUNT_JSON: process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
     AGROMONITORING_API_KEY: process.env.AGROMONITORING_API_KEY,
     HF_TOKEN: process.env.HF_TOKEN,
     LEAF_HF_SPACE: process.env.LEAF_HF_SPACE,

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { ArrowRight, Check, Globe, MapPin, Sprout } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Globe, Loader2, MapPin, Sprout } from "lucide-react";
 import { LOCALES, type Locale } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { Link, usePathname, useRouter } from "@/shared/i18n/navigation";
@@ -188,11 +188,21 @@ export function WelcomeScreen() {
       <h1 className="mt-1 text-[28px] leading-tight font-extrabold tracking-tight text-ink">{t("title")}</h1>
       <p className="mt-1 text-ap-body text-muted-foreground">{t(`step${step}Hint`)}</p>
 
-      <div className="mt-4 flex gap-1.5">
+      <div
+        className="mt-4 flex gap-1.5"
+        role="progressbar"
+        aria-valuemin={1}
+        aria-valuemax={3}
+        aria-valuenow={step}
+        aria-label={t("step", { n: step, total: 3 })}
+      >
         {([1, 2, 3] as const).map((n) => (
           <i
             key={n}
-            className={cn("h-1.5 flex-1 rounded-full", n <= step ? "bg-ink" : "bg-line")}
+            className={cn(
+              "h-1.5 flex-1 rounded-full transition-colors duration-300",
+              n < step ? "bg-good" : n === step ? "bg-ink" : "bg-line",
+            )}
             aria-hidden
           />
         ))}
@@ -209,13 +219,14 @@ export function WelcomeScreen() {
                 setDisplayName(e.target.value);
               }}
               maxLength={80}
-              className="h-12 w-full rounded-2xl border border-line bg-card px-4 text-ap-body font-semibold text-ink outline-none focus:border-ink"
+              autoComplete="name"
+              className="h-12 w-full rounded-2xl border border-line bg-card px-4 text-base font-semibold text-ink outline-none focus:border-ink"
               placeholder={t("namePlaceholder")}
             />
           </label>
           <div>
             <p className="mb-2 text-ap-small font-bold text-muted-foreground uppercase">{t("country")}</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={t("country")}>
               {(
                 [
                   ["GR", t("countryGr")],
@@ -225,6 +236,8 @@ export function WelcomeScreen() {
                 <button
                   key={code}
                   type="button"
+                  role="radio"
+                  aria-checked={country === code}
                   onClick={() => {
                     setCountry(code);
                     setRegionId(code === "TR" ? "izmir" : "north-aegean");
@@ -242,20 +255,34 @@ export function WelcomeScreen() {
           </div>
           <div>
             <p className="mb-2 text-ap-small font-bold text-muted-foreground uppercase">{t("region")}</p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {regions.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  onClick={() => setRegionId(r.id)}
-                  className={cn(
-                    "flex h-11 items-center rounded-2xl border px-3 text-left text-ap-body font-semibold",
-                    regionId === r.id ? "border-good/40 bg-good-soft text-good" : "border-line bg-card text-ink",
-                  )}
-                >
-                  {regionLabel(r.id)}
-                </button>
-              ))}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t("region")}>
+              {regions.map((r) => {
+                const on = regionId === r.id;
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setRegionId(r.id)}
+                    className={cn(
+                      "flex h-12 items-center justify-between gap-2 rounded-2xl border px-4 text-left text-ap-body font-semibold",
+                      on ? "border-good/40 bg-good-soft text-good" : "border-line bg-card text-ink",
+                    )}
+                  >
+                    <span className="truncate">{regionLabel(r.id)}</span>
+                    <span
+                      className={cn(
+                        "flex size-5 shrink-0 items-center justify-center rounded-full border-2",
+                        on ? "border-good bg-good text-white" : "border-line",
+                      )}
+                      aria-hidden
+                    >
+                      {on ? <Check className="size-3" strokeWidth={3} /> : null}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -278,7 +305,7 @@ export function WelcomeScreen() {
           <button
             type="button"
             onClick={() => setStep(3)}
-            className="mt-3 w-full text-center text-ap-body font-semibold text-muted-foreground underline"
+            className="mt-2 flex h-11 w-full items-center justify-center text-ap-body font-semibold text-muted-foreground underline underline-offset-4"
           >
             {t("skipField")}
           </button>
@@ -292,18 +319,24 @@ export function WelcomeScreen() {
               <Globe className="size-3.5" aria-hidden />
               {t("language")}
             </p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t("language")}>
               {LOCALES.map((code) => (
                 <button
                   key={code}
                   type="button"
+                  role="radio"
+                  aria-checked={prefLocale === code}
+                  lang={code}
                   onClick={() => switchLocale(code)}
                   className={cn(
-                    "flex h-11 items-center justify-center rounded-2xl border text-ap-body font-bold uppercase",
+                    "flex h-14 min-w-0 flex-col items-center justify-center rounded-2xl border px-1",
                     prefLocale === code ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
                   )}
                 >
-                  {code}
+                  <span className="truncate text-ap-body font-bold">{t(`lang_${code}`)}</span>
+                  <span className={cn("text-[12px] font-bold uppercase", prefLocale === code ? "text-white/60" : "text-muted-foreground")}>
+                    {code}
+                  </span>
                 </button>
               ))}
             </div>
@@ -320,27 +353,37 @@ export function WelcomeScreen() {
         </div>
       ) : null}
 
-      <div className="mt-auto flex gap-2 pt-8">
+      <div className="sticky bottom-0 -mx-4 mt-auto flex gap-2 bg-gradient-to-t from-background via-background to-background/0 px-4 pt-8 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:-mx-6 md:px-6">
         {step > 1 ? (
           <button
             type="button"
+            disabled={saving}
             onClick={() => setStep(step === 1 ? 1 : ((step - 1) as Step))}
-            className="flex h-12 flex-1 items-center justify-center rounded-full border border-line bg-card text-ap-btn font-bold text-ink"
+            className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-full border border-line bg-card text-ap-btn font-bold text-ink disabled:opacity-50"
           >
+            <ArrowLeft className="size-4" aria-hidden />
             {t("back")}
           </button>
         ) : null}
         {step < 3 ? (
           <button
             type="button"
+            disabled={saving}
             onClick={() => {
-              if (step === 1) void saveProfile().then((ok) => ok && setStep(2));
-              else setStep(3);
+              if (step !== 1) {
+                setStep(3);
+                return;
+              }
+              setSaving(true);
+              void saveProfile()
+                .then((ok) => ok && setStep(2))
+                .finally(() => setSaving(false));
             }}
-            className="flex h-12 flex-[2] items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white"
+            className="flex h-12 flex-[2] items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white disabled:opacity-50"
           >
+            {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
             {t("continue")}
-            <ArrowRight className="size-4" aria-hidden />
+            {saving ? null : <ArrowRight className="size-4" aria-hidden />}
           </button>
         ) : (
           <button
@@ -349,8 +392,9 @@ export function WelcomeScreen() {
             onClick={() => void finish()}
             className="flex h-12 flex-[2] items-center justify-center gap-2 rounded-full bg-ink text-ap-btn font-bold text-white disabled:opacity-50"
           >
+            {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
             {saving ? t("saving") : t("finish")}
-            <ArrowRight className="size-4" aria-hidden />
+            {saving ? null : <ArrowRight className="size-4" aria-hidden />}
           </button>
         )}
       </div>

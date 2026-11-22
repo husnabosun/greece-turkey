@@ -53,6 +53,7 @@ import {
   type MarketRequest,
 } from "@/features/marketplace/use-farmer-market";
 import { ApButton } from "@/shared/components/brand";
+import { useSalesUnseen } from "@/features/marketplace/use-sales-seen";
 import { Link, useRouter } from "@/shared/i18n/navigation";
 import type { Field } from "@/shared/types/database";
 import { FIELD_DOTS } from "@/shared/theme/tokens";
@@ -216,6 +217,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   const { fields, loading, error } = useFarmerFields();
   const fieldIds = useMemo(() => fields.map((f) => f.id), [fields]);
   const {
+    userId,
     offers,
     requests,
     deliveries,
@@ -286,6 +288,9 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     .filter((d) => d.labResult !== "failed")
     .reduce((sum, d) => sum + deliveryPayableAmount(d.tons, d.pricePerKg, d.actualKg), 0);
   const closedDeliveries = deliveries.filter((d) => d.status === "cancelled");
+  // New delivery or a step change since Sales was last opened (updates in realtime).
+  const salesUnseen = useSalesUnseen(userId, deliveries, !marketLoading, tab === "sales");
+  const tabBadge: Partial<Record<Tab, number>> = { offers: incomingBids.length, sales: salesUnseen };
 
   const regionChips = useMemo(() => {
     // One chip per resolved region (different spellings of the same place used to give duplicate chips).
@@ -403,6 +408,14 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     } finally {
       setBusyOfferId(null);
     }
+  }
+
+  /** Jump to the Offers tab, at the bids of this listing. */
+  function openLotOffers(lotId: string) {
+    setTab("offers");
+    window.setTimeout(() => {
+      document.getElementById(`lot-offers-${lotId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
   }
 
   function openListing(field: Field, card: FieldMarketCard) {
@@ -536,9 +549,9 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
               )}
             >
               {t(id)}
-              {id === "offers" && incomingBids.length > 0 ? (
+              {(tabBadge[id] ?? 0) > 0 ? (
                 <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-risk px-1 text-[12px] leading-none font-bold text-white">
-                  {incomingBids.length}
+                  {tabBadge[id]}
                 </span>
               ) : null}
             </button>
@@ -604,8 +617,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
             <div className="mt-2 grid grid-cols-2 gap-2">
               {fields.map((field, i) => {
                 const card = fieldCards[field.id];
-                const listed = card?.listedLots ?? [];
-                const committed = card?.lotStatus === "sold" || card?.lotStatus === "reserved";
+                const lots = card?.lots ?? [];
                 return (
                   <div key={field.id} className="rounded-[18px] border border-line bg-card p-3">
                     <div className="flex items-start justify-between gap-1">
@@ -620,45 +632,57 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                         {card?.qualityScore ?? "—"}
                       </span>
                     </div>
-                    {committed ? (
-                      <p className="mt-2 text-ap-small font-bold text-ap-accent">
-                        {card?.lotStatus === "sold" ? t("fieldSold") : t("fieldInDelivery")}
-                      </p>
-                    ) : null}
-                    {listed.length > 0 && card ? (
-                      <>
-                        <p className="mt-2 text-ap-small font-bold text-good">{t("fieldListed")}</p>
-                        {listed.map((lot) => (
-                          <div key={lot.id}>
-                            <p className="mt-1 text-ap-card text-ink">
-                              {lot.pricePerKg != null ? formatEuroPerKg(lot.pricePerKg, locale) : "—"}
-                              {lot.tons != null ? ` · ${formatTons(lot.tons, locale)}` : ""}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openListing(field, {
-                                  ...card,
-                                  lotStatus: "listed",
-                                  listedLotId: lot.id,
-                                  listedPrice: lot.pricePerKg,
-                                  listedTons: lot.tons,
-                                })
-                              }
-                              className="inline-flex min-h-11 items-center text-ap-body font-bold text-ink"
-                            >
-                              {t("manageListing")}
-                              <ChevronRight className="size-3.5" />
-                            </button>
-                          </div>
-                        ))}
-                        {card.offerCount > 0 ? (
-                          <p className="mt-1 text-ap-small font-semibold text-good">
-                            {t("offersCount", { n: card.offerCount })}
-                          </p>
-                        ) : null}
-                      </>
-                    ) : !committed ? (
+                    {card && lots.length > 0 ? (
+                      <div className="mt-2 space-y-1.5">
+                        {lots.map((lot) => {
+                          const isListed = lot.status === "listed";
+                          return (
+                            <div key={lot.id} className="rounded-xl bg-soft/60 px-2.5 py-1.5">
+                              <p className={cn("text-ap-small font-bold", isListed ? "text-good" : "text-ap-accent")}>
+                                {lot.status === "listed"
+                                  ? t("fieldListed")
+                                  : lot.status === "sold"
+                                    ? t("fieldSold")
+                                    : t("fieldInDelivery")}
+                              </p>
+                              <p className="mt-0.5 text-ap-card text-ink">
+                                {lot.pricePerKg != null ? formatEuroPerKg(lot.pricePerKg, locale) : "—"}
+                                {lot.tons != null ? ` · ${formatTons(lot.tons, locale)}` : ""}
+                              </p>
+                              {isListed ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openListing(field, {
+                                        ...card,
+                                        lotStatus: "listed",
+                                        listedLotId: lot.id,
+                                        listedPrice: lot.pricePerKg,
+                                        listedTons: lot.tons,
+                                      })
+                                    }
+                                    className="flex min-h-11 items-center text-ap-body font-bold text-ink"
+                                  >
+                                    {t("manageListing")}
+                                    <ChevronRight className="size-3.5" />
+                                  </button>
+                                  {lot.offerCount > 0 ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openLotOffers(lot.id)}
+                                      className="flex min-h-11 items-center text-ap-small font-semibold text-good"
+                                    >
+                                      {t("offersCount", { n: lot.offerCount })}
+                                    </button>
+                                  ) : null}
+                                </>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
                       <>
                         <p className="mt-2 text-ap-small font-semibold text-muted-foreground">
                           {t("fieldNotListed")}
@@ -671,7 +695,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                           <ChevronRight className="size-3.5" />
                         </Link>
                       </>
-                    ) : null}
+                    )}
                   </div>
                 );
               })}
@@ -851,7 +875,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   labPendingHint={t("labPendingHint")}
                   labFailed={t("labFailedTitle")}
                   labFailedHint={t("labFailedHint")}
-                  weighedLabel={t("weighedKg")}
+                  weighedLabel={(kg, delta) => t("weighedKg", { kg, delta })}
                   notPayable={t("notPayable")}
                 />
               ))}
@@ -867,7 +891,11 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
           <p className="text-ap-small text-muted-foreground">{t("incomingBidsHint")}</p>
           {(
             groupOffersByLot(incomingBids, fieldCards).map((group) => (
-              <div key={group.lotId} className="mt-2 rounded-[18px] border border-line bg-card p-3">
+              <div
+                key={group.lotId}
+                id={`lot-offers-${group.lotId}`}
+                className="mt-2 scroll-mt-4 rounded-[18px] border border-line bg-card p-3"
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-ap-card text-ink">
@@ -993,7 +1021,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   labPendingHint={t("labPendingHint")}
                   labFailed={t("labFailedTitle")}
                   labFailedHint={t("labFailedHint")}
-                  weighedLabel={t("weighedKg")}
+                  weighedLabel={(kg, delta) => t("weighedKg", { kg, delta })}
                   notPayable={t("notPayable")}
                 />
               ))}
@@ -1273,7 +1301,7 @@ function ActiveDeliveryCard({
   labPendingHint: string;
   labFailed: string;
   labFailedHint: string;
-  weighedLabel: string;
+  weighedLabel: (kg: string, delta: string) => string;
   notPayable: string;
 }) {
   const when = formatDeliveryDay(delivery.scheduledFor, locale);
@@ -1307,14 +1335,12 @@ function ActiveDeliveryCard({
           <p className="mt-1 text-ap-small font-semibold text-ink">{meta}</p>
           {delivery.actualKg != null ? (
             <p className="mt-1 text-ap-small text-muted-foreground">
-              {weighedLabel
-                .replace("{kg}", new Intl.NumberFormat(locale).format(payableKg))
-                .replace(
-                  "{delta}",
-                  delta == null
-                    ? ""
-                    : `(${delta >= 0 ? "+" : "−"}${new Intl.NumberFormat(locale).format(Math.abs(delta))} kg)`,
-                )}
+              {weighedLabel(
+                new Intl.NumberFormat(locale).format(payableKg),
+                delta == null
+                  ? ""
+                  : `(${delta >= 0 ? "+" : "−"}${new Intl.NumberFormat(locale).format(Math.abs(delta))} kg)`,
+              ).trim()}
             </p>
           ) : null}
         </div>

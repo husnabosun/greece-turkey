@@ -49,6 +49,16 @@ export type MarketDelivery = {
   lotVariety: string | null;
 };
 
+/** One listing (lot) on a field, with its own status and its own open offers. */
+export type FieldLot = {
+  id: string;
+  status: "listed" | "reserved" | "sold";
+  pricePerKg: number | null;
+  tons: number | null;
+  /** Open mill bids on this lot (only counted while it is still listed). */
+  offerCount: number;
+};
+
 export type FieldMarketCard = {
   fieldId: string;
   qualityScore: number | null;
@@ -60,11 +70,15 @@ export type FieldMarketCard = {
   lotStatus: "listed" | "reserved" | "sold" | null;
   /** Every open listing on this field (a field can carry more than one lot). */
   listedLots: { id: string; pricePerKg: number | null; tons: number | null }[];
+  /** Every open lot of the field (listed, reserved, sold), each with its own offer count. */
+  lots: FieldLot[];
   /** Tons still unsold on this field across open listings (null when nothing listed). */
   soldOrReservedTons: number;
 };
 
 type State = {
+  /** Signed-in farmer, used for the realtime filter and per-user "seen" state. */
+  userId: string | null;
   offers: MarketOffer[];
   requests: MarketRequest[];
   deliveries: MarketDelivery[];
@@ -76,6 +90,7 @@ type State = {
 };
 
 const EMPTY: State = {
+  userId: null,
   offers: [],
   requests: [],
   deliveries: [],
@@ -94,7 +109,8 @@ export function useFarmerMarket(fieldIds: string[]) {
   const fieldKey = useMemo(() => [...fieldIds].sort().join("|"), [fieldIds]);
   const [state, setState] = useState<State>(EMPTY);
 
-  const reload = useCallback(async () => {
+  /** `silent` refreshes the data without flipping `loading` (used by realtime, so the screen does not flash). */
+  const reload = useCallback(async (opts?: { silent?: boolean }) => {
     const ids = fieldKey ? fieldKey.split("|").filter(Boolean) : [];
     const supabase = tryCreateBrowserClient();
     if (!supabase) {
@@ -102,7 +118,7 @@ export function useFarmerMarket(fieldIds: string[]) {
       return;
     }
 
-    setState((prev) => ({ ...prev, loading: true, error: null }));
+    if (!opts?.silent) setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const {
         data: { user },
@@ -239,11 +255,13 @@ export function useFarmerMarket(fieldIds: string[]) {
       }
 
       const offerCountByField = new Map<string, number>();
+      const offerCountByLot = new Map<string, number>();
       for (const o of offers) {
         // Only open mill bids on still-listed lots count on field cards.
         if (o.initiatedBy !== "processor") continue;
         if (o.status !== "pending") continue;
         if (o.lotStatus !== "listed") continue;
+        offerCountByLot.set(o.lotId, (offerCountByLot.get(o.lotId) ?? 0) + 1);
         if (!o.fieldId) continue;
         offerCountByField.set(o.fieldId, (offerCountByField.get(o.fieldId) ?? 0) + 1);
       }
@@ -255,9 +273,19 @@ export function useFarmerMarket(fieldIds: string[]) {
       const statusRank = { sold: 3, reserved: 2, listed: 1 } as const;
       const listedLotsByField = new Map<string, FieldMarketCard["listedLots"]>();
       const committedTonsByField = new Map<string, number>();
+      const lotsByField = new Map<string, FieldLot[]>();
       for (const lot of lotsRes.data ?? []) {
         if (!lot.field_id) continue;
         const st = lot.status as "listed" | "reserved" | "sold";
+        const all = lotsByField.get(lot.field_id) ?? [];
+        all.push({
+          id: lot.id,
+          status: st,
+          pricePerKg: lot.price_per_kg == null ? null : Number(lot.price_per_kg),
+          tons: lot.tons == null ? null : Number(lot.tons),
+          offerCount: offerCountByLot.get(lot.id) ?? 0,
+        });
+        lotsByField.set(lot.field_id, all);
         const prev = lotStatusByField.get(lot.field_id);
         if (!prev || statusRank[st] > statusRank[prev]) {
           lotStatusByField.set(lot.field_id, st);
@@ -294,11 +322,13 @@ export function useFarmerMarket(fieldIds: string[]) {
           offerCount: offerCountByField.get(id) ?? 0,
           lotStatus: lotStatusByField.get(id) ?? null,
           listedLots: listedLotsByField.get(id) ?? [],
+          lots: lotsByField.get(id) ?? [],
           soldOrReservedTons: committedTonsByField.get(id) ?? 0,
         };
       }
 
       setState({
+        userId: user.id,
         offers,
         requests,
         deliveries,
@@ -319,6 +349,33 @@ export function useFarmerMarket(fieldIds: string[]) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // Realtime: a mill bid, an accepted offer or a delivery step changes the numbers without a refresh.
+  const { userId } = state;
+  useEffect(() => {
+    if (!userId) return;
+    const supabase = tryCreateBrowserClient();
+    if (!supabase) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Several rows often change together (accept = offer + lot + delivery): reload once.
+    const refresh = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => void reload({ silent: true }), 400);
+    };
+    const channel = supabase.channel(`farmer-market-${userId}`);
+    for (const table of ["offers", "deliveries", "lots"]) {
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table, filter: `farmer_id=eq.${userId}` },
+        refresh,
+      );
+    }
+    channel.subscribe();
+    return () => {
+      clearTimeout(timer);
+      void supabase.removeChannel(channel);
+    };
+  }, [userId, reload]);
 
   return { ...state, reload };
 }

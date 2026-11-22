@@ -17,6 +17,10 @@ export type LogbookEntryView = {
   licence: string | null;
   dose: string | null;
   preHarvestDays: number | null;
+  /** Threat ids the product protects against (`targets`). Often empty. */
+  targets: string[];
+  /** Days the protection lasts (`protection_days`). */
+  protectionDays: number | null;
 };
 
 type State = {
@@ -48,7 +52,7 @@ export function useFarmerLogbook() {
       const { data, error } = await supabase
         .from("logbook_entries")
         .select(
-          "id, field_id, product_name, active_substances, dose, licence, eu_banned, eu_status, eu_hits, applied_at, pre_harvest_days, fields(name)",
+          "id, field_id, product_name, active_substances, dose, licence, eu_banned, eu_status, eu_hits, applied_at, pre_harvest_days, protection_days, targets, fields(name)",
         )
         .eq("farmer_id", user.id)
         .order("applied_at", { ascending: false });
@@ -74,6 +78,8 @@ export function useFarmerLogbook() {
           licence: row.licence,
           dose: row.dose,
           preHarvestDays: row.pre_harvest_days,
+          targets: row.targets ?? [],
+          protectionDays: row.protection_days,
         };
       });
 

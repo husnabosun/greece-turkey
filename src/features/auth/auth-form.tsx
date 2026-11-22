@@ -1,17 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Check, Eye, EyeOff, Factory, Loader2, Sprout } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { homePathForRole } from "@/core/auth/routing";
 import type { UserRole } from "@/core/config/constants";
-import { Button } from "@/shared/components/ui/button";
+import { ApButton, ApCard } from "@/shared/components/brand";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useRouter } from "@/shared/i18n/navigation";
+import { cn } from "@/shared/lib/utils";
 import { toast } from "sonner";
 
 async function resolveHomePath(
@@ -170,117 +169,150 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
     router.replace(home);
   }
 
+  const inputClass = "h-11 rounded-xl px-3";
+
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>{mode === "login" ? t("loginTitle") : t("registerTitle")}</CardTitle>
-        <CardDescription>{mode === "login" ? t("loginSubtitle") : t("registerSubtitle")}</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <ApCard className="w-full max-w-md p-5">
+      <h1 className="text-[20px] font-extrabold tracking-tight text-ink">{mode === "login" ? t("loginTitle") : t("registerTitle")}</h1>
+      <p className="mt-0.5 text-ap-small text-muted-foreground">
+        {mode === "login" ? t("loginSubtitle") : t("registerSubtitle")}
+      </p>
+
+      {mode === "register" ? (
+        <div role="radiogroup" aria-label={t("registerTitle")} className="mt-4 grid grid-cols-2 gap-2">
+          {(
+            [
+              { id: "farmer", label: t("roleFarmer"), Icon: Sprout },
+              { id: "processor", label: t("roleProcessor"), Icon: Factory },
+            ] as const
+          ).map(({ id, label, Icon }) => {
+            const on = role === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => setRole(id)}
+                className={cn(
+                  "relative flex min-h-[76px] flex-col items-center justify-center gap-1.5 rounded-2xl border px-2 py-3 text-center transition-colors",
+                  on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink hover:bg-soft",
+                )}
+              >
+                {on ? (
+                  <span className="absolute top-2 right-2 flex size-5 items-center justify-center rounded-full bg-white text-ink">
+                    <Check className="size-3" strokeWidth={3} aria-hidden />
+                  </span>
+                ) : null}
+                <Icon className="size-6" aria-hidden />
+                <span className="text-ap-body font-bold">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <form
+        onSubmit={mode === "login" ? onLogin : onRegister}
+        className="mt-4 space-y-3"
+        autoComplete="on"
+        noValidate
+      >
         {mode === "register" ? (
-          <Tabs value={role} onValueChange={(v) => setRole(v as UserRole)} className="mb-4">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="farmer">{t("roleFarmer")}</TabsTrigger>
-              <TabsTrigger value="processor">{t("roleProcessor")}</TabsTrigger>
-            </TabsList>
-            <TabsContent value="farmer" />
-            <TabsContent value="processor" />
-          </Tabs>
+          <>
+            <div className="space-y-1.5">
+              <Label htmlFor="name">{t("displayName")}</Label>
+              <Input
+                id="name"
+                name="display_name"
+                autoComplete="name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+            {role === "processor" ? (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="company">{t("companyName")}</Label>
+                  <Input
+                    id="company"
+                    name="company_name"
+                    autoComplete="organization"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    required
+                    className={inputClass}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="invite">{t("inviteCode")}</Label>
+                  <Input
+                    id="invite"
+                    name="invite_code"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value)}
+                    autoComplete="off"
+                    required
+                    className={inputClass}
+                  />
+                  <p className="text-ap-small text-muted-foreground">{t("inviteHint")}</p>
+                </div>
+              </>
+            ) : null}
+          </>
         ) : null}
 
-        <form
-          onSubmit={mode === "login" ? onLogin : onRegister}
-          className="space-y-3"
-          autoComplete="on"
-          noValidate
-        >
-          {mode === "register" ? (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="name">{t("displayName")}</Label>
-                <Input
-                  id="name"
-                  name="display_name"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                />
-              </div>
-              {role === "processor" ? (
-                <>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="company">{t("companyName")}</Label>
-                    <Input
-                      id="company"
-                      name="company_name"
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="invite">{t("inviteCode")}</Label>
-                    <Input
-                      id="invite"
-                      name="invite_code"
-                      value={inviteCode}
-                      onChange={(e) => setInviteCode(e.target.value)}
-                      autoComplete="off"
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">{t("inviteHint")}</p>
-                  </div>
-                </>
-              ) : null}
-            </>
-          ) : null}
-
-          <div className="space-y-1.5">
-            <Label htmlFor="email">{t("email")}</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="email">{t("email")}</Label>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="password">{t("password")}</Label>
+          <div className="relative">
             <Input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={cn(inputClass, "pr-12")}
             />
+            <button
+              type="button"
+              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-muted-foreground hover:text-foreground"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? t("hidePassword") : t("showPassword")}
+              aria-pressed={showPassword}
+            >
+              {showPassword ? <EyeOff className="size-[18px]" aria-hidden /> : <Eye className="size-[18px]" aria-hidden />}
+            </button>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="password">{t("password")}</Label>
-            <div className="relative">
-              <Input
-                id="password"
-                name="password"
-                type={showPassword ? "text" : "password"}
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="pr-10"
-              />
-              <button
-                type="button"
-                className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? t("hidePassword") : t("showPassword")}
-              >
-                {showPassword ? (
-                  <EyeOff className="h-4 w-4" aria-hidden />
-                ) : (
-                  <Eye className="h-4 w-4" aria-hidden />
-                )}
-              </button>
-            </div>
-          </div>
+        </div>
 
-
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? t("loading") : mode === "login" ? t("loginCta") : t("registerCta")}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+        <ApButton
+          type="submit"
+          variant="dark"
+          className="mt-1 w-full"
+          disabled={loading}
+          icon={loading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+          label={loading ? t("loading") : mode === "login" ? t("loginCta") : t("registerCta")}
+        />
+      </form>
+    </ApCard>
   );
 }

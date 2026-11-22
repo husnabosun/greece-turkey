@@ -134,7 +134,10 @@
     "saving": "Saving…",
     "done": "Done — let's go to fields.",
     "needLogin": "Sign-in required.",
-    "needSupabase": "Database connection missing."
+    "needSupabase": "Database connection missing.",
+    "lang_el": "Ελληνικά",
+    "lang_tr": "Türkçe",
+    "lang_en": "English"
   },
   "farmerNotifications": {
     "title": "Notifications",
@@ -509,7 +512,53 @@
     "imageTooSmall": "The photo is too small. Take a closer, sharper photo.",
     "imageBadAspect": "The photo is a panorama or strip. Take a normal photo of the leaf.",
     "unavailableNow": "Analysis isn't available right now. Try again in a few minutes. Nothing was saved.",
-    "rateLimited": "Too many scans in a short time. Wait a minute."
+    "rateLimited": "Too many scans in a short time. Wait a minute.",
+    "cameraEmpty": "Tap to take a photo or pick one from your gallery",
+    "notice_unavailable_title": "AI is not available right now",
+    "notice_rateLimited_title": "Too many scans at once",
+    "notice_notLeaf_title": "No olive leaf found",
+    "notice_lowConfidence_title": "The photo is not clear enough",
+    "retry": "Try again",
+    "newPhoto": "New photo",
+    "needsRecheck": "Needs recheck",
+    "emptyScansTitle": "No scans yet",
+    "emptyScansHint": "Take a photo of a leaf to see if it is healthy.",
+    "emptyDueTitle": "All checked",
+    "showAllScans": "Show all scans",
+    "notSaved": "Not saved",
+    "taskShort": "Task",
+    "listSummary": "{n, plural, one {# scan} other {# scans}}{due, plural, =0 {} other { · # need a recheck}}",
+    "anthracnose": "Anthracnose",
+    "oliveMoth": "Olive moth",
+    "mechanicalDamage": "Hail or mechanical damage",
+    "sunscald": "Sunscald",
+    "droughtShrivel": "Drought shrivel",
+    "sootyMould": "Sooty mould or scale",
+    "pickFallen": "Pick up fallen olives",
+    "pickFallenSub": "Under the trees",
+    "removeAffected": "Remove affected fruit",
+    "removeAffectedSub": "Do not leave it on the ground",
+    "checkSpread": "Check how many are affected",
+    "checkSpreadSub": "Look at a few trees",
+    "checkWater": "Check the water",
+    "checkWaterSub": "Soil moisture and irrigation",
+    "checkBranches": "Look at twigs and leaves",
+    "checkBranchesSub": "Sticky or black coating",
+    "askAgronomistSub": "Before any treatment",
+    "notice_notFruit_title": "No olive fruit found",
+    "notFruit": "That doesn't look like an olive. Take a close photo of one olive on the tree.",
+    "notice_notTrap_title": "No trap found",
+    "notTrap": "That doesn't look like a yellow sticky trap. Lay the trap flat and photograph the whole card.",
+    "notice_wrongType_title": "Wrong scan type",
+    "wrongType": "This photo doesn't match the scan type you chose. Pick the right type above or take a new photo.",
+    "notice_blurry_title": "The photo is blurry",
+    "blurry": "Hold the phone steady and take a sharp, close photo.",
+    "notice_tooDark_title": "The photo is too dark",
+    "tooDark": "Take the photo in daylight, without a shadow on it.",
+    "notice_unsure_title": "I'm not sure",
+    "unsure": "I can't tell from this photo. Take a closer photo, or ask an agronomist.",
+    "notice_catchNotVisible_title": "Show the catch inside the trap",
+    "catchNotVisible": "I can only see the outside of the trap. Photograph the catch inside: look through the clear top, close to the liquid, so the flies can be counted."
   },
   "farmerLogbook": {
     "title": "Logbook",
@@ -574,7 +623,14 @@
     "bannedWarn": "{substance} is not approved in the EU. Buyers will see it.",
     "needProduct": "Enter a product or substance.",
     "noField": "No field",
-    "unknownPill": "Unknown"
+    "unknownPill": "Unknown",
+    "harvestNow": "From today",
+    "labelUnavailable": "AI is not available right now. Type the product by hand.",
+    "labelNotLabel": "That doesn't look like a product label. Take a photo of the label.",
+    "labelCutOff": "Part of the label is cut off. Take the photo again with the whole label in view.",
+    "labelBlurry": "The label is blurry. Hold the phone steady and try again.",
+    "labelTooDark": "The label is too dark to read. Try again in daylight.",
+    "labelUnclear": "I could not read the label with confidence. Take a closer, sharper photo."
   },
   "farmerQuality": {
     "title": "Quality score",
@@ -1275,7 +1331,8 @@
     "topAlert": "Top alert",
     "emptyTab": "Nothing in this category.",
     "aiTitle": "AI advice",
-    "aiBody": "With scans and sprays, AI will tailor advice per field."
+    "aiBody": "With scans and sprays, AI will tailor advice per field.",
+    "noLocation": "This field has no map location, so we cannot show weather. Add a location in Fields."
   },
   "farmerTasks": {
     "title": "This week",
@@ -1322,6 +1379,7 @@
     "needTitle": "Enter a title.",
     "needLogin": "Sign in required.",
     "needSupabase": "Database not configured.",
-    "actionFailed": "Could not update the task."
+    "actionFailed": "Could not update the task.",
+    "toDo": "To do"
   }
 }
