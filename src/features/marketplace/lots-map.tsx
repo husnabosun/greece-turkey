@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import mapboxgl from "mapbox-gl";
 import { ChevronLeft, ChevronRight, Crosshair, Minus, Plus, X } from "lucide-react";
@@ -67,6 +68,7 @@ export function LotsMap({
   popup = true,
   height,
 }: Props) {
+  const tMap = useTranslations("processor");
   const shellRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -280,7 +282,7 @@ export function LotsMap({
                 <button
                   type="button"
                   onClick={() => onSelectRef.current(null)}
-                  aria-label="Επαναφορά χάρτη"
+                  aria-label={tMap("mapReset")}
                   className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-card text-muted-foreground hover:bg-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
                 >
                   <X className="size-3.5" strokeWidth={2.5} />
@@ -293,7 +295,7 @@ export function LotsMap({
                   <button
                     type="button"
                     onClick={() => onSelectRef.current(null)}
-                    aria-label="Επαναφορά χάρτη"
+                    aria-label={tMap("mapReset")}
                     className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-card text-muted-foreground hover:bg-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
                   >
                     <X className="size-3.5" strokeWidth={2.5} />
@@ -336,7 +338,7 @@ export function LotsMap({
             type="button"
             onClick={togglePreviewCollapsed}
             aria-expanded={!previewCollapsed}
-            aria-label={previewCollapsed ? "Εμφάνιση υπομνήματος" : "Απόκρυψη υπομνήματος"}
+            aria-label={previewCollapsed ? tMap("legendShow") : tMap("legendHide")}
             className="flex w-10 shrink-0 items-center justify-center self-stretch border-l border-line bg-card/80 text-ink hover:bg-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink/30"
           >
             {previewCollapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}

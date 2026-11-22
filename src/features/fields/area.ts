@@ -43,3 +43,12 @@ export function formatAreaValue(ha: number, locale: string): { value: string; un
   }
   return { value, unit };
 }
+
+/** Short unit symbol shown next to the number (EN: ha, TR: dönüm, EL: στρ.). */
+export const AREA_UNIT_LABEL: Record<AreaUnit, string> = { ha: "ha", donum: "dönüm", stremma: "στρ." };
+
+/** "24.7 ha" / "247 dönüm" / "247 στρ." — the whole label in the locale's own unit and number format. */
+export function formatArea(ha: number, locale: string): string {
+  const { value, unit } = formatAreaValue(ha, locale);
+  return `${value} ${AREA_UNIT_LABEL[unit]}`;
+}

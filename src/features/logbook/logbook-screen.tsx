@@ -14,7 +14,7 @@ import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { cn } from "@/shared/lib/utils";
 import { FIELD_DOTS } from "@/shared/theme/tokens";
-import { useErrorMessage } from "@/shared/lib/error-message";
+import { errorCode, useErrorMessage } from "@/shared/lib/error-message";
 
 type Entry = LogbookEntryView;
 
@@ -154,7 +154,7 @@ export function LogbookScreen({ startAdd = false }: { startAdd?: boolean }) {
           {issues.length > 0 ? (
             <p className="mt-0.5 inline-flex items-center gap-1 text-ap-small font-bold text-risk">
               <TriangleAlert className="size-3.5 shrink-0" aria-hidden />
-              {t(issues.length === 1 ? "euIssue" : "euIssues", {
+              {t("euIssues", {
                 n: issues.length,
                 date: formatDay(issues[0].at, locale),
               })}
@@ -446,6 +446,8 @@ function AddSpraySheet({
   }) => void;
 }) {
   const t = useTranslations("farmerLogbook");
+  const errMsg = useErrorMessage();
+  const locale = useLocale();
   const [product, setProduct] = useState("");
   const [substances, setSubstances] = useState("");
   const [licence, setLicence] = useState<string | null>(null);
@@ -529,7 +531,8 @@ function AddSpraySheet({
       setLabelSource("gemini");
       toast.success(t("labelOk", { source: "gemini" }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("labelFail"));
+      const raw = err instanceof Error ? err.message : null;
+      toast.error(errorCode(raw) === "actionFailed" ? t("labelFail") : errMsg(raw));
     } finally {
       setLabelLoading(false);
     }
@@ -643,7 +646,7 @@ function AddSpraySheet({
             id="spray-dose"
             value={dose}
             onChange={(e) => setDose(e.target.value)}
-            placeholder="1,5 L/ha"
+            placeholder={t("dosePlaceholder", { dose: (1.5).toLocaleString(locale) })}
             className="h-11 rounded-xl px-3"
           />
         </div>

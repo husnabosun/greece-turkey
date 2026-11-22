@@ -1,4 +1,7 @@
 import type { AdviceResult, FruitResult, LabelResult, LeafResult, TrapResult } from "./schemas";
+import type { LANGUAGES } from "./schemas";
+
+type Language = (typeof LANGUAGES)[number];
 
 export const DEMO_LABEL: LabelResult = {
   photo: "ok",
@@ -38,10 +41,25 @@ export const DEMO_TRAP: TrapResult = {
   summary: "About 8 olive flies are stuck on the trap.",
 };
 
-export function demoAdvice(fieldName: string): AdviceResult {
-  return {
+const DEMO_ADVICE: Record<Language, (fieldName: string) => AdviceResult> = {
+  en: (fieldName) => ({
     summary: `${fieldName}: medium olive fly pressure this week. Check traps and fallen fruit.`,
     actions: ["Check yellow sticky traps", "Pick up fallen olives under the trees", "Ask a licensed agronomist if pressure rises"],
     whyNow: "Warm nights and recent trap activity raise the short-term risk.",
-  };
+  }),
+  el: (fieldName) => ({
+    summary: `${fieldName}: μέτρια πίεση δάκου αυτή την εβδομάδα. Έλεγξε τις παγίδες και τους πεσμένους καρπούς.`,
+    actions: ["Έλεγξε τις κίτρινες κολλητικές παγίδες", "Μάζεψε τις ελιές που έπεσαν κάτω από τα δέντρα", "Ρώτησε αδειοδοτημένο γεωπόνο αν αυξηθεί η πίεση"],
+    whyNow: "Οι ζεστές νύχτες και η πρόσφατη δραστηριότητα στις παγίδες αυξάνουν τον βραχυπρόθεσμο κίνδυνο.",
+  }),
+  tr: (fieldName) => ({
+    summary: `${fieldName}: bu hafta zeytin sineği baskısı orta düzeyde. Tuzakları ve yere düşen meyveleri kontrol et.`,
+    actions: ["Sarı yapışkan tuzakları kontrol et", "Ağaçların altındaki düşmüş zeytinleri topla", "Baskı artarsa lisanslı bir ziraat mühendisine danış"],
+    whyNow: "Sıcak geceler ve son tuzak hareketliliği kısa vadeli riski artırıyor.",
+  }),
+};
+
+/** Safe fallback when the AI is unavailable, in the user's language. */
+export function demoAdvice(fieldName: string, language: Language = "en"): AdviceResult {
+  return DEMO_ADVICE[language](fieldName);
 }

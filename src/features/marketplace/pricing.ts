@@ -7,11 +7,22 @@ const fromCents = (c: number) => c / 100;
 export const roundPrice = (n: number) => fromCents(Math.round(toCents(n) / 5) * 5);
 export const roundTotal = (n: number) => Math.round(n / 50) * 50;
 
-function localeTag(locale?: string) {
-  if (!locale) return "el-GR";
-  if (locale.startsWith("el")) return "el-GR";
-  if (locale.startsWith("tr")) return "tr-TR";
+/** BCP-47 tag used for Intl formatting. English (and any unknown locale) uses en-GB: day-first, € after a thin sign. */
+export function intlTag(locale?: string) {
+  if (locale?.startsWith("el")) return "el-GR";
+  if (locale?.startsWith("tr")) return "tr-TR";
   return "en-GB";
+}
+
+const localeTag = intlTag;
+
+/** A number for a text input in the user's decimal style ("1,55" in el/tr, "1.55" in en), never grouped. */
+export function formatDecimalInput(n: number, locale: string, digits = 2) {
+  return new Intl.NumberFormat(intlTag(locale), {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+    useGrouping: false,
+  }).format(n);
 }
 
 function asDate(d: string | Date): Date {

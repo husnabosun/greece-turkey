@@ -17,7 +17,7 @@ import { ApCard } from "@/shared/components/brand/ap-card";
 import { Pill } from "@/shared/components/brand/pill";
 import { StatusSteps } from "@/shared/components/brand/status-steps";
 import { cn } from "@/shared/lib/utils";
-import { euroPrice, euroTotal, formatTons, parseLocaleNumber, saleTotal } from "@/features/marketplace/pricing";
+import { euroPrice, euroTotal, formatTons, intlTag, parseLocaleNumber, saleTotal } from "@/features/marketplace/pricing";
 import {
   canAdvanceDelivery,
   deliveryStepIndex,
@@ -62,11 +62,7 @@ function escapeHtml(raw: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function localeTag(locale: string): string {
-  if (locale.startsWith("el")) return "el-GR";
-  if (locale.startsWith("tr")) return "tr-TR";
-  return "en-GB";
-}
+const localeTag = intlTag;
 
 function capitalize(str: string, tag: string): string {
   if (!str) return str;
@@ -345,7 +341,7 @@ export function ProcessorDeliveriesScreen() {
 
       {error === "needSupabase" || error === "needLogin" ? (
         <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">
-          {t(error)}
+          {errMsg(error)}
         </ApCard>
       ) : null}
 

@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import { MapPin, Navigation } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
-import { formatStremmata } from "@/features/fields/area";
+import { formatArea } from "@/features/fields/area";
 import {
   DRAW_LOCATE_ZOOM,
   initialMapView,
@@ -41,6 +41,7 @@ export function FieldMapEditor({
   fullBleed,
 }: Props) {
   const t = useTranslations("farmerFields");
+  const locale = useLocale();
   const shellRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -207,10 +208,7 @@ export function FieldMapEditor({
           <MapPin className="size-3.5 shrink-0 text-ink" aria-hidden />
           <span className="truncate text-ap-small font-bold text-ink">
             {areaHa != null
-              ? t("areaWithHa", {
-                  label: placeLabel ?? t("drawHintShort"),
-                  n: formatStremmata(areaHa),
-                })
+              ? `${placeLabel ?? t("drawHintShort")} · ${formatArea(areaHa, locale)}`
               : (placeLabel ?? t("drawHintShort"))}
           </span>
         </div>

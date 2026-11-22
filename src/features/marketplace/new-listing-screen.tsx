@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { ArrowRight, Check, ChevronLeft, Trees } from "lucide-react";
-import { formatStremmata } from "@/features/fields/area";
+import { formatArea } from "@/features/fields/area";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { varietyAgronomyContext, varietyLabelFromStored } from "@/features/fields/olive-varieties";
 import { DayChipPicker } from "@/features/marketplace/processor-kit";
@@ -246,7 +246,7 @@ export function NewListingScreen({
                       ) : null}
                       {f.area_ha != null ? (
                         <span className="rounded-full bg-white/80 px-2 py-0.5 text-ap-pill font-bold text-ink">
-                          {t("haPill", { n: formatStremmata(Number(f.area_ha), 1, locale) })}
+                          {formatArea(Number(f.area_ha), locale)}
                         </span>
                       ) : null}
                     </span>

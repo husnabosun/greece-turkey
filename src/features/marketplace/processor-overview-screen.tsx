@@ -105,10 +105,10 @@ function overviewGreeting(locale: string, company: string, now: Date | null) {
   return { hello, company, date };
 }
 
-function titleCaseName(name: string) {
+function titleCaseName(name: string, locale: string) {
   return name
-    .toLocaleLowerCase("el-GR")
-    .replace(/(^|[\s/-])\S/g, (ch) => ch.toLocaleUpperCase("el-GR"));
+    .toLocaleLowerCase(locale)
+    .replace(/(^|[\s/-])\S/g, (ch) => ch.toLocaleUpperCase(locale));
 }
 
 function SupplyWeekBars({
@@ -358,7 +358,7 @@ export function ProcessorOverviewScreen() {
       </div>
 
       {error === "needSupabase" || error === "needLogin" ? (
-        <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{t(error)}</ApCard>
+        <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{errMsg(error)}</ApCard>
       ) : null}
 
       <div className="grid grid-cols-2 gap-3 min-[900px]:flex min-[900px]:flex-wrap">
@@ -454,7 +454,7 @@ export function ProcessorOverviewScreen() {
                           : t("advance");
                   const farmer =
                     d.farmerName
-                      ? titleCaseName(d.farmerName)
+                      ? titleCaseName(d.farmerName, locale)
                       : d.lotRegion
                         ? regionLabel(d.lotRegion, locale)
                         : t("anonymousGrove");
@@ -504,7 +504,7 @@ export function ProcessorOverviewScreen() {
                 <div>
                   <p className="text-[14px] font-extrabold text-ink">
                     {d.farmerName
-                      ? titleCaseName(d.farmerName)
+                      ? titleCaseName(d.farmerName, locale)
                       : d.lotRegion
                         ? regionLabel(d.lotRegion, locale)
                         : t("anonymousGrove")}
@@ -700,7 +700,7 @@ export function ProcessorOverviewScreen() {
                 const when = parseIsoDate(d.scheduledFor);
                 const farmer =
                   d.farmerName
-                    ? titleCaseName(d.farmerName)
+                    ? titleCaseName(d.farmerName, locale)
                     : d.lotRegion
                       ? regionLabel(d.lotRegion, locale)
                       : t("anonymousGrove");

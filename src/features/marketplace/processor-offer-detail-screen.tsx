@@ -198,7 +198,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
   if (error === "needSupabase" || error === "needLogin") {
     return (
       <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6">
-        <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{t(error)}</ApCard>
+        <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{errMsg(error)}</ApCard>
       </div>
     );
   }
