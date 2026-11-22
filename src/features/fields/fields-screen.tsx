@@ -344,7 +344,7 @@ export function FieldsScreen() {
               className="flex items-start gap-2 rounded-xl bg-soft px-3 py-2 text-ap-small text-muted-foreground transition-colors hover:bg-soft/70"
             >
               <BadgeCheck className="mt-0.5 size-4 shrink-0 text-good" aria-hidden />
-              <span>{t("noScoreHow")}</span>
+              <span>{t("noScoreHow", { cta: t("scoreCta") })}</span>
             </Link>
           ) : null}
         </div>

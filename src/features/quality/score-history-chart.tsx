@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { ApCard, Pill } from "@/shared/components/brand";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { colors } from "@/shared/theme/tokens";
-import { HISTORY_MONTHS, scoreAxis } from "@/features/quality/score-history";
+import { HISTORY_MONTHS, monthSinceLabel, scoreAxis } from "@/features/quality/score-history";
 import { useScoreHistory } from "@/features/quality/use-score-history";
 import { cn } from "@/shared/lib/utils";
 
@@ -62,7 +62,7 @@ export function ScoreHistoryChart({ fieldId, refreshKey, className }: Props) {
   const tipY = Math.max(2, y(selPoint.score) - 24);
 
   const change = history.change;
-  const sinceLabel = monthLabel(history.since!);
+  const sinceLabel = monthSinceLabel(history.since!, locale);
   const tone = change > 0 ? "good" : change < 0 ? "risk" : "neutral";
   const summary =
     change > 0

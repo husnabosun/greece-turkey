@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildScoreHistory, historyWindowStart, scoreAxis } from "@/features/quality/score-history";
+import { buildScoreHistory, historyWindowStart, monthSinceLabel, scoreAxis } from "@/features/quality/score-history";
 
 const NOW = new Date(2026, 10, 22, 12); // 22 Nov 2026 (local); window = Jun..Nov
 const at = (y: number, m: number, d = 15) => new Date(y, m, d, 10).toISOString();
@@ -118,5 +118,19 @@ describe("scoreAxis", () => {
 
   it("falls back to 0-100 without data", () => {
     expect(scoreAxis([])).toEqual({ lo: 0, hi: 100, ticks: [0, 50, 100] });
+  });
+});
+
+describe("monthSinceLabel", () => {
+  it("uses the full Turkish month name with the right ablative suffix", () => {
+    const expected = [
+      "Ocak'tan", "Şubat'tan", "Mart'tan", "Nisan'dan", "Mayıs'tan", "Haziran'dan",
+      "Temmuz'dan", "Ağustos'tan", "Eylül'den", "Ekim'den", "Kasım'dan", "Aralık'tan",
+    ];
+    expected.forEach((label, i) => expect(monthSinceLabel(new Date(2026, i, 1), "tr")).toBe(label));
+  });
+
+  it("keeps a short month name for other languages", () => {
+    expect(monthSinceLabel(new Date(2026, 5, 1), "en")).toBe("Jun");
   });
 });

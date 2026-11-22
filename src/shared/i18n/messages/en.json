@@ -305,7 +305,7 @@
     "unit_donum": "dönüm",
     "unit_stremma": "stremma",
     "noScoreYet": "No score yet",
-    "noScoreHow": "Open Certify & sell, add your crop details and save. Your quality score then appears here.",
+    "noScoreHow": "Open “{cta}”, add your crop details and save. Your quality score then appears here.",
     "allTreesHealthy": "All trees look healthy",
     "fieldSummary": "Field summary",
     "lastScan": "Last scan",

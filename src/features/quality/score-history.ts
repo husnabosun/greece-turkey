@@ -88,3 +88,28 @@ export function scoreAxis(scores: number[]): { lo: number; hi: number; ticks: nu
   for (let v = adjLo; v <= hi; v += 10) ticks.push(v);
   return { lo: adjLo, hi, ticks };
 }
+
+// Turkish "from <month>" needs a case suffix that depends on the month name's last vowel / consonant.
+const TR_MONTHS_ABLATIVE = [
+  "Ocak'tan",
+  "Şubat'tan",
+  "Mart'tan",
+  "Nisan'dan",
+  "Mayıs'tan",
+  "Haziran'dan",
+  "Temmuz'dan",
+  "Ağustos'tan",
+  "Eylül'den",
+  "Ekim'den",
+  "Kasım'dan",
+  "Aralık'tan",
+];
+
+/**
+ * Month name for the "since <month>" line. Turkish uses the full name in the ablative ("Haziran'dan bu yana");
+ * other languages use the short name from Intl.
+ */
+export function monthSinceLabel(month: Date, locale: string): string {
+  if (locale.startsWith("tr")) return TR_MONTHS_ABLATIVE[month.getMonth()]!;
+  return month.toLocaleDateString(locale, { month: "short" });
+}
