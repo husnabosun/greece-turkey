@@ -1,8 +1,14 @@
-﻿-- Oil as a first-class marketplace product (separate from lots.use_type).
+-- Oil as a first-class marketplace product (separate from lots.use_type).
 -- use_type remains "olives meant for oil" vs "table olives".
 -- Quantity stays in `tons` for both products (oil UI shows kg = tons * 1000).
 
-create type public.product_kind as enum ('oil', 'olives');
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'product_kind' and typnamespace = 'public'::regnamespace) then
+    create type public.product_kind as enum ('oil', 'olives');
+  end if;
+end;
+$$;
 
 -- ---------- lots ----------
 alter table public.lots
@@ -51,6 +57,10 @@ alter table public.lots add constraint lots_price_range_chk check (
   or (product = 'olives' and price_per_kg >= 0.05 and price_per_kg <= 20)
 );
 
+-- Offers have no product column: allow oil-sized quantities (from 50 kg); the UI still enforces 0.1 t for olives.
+alter table public.offers drop constraint if exists offers_tons_range_chk;
+alter table public.offers add constraint offers_tons_range_chk check (tons >= 0.05 and tons <= 500);
+
 alter table public.offers drop constraint if exists offers_price_range_chk;
 alter table public.offers add constraint offers_price_range_chk check (
   price_per_kg >= 0.05 and price_per_kg <= 30
@@ -69,6 +79,12 @@ alter table public.buy_requests add constraint buy_requests_oil_category_chk
 alter table public.buy_requests drop constraint if exists buy_requests_max_acidity_chk;
 alter table public.buy_requests add constraint buy_requests_max_acidity_chk
   check (max_acidity is null or (max_acidity >= 0 and max_acidity <= 10));
+
+-- Oil requests can start at 50 kg (UI: oilRequestKg.min).
+alter table public.buy_requests drop constraint if exists buy_requests_tons_range_chk;
+alter table public.buy_requests add constraint buy_requests_tons_range_chk check (
+  tons <= 2000 and (tons >= 0.1 or (product = 'oil' and tons >= 0.05))
+);
 
 create index if not exists buy_requests_product_active_idx
   on public.buy_requests (product, active)
@@ -192,3 +208,5 @@ begin
   return v_new_id;
 end;
 $$;
+
+notify pgrst, 'reload schema';

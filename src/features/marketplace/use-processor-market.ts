@@ -565,7 +565,7 @@ export async function counterIncomingOffer(
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
-  if (!Number.isFinite(newPrice) || newPrice < 0.05 || newPrice > 20) {
+  if (!Number.isFinite(newPrice) || newPrice < 0.05 || newPrice > 30) {
     return { ok: false, error: "invalidPrice" };
   }
   // Atomic on the server: one counter per offer, only the receiving side may counter.

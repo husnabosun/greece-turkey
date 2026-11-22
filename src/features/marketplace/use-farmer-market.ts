@@ -496,7 +496,7 @@ export async function counterOffer(
   if (offer.status !== "pending" || offer.lotStatus !== "listed") {
     return { ok: false, error: "offerNotPending" };
   }
-  if (!Number.isFinite(newPrice) || newPrice < 0.05 || newPrice > 20) {
+  if (!Number.isFinite(newPrice) || newPrice < 0.05 || newPrice > 30) {
     return { ok: false, error: "invalidPrice" };
   }
   // Atomic on the server: marks the bid countered and creates exactly one counter offer.
