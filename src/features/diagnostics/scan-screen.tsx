@@ -22,6 +22,7 @@ import {
   Tag,
   TriangleAlert,
   Scissors,
+  ShieldAlert,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -41,13 +42,37 @@ import { FIELD_DOTS } from "@/shared/theme/tokens";
 type View = "list" | "camera" | "result";
 
 /** Inline guidance shown on the review screen when the AI could not give a result. */
-type Notice = "unavailable" | "rateLimited" | "notLeaf" | "lowConfidence";
+type Notice =
+  | "unavailable"
+  | "rateLimited"
+  | "notLeaf"
+  | "lowConfidence"
+  | "notFruit"
+  | "notTrap"
+  | "wrongType"
+  | "blurry"
+  | "tooDark"
+  | "unsure";
 const NOTICE_RETRY: Record<Notice, boolean> = {
   unavailable: true,
   rateLimited: true,
   notLeaf: false,
   lowConfidence: false,
+  notFruit: false,
+  notTrap: false,
+  wrongType: false,
+  blurry: false,
+  tooDark: false,
+  unsure: false,
 };
+
+/** The message for a photo the server rejected (fruit and trap scans). */
+function retakeNotice(mode: string, reason: unknown): Notice {
+  if (reason === "wrong_scan_type") return "wrongType";
+  if (reason === "blurry") return "blurry";
+  if (reason === "too_dark") return "tooDark";
+  return mode === "trap" ? "notTrap" : "notFruit";
+}
 
 type TFn = (key: string, values?: Record<string, string | number>) => string;
 
@@ -55,7 +80,22 @@ const LATIN = {
   peacock: "Spilocaea oleaginea",
   mite: "Aculus olearius",
   fly: "Bactrocera oleae",
+  anthracnose: "Colletotrichum spp.",
+  moth: "Prays oleae",
 } as const;
+
+type FruitView = { titleKey: NonNullable<Presented["titleKey"]>; tone: PillTone; pillKey: PillKey; action: ActionKind; latin?: string };
+/** How each fruit diagnosis of the server is shown. Keys are the values of `FRUIT_DIAGNOSES` (schemas.ts). */
+const FRUIT_VIEW: Record<string, FruitView> = {
+  "olive fly": { titleKey: "oliveFly", tone: "risk", pillKey: "highRisk", action: "fruitFly", latin: LATIN.fly },
+  anthracnose: { titleKey: "anthracnose", tone: "risk", pillKey: "highRisk", action: "fruitFungus", latin: LATIN.anthracnose },
+  "olive moth": { titleKey: "oliveMoth", tone: "warn", pillKey: "watch", action: "fruitMoth", latin: LATIN.moth },
+  "hail or mechanical damage": { titleKey: "mechanicalDamage", tone: "warn", pillKey: "watch", action: "fruitDamage" },
+  sunscald: { titleKey: "sunscald", tone: "warn", pillKey: "watch", action: "fruitDamage" },
+  "drought shrivel": { titleKey: "droughtShrivel", tone: "warn", pillKey: "watch", action: "fruitDry" },
+  "sooty mould or scale": { titleKey: "sootyMould", tone: "warn", pillKey: "watch", action: "fruitScale" },
+  healthy: { titleKey: "healthyFruit", tone: "good", pillKey: "healthy", action: "healthy" },
+};
 
 export function ScanScreen() {
   const t = useTranslations("farmerScan");
@@ -318,6 +358,16 @@ export function ScanScreen() {
       }
       if (isRecord(payload) && payload.rejected === "not_leaf") {
         setNotice("notLeaf");
+        return;
+      }
+      // Fruit and trap: the server checked the photo and the confidence (scan-verdict.ts). Leaf answers have no verdict.
+      const verdict = isRecord(payload) && isRecord(payload.verdict) ? payload.verdict : null;
+      if (verdict?.kind === "retake") {
+        setNotice(retakeNotice(mode, verdict.reason));
+        return;
+      }
+      if (verdict?.kind === "unsure") {
+        setNotice("unsure");
         return;
       }
 
@@ -1071,26 +1121,51 @@ function Corners() {
   );
 }
 
-function actionSet(kind: ActionKind, t: TFn): { icon: LucideIcon; title: string; sub: string; color: string }[] {
-  if (kind === "healthy") {
-    return [
-      { icon: Check, title: t("keepChecking"), sub: t("keepCheckingSub"), color: "text-good" },
-      { icon: CloudRain, title: t("scanAfterRain"), sub: t("scanAfterRainSub"), color: "text-good" },
-      { icon: ClipboardList, title: t("keepRecords"), sub: t("keepRecordsSub"), color: "text-ap-accent" },
-    ];
+type ActionItem = { icon: LucideIcon; title: string; sub: string; color: string };
+
+function actionSet(kind: ActionKind, t: TFn): ActionItem[] {
+  const checkTrap: ActionItem = { icon: Bug, title: t("checkTrap"), sub: t("checkTrapSub"), color: "text-good" };
+  const replaceCard: ActionItem = { icon: RefreshCw, title: t("replaceCard"), sub: t("replaceCardSub"), color: "text-good" };
+  const sendPhoto: ActionItem = { icon: Camera, title: t("sendPhoto"), sub: t("sendPhotoSub"), color: "text-ap-accent" };
+  const keepRecords: ActionItem = { icon: ClipboardList, title: t("keepRecords"), sub: t("keepRecordsSub"), color: "text-ap-accent" };
+  const pickFallen: ActionItem = { icon: Leaf, title: t("pickFallen"), sub: t("pickFallenSub"), color: "text-good" };
+  const removeAffected: ActionItem = { icon: Scissors, title: t("removeAffected"), sub: t("removeAffectedSub"), color: "text-good" };
+  const checkSpread: ActionItem = { icon: Check, title: t("checkSpread"), sub: t("checkSpreadSub"), color: "text-good" };
+  const checkWater: ActionItem = { icon: CloudRain, title: t("checkWater"), sub: t("checkWaterSub"), color: "text-good" };
+  const checkBranches: ActionItem = { icon: Leaf, title: t("checkBranches"), sub: t("checkBranchesSub"), color: "text-good" };
+  const askAgronomist: ActionItem = { icon: ShieldAlert, title: t("askAgronomist"), sub: t("askAgronomistSub"), color: "text-ap-accent" };
+
+  switch (kind) {
+    case "healthy":
+      return [
+        { icon: Check, title: t("keepChecking"), sub: t("keepCheckingSub"), color: "text-good" },
+        { icon: CloudRain, title: t("scanAfterRain"), sub: t("scanAfterRainSub"), color: "text-good" },
+        keepRecords,
+      ];
+    case "trap":
+    case "trapClear":
+      return [checkTrap, replaceCard, sendPhoto];
+    case "trapBusy":
+      return [checkTrap, pickFallen, askAgronomist];
+    case "fruitFly":
+      return [pickFallen, checkTrap, askAgronomist];
+    case "fruitFungus":
+      return [removeAffected, checkSpread, askAgronomist];
+    case "fruitMoth":
+      return [checkSpread, pickFallen, askAgronomist];
+    case "fruitDamage":
+      return [checkSpread, keepRecords, askAgronomist];
+    case "fruitDry":
+      return [checkWater, checkSpread, askAgronomist];
+    case "fruitScale":
+      return [checkBranches, checkSpread, askAgronomist];
+    default:
+      return [
+        { icon: Scissors, title: t("actionPrune"), sub: t("actionPruneSub"), color: "text-good" },
+        { icon: Leaf, title: t("actionLeaves"), sub: t("actionLeavesSub"), color: "text-good" },
+        { icon: RefreshCw, title: t("actionRecheck"), sub: t("actionRecheckSub"), color: "text-ap-accent" },
+      ];
   }
-  if (kind === "trap") {
-    return [
-      { icon: Bug, title: t("checkTrap"), sub: t("checkTrapSub"), color: "text-good" },
-      { icon: RefreshCw, title: t("replaceCard"), sub: t("replaceCardSub"), color: "text-good" },
-      { icon: Camera, title: t("sendPhoto"), sub: t("sendPhotoSub"), color: "text-ap-accent" },
-    ];
-  }
-  return [
-    { icon: Scissors, title: t("actionPrune"), sub: t("actionPruneSub"), color: "text-good" },
-    { icon: Leaf, title: t("actionLeaves"), sub: t("actionLeavesSub"), color: "text-good" },
-    { icon: RefreshCw, title: t("actionRecheck"), sub: t("actionRecheckSub"), color: "text-ap-accent" },
-  ];
 }
 
 function demoNoteFor(reason: string | undefined, t: TFn): string {
@@ -1224,44 +1299,21 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
   }
 
   if (data.mode === "fruit" && typeof result.diagnosis === "string") {
-    const dx = result.diagnosis;
-    let title = dx;
-    let titleKey: Presented["titleKey"];
-    let latin: string | undefined;
-    let tone: PillTone = "warn";
-    let pillKey: PillKey = "watch";
-    if (dx === "healthy") {
-      title = t("healthyFruit");
-      titleKey = "healthyFruit";
-      tone = "good";
-      pillKey = "healthy";
-    } else if (dx === "olive fly sting") {
-      title = t("oliveFly");
-      titleKey = "oliveFly";
-      latin = LATIN.fly;
-      tone = "risk";
-      pillKey = "highRisk";
-    } else if (dx === "other damage") {
-      title = t("otherDamage");
-      titleKey = "otherDamage";
-    } else if (dx === "unclear") {
-      title = t("notClear");
-      titleKey = "notClear";
-    }
-    const toneGood = tone === "good";
+    const view = FRUIT_VIEW[result.diagnosis];
+    if (!view) return null;
     return {
       mode: "fruit",
-      title,
-      titleKey,
-      latin,
-      summary: strings(result.symptoms).join(" "),
-      tone,
-      pillKey,
+      title: t(view.titleKey),
+      titleKey: view.titleKey,
+      latin: view.latin,
+      summary: typeof result.summary === "string" ? result.summary.trim() : "",
+      tone: view.tone,
+      pillKey: view.pillKey,
       confidence,
       source,
       demoReason,
-      actionKind: toneGood ? "healthy" : "care",
-      showNoChemicals: !toneGood,
+      actionKind: view.action,
+      showNoChemicals: view.tone !== "good",
     };
   }
 
@@ -1273,13 +1325,13 @@ function buildPresented(data: unknown, t: TFn): Presented | null {
       mode: "trap",
       title: t("trapTitle", { n }),
       titleKey: "trapTitle",
-      summary: typeof result.notes === "string" ? result.notes : "",
+      summary: typeof result.summary === "string" ? result.summary.trim() : "",
       tone,
       pillKey,
       confidence,
       source,
       demoReason,
-      actionKind: "trap",
+      actionKind: n <= 0 ? "trapClear" : n > 10 ? "trapBusy" : "trap",
       showNoChemicals: tone !== "good",
     };
   }

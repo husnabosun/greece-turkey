@@ -64,6 +64,12 @@ const TITLE_BY_KEY: Record<string, string> = {
   healthyFruit: "Healthy fruit",
   otherDamage: "Other damage",
   notClear: "Not clear",
+  anthracnose: "Anthracnose",
+  oliveMoth: "Olive moth damage",
+  mechanicalDamage: "Hail or mechanical damage",
+  sunscald: "Sunscald",
+  droughtShrivel: "Drought shrivel",
+  sootyMould: "Sooty mould or scale",
   uncertain: "Uncertain",
   trapTitle: "Fly trap",
 };

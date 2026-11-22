@@ -17,6 +17,13 @@ ${COMMON_RULES}`;
 
 export const LABEL_PROMPT = `You read the label of a plant protection product (pesticide) in a photo. The label may be in Turkish, Greek, English or another language.
 Extract exactly what is printed. Do not guess and do not use outside knowledge about the product.
+First check the photo itself and set "photo":
+- "ok": a product label is readable.
+- "not_a_label": the photo shows something else (a field, a person, a screen, a random object).
+- "cut_off": part of the label is outside the photo, so the product name or substances cannot be read in full.
+- "blurry": the text is out of focus or shaky.
+- "too_dark": too dark or too much glare to read.
+When "photo" is not "ok", leave productName empty, the lists empty, the other fields null, and confidence below 0.4.
 - productName: the trade name as printed.
 - activeSubstances: the active substances (active ingredients) with their names in English lower case, for example "copper oxychloride". Leave out the amounts.
 - licenceNumber: the registration or licence number as printed, or null.
@@ -42,20 +49,45 @@ Also return confidence 0–1, top3 guesses with confidence, and up to 4 short vi
 When context includes variety disease_susceptibility (1–5), weigh peacock spot (spilocaea_oleagina) and knot (pseudomonas_savastanoi) accordingly — higher score means the cultivar is more prone, but still judge only from the photo.
 ${SAFETY_RULES}`;
 
-export const FRUIT_PROMPT = `You look at a photo of one olive fruit (olives on the tree or in a hand) and decide if it shows olive fly damage.
-The olive fly (Bactrocera oleae) lays its egg under the skin of the fruit. A sting looks like a small dark or brownish dot, sometimes with a light halo or a tiny soft spot. Later there can be an exit hole.
-- diagnosis: "olive fly sting" if you see such marks, "other damage" for other problems (bird, hail, rot, disease), "healthy" if the fruit looks clean, "unclear" if you cannot judge.
-- confidence: 0 to 1.
-- symptoms: up to 4 short things you can actually see in the photo.
+/** The photo check shared by the fruit and trap prompts. */
+const PHOTO_CHECK = (subject: string, wrong: string) => `First check the photo itself and set "photo":
+- "ok": the photo clearly shows ${subject}, sharp enough to judge.
+- "not_olive": the photo shows something else (a person, soil, a screen, another plant or fruit, an animal).
+- "wrong_scan_type": ${wrong}
+- "blurry": out of focus or shaky.
+- "too_dark": too dark, in deep shadow, or too much glare.
+When "photo" is not "ok", say so honestly: do not guess a diagnosis, use "unclear" or 0, and set confidence below 0.4.`;
+
+const SENTENCE = `- summary: ONE short, plain sentence for the farmer (at most 25 words) that says what you see and what it means. No lists of keywords, no latin names, no numbers other than the ones you counted.`;
+
+export const FRUIT_PROMPT = `You look at a photo of olive fruit (olives on the tree or in a hand) and decide what is wrong with the fruit, if anything.
+${PHOTO_CHECK("olive fruit up close, or olive leaves and twigs that show a black sooty coating or scale insects", 'the photo shows a yellow sticky trap, a label, or an olive leaf without any sooty coating or scale (leaf diseases are checked with the Leaf scan, not here).')}
+Choose exactly one "diagnosis" from this list:
+- "olive fly": the olive fly (Bactrocera oleae) lays eggs under the skin. Small dark or brownish dots, often with a light halo, a soft spot, or a tiny round exit hole.
+- "anthracnose": the fungus Colletotrichum. Round or oval, sunken, dark spots with a clear edge that grow, often with orange or pink pustules in them, then the fruit rots or mummifies. A wrinkled skin without such spots is not anthracnose.
+- "olive moth": the olive moth (Prays oleae). A larva enters at the stem end, with fruit dropping early, a small hole near the stalk, and fine dark frass.
+- "hail or mechanical damage": clean cuts, dents, scars or bruises from hail, wind, tools or animals, with no spreading spots.
+- "sunscald": a pale or brown, dry, flat patch on the side of the fruit that faced the sun, on one side only.
+- "drought shrivel": fruit that is small and wrinkled all over. Several olives wrinkled the same way, even with a dull or darker band, point to drought or water stress rather than a fungus.
+- "sooty mould or scale": a black, soot-like coating on fruit or leaves, often with sticky honeydew and small scale insects on the twigs.
+- "healthy": the fruit looks clean and normal.
+- "unclear": you cannot tell.
+- confidence: 0 to 1. Use below 0.6 when two causes look equally likely or the marks are tiny.
+${SENTENCE}
 When context includes variety disease_susceptibility.bactrocera_oleae (1–5) or primary_use TABLE vs OIL, note that table cultivars and high fly scores are more at risk — still judge only from the photo.
+For anything that needs treatment, do not suggest it. The app tells the farmer to ask a licensed agronomist.
 ${SAFETY_RULES}`;
 
-export const TRAP_PROMPT = `You look at a photo of a yellow sticky trap for olive flies and count the olive flies stuck on it.
-Count only olive flies (Bactrocera oleae): small flies, about 4 to 5 mm, with a clear wing with a dark spot at the tip and a yellow-brown body.
-Do not count other insects, dirt or leaves. If you are not sure whether an insect is an olive fly, do not count it.
-- flyCount: the number of olive flies you counted (a whole number, 0 when there are none).
-- confidence: 0 to 1 in your count. Use below 0.4 when the trap is partly out of the photo, the photo is blurry, or the flies are too small to count.
-- notes: one short sentence, for example what else is on the trap, or why you are not sure.
+export const TRAP_PROMPT = `You look at a photo of a yellow sticky trap for olive flies and count what is stuck on it.
+${PHOTO_CHECK("a yellow sticky trap, mostly in view", 'the photo shows fruit, a leaf, or a label and not a trap.')}
+Count only what you can clearly see:
+- flyCount: olive flies (Bactrocera oleae). Small flies, about 4 to 5 mm, with a clear wing with a dark spot at the tip and a yellow-brown body. A whole number, 0 when there are none.
+- mothCount: olive moths (Prays oleae). Small grey-silver moths with narrow folded wings, about 6 mm. A whole number, 0 when there are none.
+- otherInsects: true when you see other insects on the trap (bees, midges, beetles, wasps and so on), false when you see none. Never count them as olive flies.
+- A trap with a clean card and nothing stuck on it is valid: flyCount 0, mothCount 0, with high confidence when the whole card is visible.
+- If you are not sure whether an insect is an olive fly or a moth, do not count it.
+- confidence: 0 to 1 in your counts. Use below 0.6 when the trap is partly out of the photo, the flies are too small to count, or the card is crowded and hard to read.
+${SENTENCE}
 ${SAFETY_RULES}`;
 
 export function advicePrompt(input: AdviseRequest): string {

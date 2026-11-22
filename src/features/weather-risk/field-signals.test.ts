@@ -56,6 +56,13 @@ describe("buildFieldSignals: scans", () => {
     expect(a.drivers.join(" ")).toMatch(/Olive fly sting found/);
   });
 
+  it("other fruit problems are not read as an olive fly sting", () => {
+    const hail: ScanInput = { fieldId: "f1", at: "2026-10-04T12:00:00Z", mode: "fruit", titleKey: "mechanicalDamage", title: "Hail", tone: "warn" };
+    const a = oliveFly.assess(inputFor(flyWeather(), 14, buildFieldSignals(field, [hail], [])));
+    expect(a.level).toBe("Medium");
+    expect(a.drivers.join(" ")).not.toMatch(/Olive fly sting found/);
+  });
+
   it("falls back to the AI label of old rows without a title key", () => {
     const old: ScanInput = { fieldId: "f1", at: "2026-11-09T12:00:00Z", mode: "leaf", title: "", tone: "risk", diagnosis: { result: { label: "Olive Peacock Spot" } } };
     const w = around("2026-11-10", { tMean: 15, tMin: 12, tMax: 18, wetHours: 5 }, { 0: { rain: 3, rainyHours: 3, wetHours: 8 } });

@@ -1,6 +1,7 @@
 import type { AdviceResult, FruitResult, LabelResult, LeafResult, TrapResult } from "./schemas";
 
 export const DEMO_LABEL: LabelResult = {
+  photo: "ok",
   productName: "Copper oxychloride 50 WP",
   activeSubstances: ["copper oxychloride"],
   licenceNumber: "DEMO-EL-001",
@@ -22,15 +23,19 @@ export const DEMO_LEAF: LeafResult = {
 };
 
 export const DEMO_FRUIT: FruitResult = {
-  diagnosis: "olive fly sting",
+  photo: "ok",
+  diagnosis: "olive fly",
   confidence: 0.7,
-  symptoms: ["Small dark puncture on the fruit skin"],
+  summary: "Small dark puncture marks on the skin look like olive fly stings.",
 };
 
 export const DEMO_TRAP: TrapResult = {
+  photo: "ok",
   flyCount: 8,
+  mothCount: 0,
+  otherInsects: false,
   confidence: 0.65,
-  notes: "Demo count — connect Vertex AI (GOOGLE_CLOUD_PROJECT + service account) for a live read.",
+  summary: "About 8 olive flies are stuck on the trap.",
 };
 
 export function demoAdvice(fieldName: string): AdviceResult {

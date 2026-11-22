@@ -411,6 +411,22 @@ function todayIso() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Message key for a label photo the server rejected (see scan-verdict.ts). */
+function labelRetakeKey(reason: unknown): string {
+  switch (reason) {
+    case "cut_off":
+      return "labelCutOff";
+    case "blurry":
+      return "labelBlurry";
+    case "too_dark":
+      return "labelTooDark";
+    case "unclear":
+      return "labelUnclear";
+    default:
+      return "labelNotLabel";
+  }
+}
+
 function AddSpraySheet({
   fieldName,
   saving = false,
@@ -481,11 +497,23 @@ function AddSpraySheet({
         body: JSON.stringify({ imageBase64: base64 }),
       });
       const json: unknown = await res.json();
-      if (!isRecord(json) || json.ok !== true || !isRecord(json.data) || !isRecord(json.data.label)) {
+      if (!isRecord(json) || json.ok !== true || !isRecord(json.data)) {
         const message = isRecord(json) && typeof json.error === "string" ? json.error : t("labelFail");
         throw new Error(message);
       }
-      const label = json.data.label;
+      const data = json.data;
+      // The AI is down: say so. The form is never filled from a made-up label.
+      if (data.unavailable === true || data.source === "demo") {
+        toast.error(t("labelUnavailable"));
+        return;
+      }
+      // The server rejected the photo or the read was not confident: ask for a new photo, leave the form as it is.
+      const verdict = isRecord(data.verdict) ? data.verdict : null;
+      if (verdict?.kind !== "ok" || !isRecord(data.label)) {
+        toast.error(t(labelRetakeKey(verdict?.reason)));
+        return;
+      }
+      const label = data.label;
       if (typeof label.productName !== "string") throw new Error(t("labelFail"));
       const substancesFound = Array.isArray(label.activeSubstances)
         ? label.activeSubstances.filter((s): s is string => typeof s === "string")
@@ -498,13 +526,8 @@ function AddSpraySheet({
         setPhiText(String(label.preHarvestDays));
       }
       setFromLabel(true);
-      setLabelSource(json.data.source === "demo" ? "demo" : "gemini");
-      const source = typeof json.data.source === "string" ? json.data.source : "gemini";
-      if (source === "demo") {
-        toast.message(t("labelDemoSkip"));
-        return;
-      }
-      toast.success(t("labelOk", { source }));
+      setLabelSource("gemini");
+      toast.success(t("labelOk", { source: "gemini" }));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("labelFail"));
     } finally {

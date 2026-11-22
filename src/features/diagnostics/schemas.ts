@@ -97,7 +97,12 @@ export const ndviRequest = z.object({
   end: z.number().int().positive().optional(),
 });
 
+/** What is wrong with the photo itself. Anything but "ok" means: ask for a new photo, give no diagnosis. */
+export const PHOTO_ISSUES = ["ok", "not_olive", "wrong_scan_type", "blurry", "too_dark"] as const;
+export const LABEL_PHOTO_ISSUES = ["ok", "not_a_label", "cut_off", "blurry", "too_dark"] as const;
+
 export const labelResult = z.object({
+  photo: z.enum(LABEL_PHOTO_ISSUES),
   productName: z.string().max(120),
   activeSubstances: z.array(z.string().max(80)).max(8),
   licenceNumber: z.string().max(60).nullable(),
@@ -115,7 +120,18 @@ export const leafGateResult = z.object({
 });
 export type LeafGateResult = z.infer<typeof leafGateResult>;
 
-export const FRUIT_DIAGNOSES = ["olive fly sting", "other damage", "healthy", "unclear"] as const;
+/** Fruit problems. Names follow the risk engine threats: olive-fly, anthracnose, olive-moth, drought. */
+export const FRUIT_DIAGNOSES = [
+  "olive fly",
+  "anthracnose",
+  "olive moth",
+  "hail or mechanical damage",
+  "sunscald",
+  "drought shrivel",
+  "sooty mould or scale",
+  "healthy",
+  "unclear",
+] as const;
 export const LEAF_LABELS = ["Healthy", "Olive Peacock Spot", "Aculus Olearius"] as const;
 
 function coerceLeafLabel(raw: unknown): (typeof LEAF_LABELS)[number] | unknown {
@@ -131,16 +147,33 @@ function coerceLeafLabel(raw: unknown): (typeof LEAF_LABELS)[number] | unknown {
 
 const leafLabel = z.preprocess(coerceLeafLabel, z.enum(LEAF_LABELS));
 
+/** The model may still say "olive fly sting" or "exit hole": that is the olive fly. */
+function coerceFruitDiagnosis(raw: unknown): unknown {
+  if (typeof raw !== "string") return raw;
+  const n = raw.trim().toLowerCase();
+  if (n.startsWith("olive fly")) return "olive fly";
+  return n;
+}
+
 export const fruitResult = z.object({
-  diagnosis: z.enum(FRUIT_DIAGNOSES),
+  photo: z.enum(PHOTO_ISSUES),
+  diagnosis: z.preprocess(coerceFruitDiagnosis, z.enum(FRUIT_DIAGNOSES)),
   confidence,
-  symptoms: z.array(z.string().max(120)).max(5),
+  /** One short sentence for the farmer, in the language of the request. */
+  summary: z.string().min(1).max(220),
 });
 
 export const trapResult = z.object({
+  photo: z.enum(PHOTO_ISSUES),
+  /** Olive flies (Bactrocera oleae) only. */
   flyCount: z.number().int().min(0).max(500),
+  /** Olive moths (Prays oleae) only. */
+  mothCount: z.number().int().min(0).max(500),
+  /** Other insects (bycatch) are on the trap. */
+  otherInsects: z.boolean(),
   confidence,
-  notes: z.string().max(200),
+  /** One short sentence for the farmer, in the language of the request. */
+  summary: z.string().min(1).max(220),
 });
 
 export const leafResult = z.object({
