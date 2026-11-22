@@ -367,38 +367,6 @@ export function FieldScoreScreen({ fieldId }: Props) {
             const photo = isPhotoProof(p.id);
             const preview = proofPreviews[p.id];
             return (
-<<<<<<< HEAD
-              <button
-                key={p.id}
-                type="button"
-                role="checkbox"
-                aria-checked={on}
-                onClick={() => toggleProof(p.id)}
-                className={cn(
-                  "flex min-h-[56px] items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors",
-                  on ? "border border-[#A9BE9C] bg-[#F2F8EE]" : "border border-dashed border-[#C9C6BE] bg-card hover:bg-soft/40",
-                )}
-              >
-                {on ? (
-                  <Check className="size-[18px] shrink-0 text-good" strokeWidth={2.6} aria-hidden />
-                ) : (
-                  <FileText className="size-[18px] shrink-0 text-muted-foreground" aria-hidden />
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className={cn("block truncate text-ap-body font-bold", on ? "text-good" : "text-[#555]")}>
-                    {t(p.labelKey)}
-                  </span>
-                  <span
-                    className={cn(
-                      "block text-[12px] font-bold tracking-[0.4px]",
-                      on ? "text-good" : p.note === "REQUIRED" ? "text-risk" : "text-muted-foreground",
-                    )}
-                  >
-                    {on ? t("added") : p.note === "REQUIRED" ? t("required") : t("optional")}
-                  </span>
-                </span>
-              </button>
-=======
               <div key={p.id} className="relative">
                 {photo ? (
                   <input
@@ -429,8 +397,8 @@ export function FieldScoreScreen({ fieldId }: Props) {
                     }
                   }}
                   className={cn(
-                    "flex h-[52px] w-full items-center gap-2 rounded-xl px-3 text-left disabled:opacity-60",
-                    on ? "border border-[#A9BE9C] bg-[#F2F8EE]" : "border border-dashed border-[#C9C6BE] bg-card",
+                    "flex min-h-[56px] w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors disabled:opacity-60",
+                    on ? "border border-[#A9BE9C] bg-[#F2F8EE]" : "border border-dashed border-[#C9C6BE] bg-card hover:bg-soft/40",
                   )}
                 >
                   {on ? (
@@ -444,7 +412,7 @@ export function FieldScoreScreen({ fieldId }: Props) {
                     </span>
                     <span
                       className={cn(
-                        "text-[12px] font-bold tracking-[0.5px]",
+                        "block text-[12px] font-bold tracking-[0.4px]",
                         on ? "text-good" : p.note === "REQUIRED" ? "text-risk" : "text-muted-foreground",
                       )}
                     >
@@ -465,7 +433,6 @@ export function FieldScoreScreen({ fieldId }: Props) {
                   ) : null}
                 </button>
               </div>
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
             );
           })}
         </div>
@@ -477,14 +444,7 @@ export function FieldScoreScreen({ fieldId }: Props) {
             </p>
             <div className="ml-3 min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-<<<<<<< HEAD
-                <p className="text-ap-card text-ink">{t("startingScore")}</p>
-                <span className="inline-flex min-h-6 items-center rounded-md bg-warn-soft px-2 text-[12px] font-bold text-warn-text">
-                  {t("estimated")}
-                </span>
-=======
                 <p className="text-ap-card text-ink">{t("qualityScore")}</p>
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
               </div>
               <p className="text-ap-small font-medium text-muted-foreground">
                 {displayScore != null ? t("scoreFromQuality") : t("scoreAfterSave")}
@@ -504,11 +464,7 @@ export function FieldScoreScreen({ fieldId }: Props) {
                 <span
                   key={key}
                   className={cn(
-<<<<<<< HEAD
                     "flex min-h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-1.5 text-[12px] font-bold",
-=======
-                    "flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-0.5 text-[12px] font-bold sm:text-[10.5px]",
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
                     on ? "bg-warn-soft text-warn-text" : "bg-black/5 text-muted-foreground",
                   )}
                 >

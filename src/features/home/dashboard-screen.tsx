@@ -475,24 +475,14 @@ export function DashboardScreen() {
             aria-label={t("settings")}
             aria-expanded={menu}
             onClick={() => setMenu((v) => !v)}
-<<<<<<< HEAD
             className="flex size-11 items-center justify-center rounded-full border border-line bg-card transition-colors hover:bg-soft"
-=======
-            className="flex size-11 items-center justify-center rounded-full border border-line bg-card"
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
           >
             <Settings className="size-[18px]" aria-hidden />
           </button>
           <Link
-<<<<<<< HEAD
-            href="/farmer/tasks"
-            className="relative flex size-11 items-center justify-center rounded-full border border-line bg-card transition-colors hover:bg-soft"
-            aria-label={t("tasks")}
-=======
             href="/farmer/notifications"
-            className="relative flex size-11 items-center justify-center rounded-full border border-line bg-card"
+            className="relative flex size-11 items-center justify-center rounded-full border border-line bg-card transition-colors hover:bg-soft"
             aria-label={t("alerts")}
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
           >
             <Bell className="size-[18px] text-good" aria-hidden />
             {offerCount > 0 ? (
@@ -505,7 +495,6 @@ export function DashboardScreen() {
                 type="button"
                 aria-label={t("settings")}
                 onClick={() => setMenu(false)}
-<<<<<<< HEAD
                 className="fixed inset-0 z-10 cursor-default"
               />
               <div className="absolute top-12 right-0 z-20 w-[236px] rounded-2xl border border-line bg-card p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
@@ -516,6 +505,14 @@ export function DashboardScreen() {
                 >
                   <Plus className="size-[18px]" aria-hidden />
                   {t("addField")}
+                </Link>
+                <Link
+                  href="/farmer/welcome"
+                  onClick={() => setMenu(false)}
+                  className="flex h-11 items-center gap-2.5 rounded-xl px-2.5 text-ap-body font-semibold text-ink hover:bg-soft"
+                >
+                  <MapPin className="size-[18px]" aria-hidden />
+                  {t("profileSettings")}
                 </Link>
                 <div className="px-2.5 pt-1.5 pb-1.5">
                   <p className="mb-1.5 flex items-center gap-2 text-ap-body font-semibold text-ink">
@@ -543,43 +540,6 @@ export function DashboardScreen() {
                 </div>
                 <div className="border-t border-line pt-1">
                   <SignOutButton className="h-11 w-full justify-start rounded-xl px-2.5" />
-=======
-                className="flex h-11 items-center gap-2.5 rounded-xl px-2.5 text-ap-body font-semibold text-ink"
-              >
-                <Plus className="size-[18px]" aria-hidden />
-                {t("addField")}
-              </Link>
-              <Link
-                href="/farmer/welcome"
-                onClick={() => setMenu(false)}
-                className="flex h-11 items-center gap-2.5 rounded-xl px-2.5 text-ap-body font-semibold text-ink"
-              >
-                <MapPin className="size-[18px]" aria-hidden />
-                {t("profileSettings")}
-              </Link>
-              <div className="px-2.5 pt-1 pb-1.5">
-                <p className="mb-1.5 flex items-center gap-2 text-ap-body font-semibold text-ink">
-                  <Globe className="size-4" aria-hidden />
-                  {t("advisorLanguage")}
-                </p>
-                <div className="flex gap-1.5">
-                  {LOCALES.map((code) => (
-                    <button
-                      key={code}
-                      type="button"
-                      onClick={() => {
-                        router.replace(pathname, { locale: code as Locale });
-                        setMenu(false);
-                      }}
-                      className={cn(
-                        "min-h-11 flex-1 rounded-full border text-ap-pill font-bold uppercase",
-                        locale === code ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
-                      )}
-                    >
-                      {code}
-                    </button>
-                  ))}
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
                 </div>
               </div>
             </>
@@ -634,9 +594,9 @@ export function DashboardScreen() {
           <Skeleton className="h-44 w-full rounded-[22px]" />
         </div>
       ) : (
-<<<<<<< HEAD
-        <>
-          <div className="mt-3.5 flex min-h-11 flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-2xl border border-line bg-card px-3.5 py-2 text-ap-body font-semibold">
+        <div className="mt-3.5 md:grid md:grid-cols-2 md:items-start md:gap-6">
+          <div className="min-w-0">
+          <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-2xl border border-line bg-card px-3.5 py-2 text-ap-body font-semibold">
             <div className="flex items-center gap-2">
               <WeatherIcon className="size-[18px] shrink-0 text-warn" aria-hidden />
               <span>{weather ? `${Math.round(weather.current.temp)}°C` : "—"}</span>
@@ -650,19 +610,6 @@ export function DashboardScreen() {
                 <span className="font-medium text-muted-foreground">{rainText}</span>
               </div>
             ) : null}
-=======
-        <div className="mt-3.5 md:grid md:grid-cols-2 md:items-start md:gap-6">
-          <div className="min-w-0">
-          <div className="flex h-11 items-center gap-2 rounded-2xl border border-line bg-card px-3 text-ap-body font-semibold">
-            <WeatherIcon className="size-[18px] shrink-0 text-warn" aria-hidden />
-            <span>{weather ? `${Math.round(weather.current.temp)}°C` : "—"}</span>
-            <span className="truncate font-medium text-muted-foreground">{weatherLabel}</span>
-            <span className="mx-1 h-5 w-px shrink-0 bg-line" />
-            <span className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
-              <Droplet className="size-4 shrink-0 text-ap-accent" aria-hidden />
-              <span className="truncate font-medium text-muted-foreground">{rainText}</span>
-            </span>
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
           </div>
 
           <div className={cn("mt-3.5 rounded-[22px] p-4", tone.card)}>
@@ -695,37 +642,10 @@ export function DashboardScreen() {
                 <CardIcon className="size-5" style={{ color: tone.iconColor }} aria-hidden />
               </div>
             </div>
-<<<<<<< HEAD
 
             <p className="mt-1.5 text-ap-body text-[#5a5a5a]">{tipText}</p>
-            <AiTag source="demo" className="mt-2" />
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-=======
-            <p className={cn("mt-3 text-[12px] font-bold tracking-[1.4px] uppercase", tone.kicker)}>
-              {kickerText}
-            </p>
-            <h2 className="mt-1.5 max-w-[240px] text-[23px] leading-tight font-extrabold tracking-tight text-ink">
-              {elevated && threat
-                ? t("riskIs", {
-                    threat: threatLabel(elevated.threat, tThreats),
-                    level: riskLevelLabel(elevated.level, tThreats),
-                  })
-                : weather
-                  ? t("noBigRisks")
-                  : t("noWeatherYet")}
-            </h2>
-            <p className="mt-1.5 max-w-[260px] text-ap-body text-[#5a5a5a]">{tipText}</p>
-            <div
-              className={cn(
-                "absolute top-14 right-4 flex size-12 items-center justify-center rounded-full",
-                tone.iconBg,
-              )}
-            >
-              <CardIcon className="size-5" style={{ color: tone.iconColor }} aria-hidden />
-            </div>
-            <div className="mt-4 flex items-center justify-between gap-2">
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
               {elevated && scanMode ? (
                 <ApButton
                   label={t("ctaScan")}
@@ -772,14 +692,10 @@ export function DashboardScreen() {
           <SectionHeader
             title={t("todayTasks")}
             action={
-<<<<<<< HEAD
               <Link
                 href="/farmer/tasks"
-                className="inline-flex min-h-11 items-center text-ap-body font-medium text-muted-foreground"
+                className="inline-flex min-h-11 min-w-11 items-center justify-end text-ap-body font-medium text-muted-foreground"
               >
-=======
-              <Link href="/farmer/tasks" className="inline-flex min-h-11 min-w-11 items-center justify-end text-ap-body font-medium text-muted-foreground">
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
                 {t("seeAll")}
               </Link>
             }
@@ -827,14 +743,10 @@ export function DashboardScreen() {
           <SectionHeader
             title={t("yourFields")}
             action={
-<<<<<<< HEAD
               <Link
                 href="/farmer/fields"
-                className="inline-flex min-h-11 items-center text-ap-body font-medium text-muted-foreground"
+                className="inline-flex min-h-11 min-w-11 items-center justify-end text-ap-body font-medium text-muted-foreground"
               >
-=======
-              <Link href="/farmer/fields" className="inline-flex min-h-11 min-w-11 items-center justify-end text-ap-body font-medium text-muted-foreground">
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
                 {t("seeAll")}
               </Link>
             }
@@ -847,23 +759,14 @@ export function DashboardScreen() {
           ) : fields.length === 0 ? (
             <p className="mt-2 text-ap-body text-muted-foreground">{t("noFieldsBody")}</p>
           ) : (
-<<<<<<< HEAD
-            <div className="mt-2 flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-=======
-            <div className="mt-2.5 flex gap-2.5 overflow-x-auto pb-1 md:flex-col md:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
+            <div className="mt-2 flex gap-2.5 overflow-x-auto pb-1 md:flex-col md:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {shown.map((f) => {
                 const live = elevated && primary?.id === f.id ? elevated : null;
                 const liveThreat = live ? THREAT_BY_ID[live.threat] : null;
                 const score = fieldScores[f.id];
                 return (
-<<<<<<< HEAD
-                  <Link key={f.id} href="/farmer/fields" className="w-[240px] shrink-0">
+                  <Link key={f.id} href="/farmer/fields" className="w-[240px] shrink-0 md:w-full">
                     <ApCard className="p-3.5 transition-colors hover:border-ink/30">
-=======
-                  <Link key={f.id} href="/farmer/fields" className="w-[236px] shrink-0 md:w-full">
-                    <ApCard className="p-3">
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
                       <div className="flex items-center gap-2.5">
                         <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-good-soft">
                           <Trees className="size-5 text-good" aria-hidden />
@@ -877,13 +780,13 @@ export function DashboardScreen() {
                               : ""}
                           </p>
                         </div>
-<<<<<<< HEAD
-                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-=======
-                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-soft text-ap-body font-extrabold text-muted-foreground">
-                          {score != null ? score : "—"}
-                        </span>
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
+                        {score != null ? (
+                          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-good-soft text-ap-body font-extrabold text-good">
+                            {score}
+                          </span>
+                        ) : (
+                          <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                        )}
                       </div>
                       {live && liveThreat ? (
                         <div className="mt-2.5 flex min-h-6 items-center gap-2">
@@ -932,11 +835,7 @@ function QuickPill({
     <Link
       href={href}
       className={cn(
-<<<<<<< HEAD
-        "flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border-[1.5px] bg-card px-2 py-1.5 text-center text-[12px] leading-tight font-bold transition-colors hover:bg-soft/60",
-=======
-        "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border-[1.5px] bg-card text-ap-pill font-bold",
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
+        "flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border-[1.5px] bg-card px-2 py-1.5 text-center text-ap-pill leading-tight font-bold transition-colors hover:bg-soft/60",
         style,
       )}
     >

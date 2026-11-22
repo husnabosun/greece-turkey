@@ -36,8 +36,8 @@ const AGE_PRESETS = [
 const TREES_PER_HA = 130;
 
 /**
-- Add field — your product flow: enter details, save, done.
-- (Demo’s extra “Start selling” step is intentionally not used.)
+ * Add field — your product flow: enter details, save, done.
+ * (Demo’s extra “Start selling” step is intentionally not used.)
  */
 export function AddFieldScreen() {
   const t = useTranslations("farmerFields");
@@ -276,12 +276,8 @@ export function AddFieldScreen() {
                     // Keep exactly what was typed; invalid input is flagged below, never rewritten.
                     setTreesText(e.target.value.slice(0, 7));
                   }}
-<<<<<<< HEAD
-                  className="min-w-0 flex-1 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-=======
                   aria-invalid={treesText.trim() !== "" && parseTrees() == null}
-                  className="w-16 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none"
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
+                  className="min-w-0 flex-1 bg-transparent text-center text-ap-card font-extrabold text-ink outline-none"
                 />
                 <RoundBtn
                   label={t("more")}
@@ -294,11 +290,6 @@ export function AddFieldScreen() {
                   <Plus className="size-4" />
                 </RoundBtn>
               </div>
-<<<<<<< HEAD
-            </ApCard>
-
-            <ApCard className="p-3.5">
-=======
               {treesText.trim() !== "" && parseTrees() == null ? (
                 <p className="mt-1 text-ap-small font-semibold text-risk" role="alert">
                   {t("invalidTrees")}
@@ -311,14 +302,14 @@ export function AddFieldScreen() {
                     setTreesText(String(satelliteTrees));
                     setTreesTouched(false);
                   }}
-                  className="mt-2 text-left text-ap-small font-bold text-ap-accent"
+                  className="mt-2 min-h-11 text-left text-ap-small font-bold text-ap-accent"
                 >
                   {t("useEstimate", { n: satelliteTrees })}
                 </button>
               ) : null}
-            </div>
-            <div className="rounded-[18px] border border-line bg-card p-3">
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
+            </ApCard>
+
+            <ApCard className="p-3.5">
               <p className="text-ap-small font-medium text-muted-foreground">{t("treeAgeExact")}</p>
               <div className="mt-2 flex items-center justify-between gap-2">
                 <RoundBtn label={t("less")} onClick={() => setAgeYears((n) => Math.max(1, n - 1))}>
@@ -354,30 +345,21 @@ export function AddFieldScreen() {
             </ApCard>
           </div>
 
-<<<<<<< HEAD
           <ApCard className="mt-2.5 p-3.5">
-            <p className="text-ap-small font-medium text-muted-foreground">{t("oliveVariety")}</p>
-            <div className="mt-2.5 space-y-3">
-              {varietyGroups.map((group) => (
-                <div key={group.origin}>
-                  <p className="mb-1.5 text-[12px] font-bold tracking-[0.6px] text-muted-foreground uppercase">
-=======
-          <div className="mt-2 rounded-[18px] border border-line bg-card p-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-ap-small font-medium text-muted-foreground">{t("oliveVariety")}</p>
               <button
                 type="button"
                 onClick={() => setShowAllVarieties((v) => !v)}
-                className="text-ap-small font-bold text-ap-accent"
+                className="min-h-11 text-ap-small font-bold text-ap-accent"
               >
                 {showAllVarieties ? t("showLocalVarieties") : t("showAllVarieties")}
               </button>
             </div>
-            <div className="mt-2 space-y-2.5">
+            <div className="mt-2.5 space-y-3">
               {varietyGroups.map((group) => (
                 <div key={group.origin}>
-                  <p className="mb-1 text-[12px] font-bold tracking-[0.6px] text-muted-foreground uppercase">
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
+                  <p className="mb-1.5 text-[12px] font-bold tracking-[0.6px] text-muted-foreground uppercase">
                     {t(group.labelKey)}
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -429,13 +411,8 @@ function PillBtn({ on, onClick, children }: { on: boolean; onClick: () => void; 
       type="button"
       onClick={onClick}
       className={cn(
-<<<<<<< HEAD
         "inline-flex min-h-11 items-center rounded-full border px-4 text-ap-pill font-bold transition-colors",
         on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink hover:bg-soft",
-=======
-        "inline-flex min-h-11 items-center rounded-full border px-3 text-ap-pill font-bold",
-        on ? "border-ink bg-ink text-white" : "border-line bg-card text-ink",
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
       )}
     >
       {children}
@@ -449,11 +426,7 @@ function RoundBtn({ label, onClick, children }: { label: string; onClick: () => 
       type="button"
       aria-label={label}
       onClick={onClick}
-<<<<<<< HEAD
       className="flex size-11 shrink-0 items-center justify-center rounded-full bg-soft transition-colors hover:bg-soft/80"
-=======
-      className="flex size-11 shrink-0 items-center justify-center rounded-full bg-soft"
->>>>>>> bae40a1a4f39f12c467fc4f9db0d6072f0016e03
     >
       {children}
     </button>
