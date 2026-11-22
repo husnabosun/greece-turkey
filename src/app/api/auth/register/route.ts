@@ -74,5 +74,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
+  // GoTrue inserts the auth user first and writes custom app_metadata in a later UPDATE, so the
+  // on_auth_user_created trigger only sees the default role (farmer). Set the processor role on
+  // the profile here with the service role (the profile guard only blocks role changes by users).
+  if (role === "processor") {
+    const { error: profileError } = await admin
+      .from("profiles")
+      .update({ role: "processor", company_name: company_name?.trim().slice(0, 120) || null })
+      .eq("id", data.user.id);
+    if (profileError) {
+      await admin.auth.admin.deleteUser(data.user.id);
+      return NextResponse.json({ error: profileError.message }, { status: 500 });
+    }
+  }
+
   return NextResponse.json({ ok: true, userId: data.user.id });
 }
