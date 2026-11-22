@@ -17,7 +17,8 @@ import { ApCard } from "@/shared/components/brand/ap-card";
 import { Pill } from "@/shared/components/brand/pill";
 import { StatusSteps } from "@/shared/components/brand/status-steps";
 import { cn } from "@/shared/lib/utils";
-import { euroPrice, euroTotal, formatTons, parseLocaleNumber, saleTotal } from "@/features/marketplace/pricing";
+import { euroPrice, euroTotal, formatQuantity,
+  formatTons, parseLocaleNumber, saleTotal } from "@/features/marketplace/pricing";
 import {
   canAdvanceDelivery,
   deliveryStepIndex,
@@ -271,7 +272,7 @@ export function ProcessorDeliveriesScreen() {
     <div class="cell"><div class="label">${escapeHtml(t("status"))}</div><div class="val">${escapeHtml(statusText)}</div></div>
     <div class="cell"><div class="label">${escapeHtml(t("variety"))}</div><div class="val">${escapeHtml(variety)}</div></div>
     <div class="cell"><div class="label">${escapeHtml(t("region"))}</div><div class="val">${escapeHtml(region)}</div></div>
-    <div class="cell"><div class="label">${escapeHtml(t("tons"))}</div><div class="val">${escapeHtml(formatTons(tons, locale))}${d.actualKg != null ? ` (${d.actualKg.toLocaleString(tag)} kg)` : ""}</div></div>
+    <div class="cell"><div class="label">${escapeHtml(t("tons"))}</div><div class="val">${escapeHtml(formatQuantity(d.product, tons, locale))}${d.actualKg != null ? ` (${d.actualKg.toLocaleString(tag)} kg)` : ""}</div></div>
     <div class="cell"><div class="label">${escapeHtml(t("price"))}</div><div class="val">${escapeHtml(euroPrice(d.pricePerKg, locale))}/kg (${escapeHtml(total)})</div></div>
     <div class="cell"><div class="label">${escapeHtml(t("qualityScore"))}</div><div class="val">${escapeHtml(scoreText)}</div></div>
     <div class="cell"><div class="label">${escapeHtml(t("noBannedProducts"))}</div><div class="val">${escapeHtml(euCompliance)}</div></div>
@@ -424,7 +425,7 @@ export function ProcessorDeliveriesScreen() {
                               })
                             : t("unscheduledShort"),
                           d.lotVariety ? varietyLabel(d.lotVariety) : null,
-                          formatTons(tons, locale),
+                          formatQuantity(d.product, tons, locale),
                           `${euroPrice(d.pricePerKg, locale)}/kg`,
                           d.lotRegion ? regionLabel(d.lotRegion, locale) : null,
                         ]
@@ -547,7 +548,7 @@ export function ProcessorDeliveriesScreen() {
                       : null;
                     const summaryLine = [
                       d.lotVariety ? varietyLabel(d.lotVariety) : null,
-                      formatTons(tons, locale),
+                      formatQuantity(d.product, tons, locale),
                       total,
                     ]
                       .filter(Boolean)
@@ -626,7 +627,7 @@ export function ProcessorDeliveriesScreen() {
         title={t("advanceStepTitle")}
         subtitle={
           advanceTarget
-            ? `${advanceTarget.farmerName ?? advanceTarget.lotRegion ?? ""} · ${formatTons(effectiveTons(advanceTarget), locale)}`
+            ? `${advanceTarget.farmerName ?? advanceTarget.lotRegion ?? ""} · ${formatQuantity(advanceTarget.product, effectiveTons(advanceTarget), locale)}`
             : undefined
         }
         actionLabel={
@@ -707,7 +708,7 @@ export function ProcessorDeliveriesScreen() {
         title={cancelTarget?.labResult === "failed" ? t("returnLotTitle") : t("cancelPickupTitle")}
         subtitle={
           cancelTarget
-            ? `${cancelTarget.farmerName ?? cancelTarget.lotRegion ?? ""} · ${formatTons(cancelTarget.tons, locale)}`
+            ? `${cancelTarget.farmerName ?? cancelTarget.lotRegion ?? ""} · ${formatQuantity(cancelTarget.product, cancelTarget.tons, locale)}`
             : undefined
         }
         actionLabel={cancelling ? t("loading") : cancelTarget?.labResult === "failed" ? t("returnLot") : t("cancelPickup")}

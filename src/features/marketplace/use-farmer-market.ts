@@ -17,6 +17,7 @@ export type MarketOffer = {
   tons: number;
   pricePerKg: number;
   fieldId: string | null;
+  product: ProductKind;
   fieldName: string | null;
   lotVariety: string | null;
   buyRequestId: string | null;
@@ -50,6 +51,7 @@ export type MarketDelivery = {
   fieldName: string | null;
   processorName: string | null;
   lotVariety: string | null;
+  product: ProductKind;
 };
 
 /** One listing (lot) on a field, with its own status and its own open offers. */
@@ -139,7 +141,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         supabase
           .from("offers")
           .select(
-            "id, lot_id, processor_id, initiated_by, status, tons, price_per_kg, buy_request_id, lots(status, variety, field_id, fields(name))",
+            "id, lot_id, processor_id, initiated_by, status, tons, price_per_kg, buy_request_id, lots(status, product, variety, field_id, fields(name))",
           )
           .eq("farmer_id", user.id)
           .order("created_at", { ascending: false }),
@@ -154,7 +156,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         supabase
           .from("deliveries")
           .select(
-            "id, status, tons, price_per_kg, scheduled_for, processor_id, actual_kg, lab_result, quality_score_snapshot, lots(variety, fields(name))",
+            "id, status, tons, price_per_kg, scheduled_for, processor_id, actual_kg, lab_result, quality_score_snapshot, lots(product, variety, fields(name))",
           )
           .eq("farmer_id", user.id)
           .order("created_at", { ascending: false }),
@@ -197,6 +199,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         const lot = row.lots as
           | {
               status?: string;
+              product?: ProductKind;
               variety?: string;
               field_id?: string;
               fields?: { name?: string } | { name?: string }[];
@@ -215,6 +218,7 @@ export function useFarmerMarket(fieldIds: string[]) {
           tons: Number(row.tons),
           pricePerKg: Number(row.price_per_kg),
           fieldId: lot?.field_id ?? null,
+          product: lot?.product ?? "olives",
           fieldName: fieldName ?? null,
           lotVariety: lot?.variety ?? null,
           buyRequestId: row.buy_request_id ?? null,
@@ -242,7 +246,7 @@ export function useFarmerMarket(fieldIds: string[]) {
 
       const deliveries: MarketDelivery[] = (deliveriesRes.data ?? []).map((row) => {
         const lot = row.lots as
-          | { variety?: string; fields?: { name?: string } | { name?: string }[] }
+          | { product?: ProductKind; variety?: string; fields?: { name?: string } | { name?: string }[] }
           | null;
         const fieldsJoin = lot?.fields;
         const fieldName = Array.isArray(fieldsJoin) ? fieldsJoin[0]?.name : fieldsJoin?.name;
@@ -259,6 +263,7 @@ export function useFarmerMarket(fieldIds: string[]) {
           fieldName: fieldName ?? null,
           processorName: nameByProcessor.get(row.processor_id) ?? null,
           lotVariety: lot?.variety ?? null,
+          product: lot?.product ?? "olives",
         };
       });
 

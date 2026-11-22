@@ -22,6 +22,7 @@ import { Link, useRouter } from "@/shared/i18n/navigation";
 import {
   formatEuro,
   formatEuroPerKg,
+  formatQuantity,
   formatTons,
   saleTotal,
   MARKET_LIMITS,
@@ -465,7 +466,7 @@ export function ProcessorOverviewScreen() {
                         <p className="text-[12px] font-medium text-muted-foreground">
                           {[
                             d.lotVariety ? varietyLabel(d.lotVariety) : null,
-                            formatTons(d.tons, locale),
+                            formatQuantity(d.product, d.tons, locale),
                             t(`step.${d.status}` as "step.scheduled"),
                           ]
                             .filter(Boolean)
@@ -510,7 +511,7 @@ export function ProcessorOverviewScreen() {
                         : t("anonymousGrove")}
                   </p>
                   <p className="text-[12px] font-medium text-muted-foreground">
-                    {[d.lotVariety ? varietyLabel(d.lotVariety) : null, formatTons(d.tons, locale)].filter(Boolean).join(" · ")}
+                    {[d.lotVariety ? varietyLabel(d.lotVariety) : null, formatQuantity(d.product, d.tons, locale)].filter(Boolean).join(" · ")}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -717,7 +718,7 @@ export function ProcessorOverviewScreen() {
                             })
                           : t("unscheduledShort"),
                         d.lotVariety ? varietyLabel(d.lotVariety) : null,
-                        formatTons(d.tons, locale),
+                        formatQuantity(d.product, d.tons, locale),
                         d.lotRegion ? regionLabel(d.lotRegion, locale) : null,
                         t(`step.${d.status}` as "step.scheduled"),
                       ]

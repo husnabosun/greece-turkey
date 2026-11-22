@@ -29,7 +29,6 @@ import {
   formatEuro,
   formatEuroPerKg,
   formatQuantity,
-  formatTons,
   kgToTons,
   parseBounded,
   parseLocaleNumber,
@@ -93,6 +92,7 @@ function groupOffersByLot(
       lotId: string;
       fieldName: string | null;
       lotVariety: string | null;
+      product: ProductKind;
       tons: number;
       askPrice: number | null;
       offers: MarketOffer[];
@@ -108,6 +108,7 @@ function groupOffersByLot(
         lotId: offer.lotId,
         fieldName: offer.fieldName,
         lotVariety: offer.lotVariety,
+        product: offer.product,
         tons: offer.tons,
         askPrice: ask,
         offers: [offer],
@@ -960,7 +961,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   unscheduled={t("unscheduledShort")}
                   nextHint={nextStepHint(d, t)}
                   pickupOn={t("pickupOn")}
-                  tonsLabel={formatTons(d.tons, locale)}
+                  tonsLabel={formatQuantity(d.product, d.tons, locale)}
                   labPending={t("labPending")}
                   labPendingHint={t("labPendingHint")}
                   labFailed={t("labFailedTitle")}
@@ -992,7 +993,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                       {group.fieldName ?? group.lotVariety ?? "—"}
                     </p>
                     <p className="text-ap-small text-muted-foreground">
-                      {formatTons(group.tons, locale)}
+                      {formatQuantity(group.product, group.tons, locale)}
                       {group.askPrice != null
                         ? ` · ${t("asking", { price: formatEuroPerKg(group.askPrice, locale) })}`
                         : null}
@@ -1106,7 +1107,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   unscheduled={t("unscheduledShort")}
                   nextHint={nextStepHint(d, t)}
                   pickupOn={t("pickupOn")}
-                  tonsLabel={formatTons(d.tons, locale)}
+                  tonsLabel={formatQuantity(d.product, d.tons, locale)}
                   labPending={t("labPending")}
                   labPendingHint={t("labPendingHint")}
                   labFailed={t("labFailedTitle")}
@@ -1125,7 +1126,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                     <div className="min-w-0">
                       <p className="text-ap-card font-extrabold text-ink">{d.fieldName ?? "—"}</p>
                       <p className="text-ap-body text-muted-foreground">
-                        {d.processorName ?? "—"} · {formatTons(d.tons, locale)}
+                        {d.processorName ?? "—"} · {formatQuantity(d.product, d.tons, locale)}
                       </p>
                     </div>
                     <span className="shrink-0 rounded-full bg-risk-soft px-2.5 py-1 text-ap-small font-bold text-risk">
@@ -1174,7 +1175,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
           <div className="space-y-3">
             <p className="text-ap-body text-muted-foreground">{acceptTarget.processorName}</p>
             <p className="text-ap-card font-extrabold text-ink">
-              {formatTons(acceptTarget.tons, locale)} × {formatEuroPerKg(acceptTarget.pricePerKg, locale)}
+              {formatQuantity(acceptTarget.product, acceptTarget.tons, locale)} × {formatEuroPerKg(acceptTarget.pricePerKg, locale)}
             </p>
             <p className="text-[22px] font-extrabold text-ink">
               {formatEuro(acceptTarget.tons * 1000 * acceptTarget.pricePerKg, locale)}
@@ -1207,7 +1208,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
         {counterTarget ? (
           <div className="space-y-3">
             <p className="text-ap-body text-muted-foreground">
-              {counterTarget.processorName} · {formatTons(counterTarget.tons, locale)}
+              {counterTarget.processorName} · {formatQuantity(counterTarget.product, counterTarget.tons, locale)}
             </p>
             <label className="block">
               <span className="text-ap-small font-bold text-muted-foreground">{t("yourPricePerKg")}</span>
@@ -1254,7 +1255,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
             {counterTotal != null ? (
               <p className="text-ap-body font-semibold text-ink">
                 {t("counterTotal", {
-                  tons: formatTons(counterTarget.tons, locale),
+                  tons: formatQuantity(counterTarget.product, counterTarget.tons, locale),
                   total: formatEuro(counterTotal, locale),
                 })}
               </p>
@@ -1274,7 +1275,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
           <div className="space-y-2">
             <p className="text-ap-body text-muted-foreground">{rejectTarget.processorName}</p>
             <p className="text-ap-card font-extrabold text-ink">
-              {formatTons(rejectTarget.tons, locale)} × {formatEuroPerKg(rejectTarget.pricePerKg, locale)}
+              {formatQuantity(rejectTarget.product, rejectTarget.tons, locale)} × {formatEuroPerKg(rejectTarget.pricePerKg, locale)}
             </p>
             <p className="text-ap-small text-muted-foreground">{t("rejectBidConfirm")}</p>
           </div>
@@ -1292,7 +1293,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
           <div className="space-y-2">
             <p className="text-ap-body text-muted-foreground">{withdrawTarget.processorName}</p>
             <p className="text-ap-card font-extrabold text-ink">
-              {formatTons(withdrawTarget.tons, locale)} × {formatEuroPerKg(withdrawTarget.pricePerKg, locale)}
+              {formatQuantity(withdrawTarget.product, withdrawTarget.tons, locale)} × {formatEuroPerKg(withdrawTarget.pricePerKg, locale)}
             </p>
             <p className="text-ap-small text-muted-foreground">{t("withdrawOfferConfirm")}</p>
           </div>
@@ -1615,7 +1616,7 @@ function OfferCard({
             ) : null}
           </div>
           <p className="text-ap-small text-muted-foreground">
-            {offer.fieldName ?? offer.lotVariety ?? "—"} · {formatTons(offer.tons, locale)}
+            {offer.fieldName ?? offer.lotVariety ?? "—"} · {formatQuantity(offer.product, offer.tons, locale)}
           </p>
         </div>
         <p className="text-[22px] font-extrabold text-ink">
@@ -1687,7 +1688,7 @@ function SentOfferCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-ap-card text-ink">{offer.processorName}</p>
           <p className="text-ap-small text-muted-foreground">
-            {offer.fieldName ?? offer.lotVariety ?? "—"} · {formatTons(offer.tons, locale)}
+            {offer.fieldName ?? offer.lotVariety ?? "—"} · {formatQuantity(offer.product, offer.tons, locale)}
           </p>
         </div>
         <p className="text-[22px] font-extrabold text-ink">
