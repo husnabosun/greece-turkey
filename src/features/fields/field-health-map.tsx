@@ -9,7 +9,8 @@ import { cn } from "@/shared/lib/utils";
 import {
   initialMapView,
   LOCATE_ZOOM,
-  requestDeviceLocation,
+  locateDevice,
+  type LocationFailure,
   writeLastMapCenter,
 } from "@/features/fields/map-location";
 import {
@@ -72,6 +73,8 @@ type Props = {
   showHealth: boolean;
   onToggleHealth: (v: boolean) => void;
   onLocate: () => void;
+  /** Called instead of `onLocate` when the device position could not be read (denied / unavailable / timeout). */
+  onLocateError?: (reason: LocationFailure) => void;
   labels: {
     aiLayer: string;
     healthy: string;
@@ -103,6 +106,7 @@ export function FieldHealthMap({
   showHealth,
   onToggleHealth,
   onLocate,
+  onLocateError,
   labels,
   className,
 }: Props) {
@@ -270,17 +274,17 @@ export function FieldHealthMap({
       onLocate();
       return;
     }
-    void requestDeviceLocation()
-      .then((pos) => {
-        const next: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        writeLastMapCenter(next[0], next[1], LOCATE_ZOOM);
-        map.easeTo({ center: next, zoom: LOCATE_ZOOM, duration: 600 });
-        onLocate();
-      })
-      .catch(() => {
-        fitTo(map, fitBoundsFor(latest.current), true);
-        onLocate();
-      });
+    void locateDevice().then((r) => {
+      if (!r.ok) {
+        // Keep the current view; the caller shows the reason.
+        onLocateError?.(r.reason);
+        return;
+      }
+      const next: [number, number] = [r.position.coords.longitude, r.position.coords.latitude];
+      writeLastMapCenter(next[0], next[1], LOCATE_ZOOM);
+      map.easeTo({ center: next, zoom: LOCATE_ZOOM, duration: 600 });
+      onLocate();
+    });
   }
 
   const legend: { key: MapTreeStatus; label: string }[] = [

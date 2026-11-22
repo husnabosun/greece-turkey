@@ -61,7 +61,10 @@
     "close": "Close",
     "confirmTitle": "Please confirm",
     "cancel": "Cancel",
-    "ok": "OK"
+    "ok": "OK",
+    "locateDenied": "Location is blocked. Allow it in your browser settings.",
+    "locateUnavailable": "Can't get your location right now.",
+    "locateTimeout": "Locating took too long. Try again."
   },
   "roles": {
     "farmer": "Farmer",

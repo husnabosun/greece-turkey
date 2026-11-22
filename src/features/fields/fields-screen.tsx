@@ -24,6 +24,7 @@ import {
 } from "@/features/fields/tree-count-source";
 import { formatRelativeAge, relativeAge } from "@/features/fields/field-summary";
 import { useFieldSummary } from "@/features/fields/use-field-summary";
+import { LOCATION_FAILURE_MESSAGE_KEY } from "@/features/fields/map-location";
 import { useMapStartView } from "@/features/fields/use-map-start-view";
 import { deleteFarmerField, updateFarmerField } from "@/features/fields/field-mutations";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
@@ -54,6 +55,7 @@ export function FieldsScreen() {
   const t = useTranslations("farmerFields");
   const errMsg = useErrorMessage();
   const tThreats = useTranslations("riskThreats");
+  const tCommon = useTranslations("common");
   const locale = useLocale();
   const router = useRouter();
   const { fields, loading, reload } = useFarmerFields();
@@ -392,6 +394,7 @@ export function FieldsScreen() {
                 showHealth={showHealth}
                 onToggleHealth={setShowHealth}
                 onLocate={() => toast(t("located"))}
+                onLocateError={(reason) => toast.error(tCommon(LOCATION_FAILURE_MESSAGE_KEY[reason]))}
                 labels={{
                   aiLayer: t("aiLayer"),
                   healthy: t("healthy"),

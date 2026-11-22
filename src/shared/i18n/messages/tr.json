@@ -61,7 +61,10 @@
     "close": "Kapat",
     "confirmTitle": "Onaylayın",
     "cancel": "Vazgeç",
-    "ok": "Tamam"
+    "ok": "Tamam",
+    "locateDenied": "Konum izni engellenmiş. Tarayıcı ayarlarından izin verin.",
+    "locateUnavailable": "Konumunuz şu an alınamıyor.",
+    "locateTimeout": "Konum alınamadı, süre doldu. Tekrar deneyin."
   },
   "roles": {
     "farmer": "Çiftçi",

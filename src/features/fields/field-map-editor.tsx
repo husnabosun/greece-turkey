@@ -5,6 +5,7 @@ import mapboxgl from "mapbox-gl";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import { MapPin, Navigation } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
+import { toast } from "sonner";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 import { formatArea } from "@/features/fields/area";
@@ -13,6 +14,8 @@ import {
   DRAW_LOCATE_ZOOM,
   initialMapView,
   LOCATE_ZOOM,
+  LOCATION_FAILURE_MESSAGE_KEY,
+  locateDevice,
   requestDeviceLocation,
   writeLastMapCenter,
 } from "@/features/fields/map-location";
@@ -45,6 +48,7 @@ export function FieldMapEditor({
   startView,
 }: Props) {
   const t = useTranslations("farmerFields");
+  const tCommon = useTranslations("common");
   const locale = useLocale();
   const shellRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -182,9 +186,14 @@ export function FieldMapEditor({
   function useMyLocation() {
     if (!mapRef.current) return;
     setLocating(true);
-    void requestDeviceLocation()
-      .then((pos) => {
-        const center: [number, number] = [pos.coords.longitude, pos.coords.latitude];
+    void locateDevice()
+      .then((r) => {
+        if (!r.ok) {
+          // Denied / unavailable / timeout: tell the user, keep the current view.
+          toast.error(tCommon(LOCATION_FAILURE_MESSAGE_KEY[r.reason]));
+          return;
+        }
+        const center: [number, number] = [r.position.coords.longitude, r.position.coords.latitude];
         writeLastMapCenter(center[0], center[1], DRAW_LOCATE_ZOOM);
         onCenterChangeRef.current?.(center[0], center[1]);
         mapRef.current?.easeTo({

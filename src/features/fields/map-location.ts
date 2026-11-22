@@ -46,17 +46,75 @@ export function initialMapView(): MapCenter {
   return readLastMapCenter() ?? { center: DEFAULT_FIELD_CENTER, zoom: DEFAULT_FIELD_ZOOM };
 }
 
-export function requestDeviceLocation(opts?: PositionOptions): Promise<GeolocationPosition> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error("geolocation unavailable"));
+/** Give up locating after this long. */
+export const LOCATE_TIMEOUT_MS = 8000;
+
+/** Coarse (network / cell) fix is enough to centre a map and answers much faster than GPS. */
+export const LOCATE_OPTIONS: PositionOptions = {
+  enableHighAccuracy: false,
+  timeout: LOCATE_TIMEOUT_MS,
+  maximumAge: 120_000,
+};
+
+export type LocationFailure = "denied" | "unavailable" | "timeout";
+
+export type LocationResult =
+  | { ok: true; position: GeolocationPosition }
+  | { ok: false; reason: LocationFailure };
+
+/** Message key in the `common` namespace for each failure. */
+export const LOCATION_FAILURE_MESSAGE_KEY = {
+  denied: "locateDenied",
+  unavailable: "locateUnavailable",
+  timeout: "locateTimeout",
+} as const satisfies Record<LocationFailure, string>;
+
+/** GeolocationPositionError.code: 1 = permission denied, 2 = position unavailable, 3 = timeout. */
+export function classifyLocationError(err: unknown): LocationFailure {
+  const code = typeof err === "object" && err !== null ? (err as { code?: unknown }).code : undefined;
+  if (code === 1) return "denied";
+  if (code === 3) return "timeout";
+  return "unavailable";
+}
+
+function currentGeolocation(): Geolocation | undefined {
+  return typeof navigator !== "undefined" ? navigator.geolocation : undefined;
+}
+
+/**
+ * Ask for the device position. Never throws or rejects: a refusal, a missing API, a timeout or any
+ * other failure comes back as `{ ok: false, reason }` so the caller can keep the current map view.
+ */
+export function locateDevice(
+  opts?: PositionOptions,
+  geo: Geolocation | undefined = currentGeolocation(),
+): Promise<LocationResult> {
+  return new Promise((resolve) => {
+    if (!geo) {
+      resolve({ ok: false, reason: "unavailable" });
       return;
     }
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      timeout: 12000,
-      maximumAge: 120_000,
-      ...opts,
-    });
+    // Some browsers never call back (permission prompt ignored): our own timer guarantees an answer.
+    const timer = setTimeout(() => resolve({ ok: false, reason: "timeout" }), LOCATE_TIMEOUT_MS + 2000);
+    const done = (r: LocationResult) => {
+      clearTimeout(timer);
+      resolve(r);
+    };
+    try {
+      geo.getCurrentPosition(
+        (position) => done({ ok: true, position }),
+        (err) => done({ ok: false, reason: classifyLocationError(err) }),
+        { ...LOCATE_OPTIONS, ...opts },
+      );
+    } catch (err) {
+      done({ ok: false, reason: classifyLocationError(err) });
+    }
   });
+}
+
+/** Rejecting variant, kept for callers that already wrap it in try/catch. Prefer `locateDevice`. */
+export async function requestDeviceLocation(opts?: PositionOptions): Promise<GeolocationPosition> {
+  const r = await locateDevice(opts);
+  if (!r.ok) throw new Error(`geolocation ${r.reason}`);
+  return r.position;
 }
