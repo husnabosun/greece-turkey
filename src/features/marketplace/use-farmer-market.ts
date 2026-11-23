@@ -3,7 +3,8 @@
 import { errorCode } from "@/shared/lib/error-message";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
-import type { LabResult } from "@/shared/types/database";
+import { addDaysIso, todayIsoDate } from "@/features/marketplace/schedule";
+import type { LabResult, OilCategory, ProductKind } from "@/shared/types/database";
 
 export type MarketOffer = {
   id: string;
@@ -17,6 +18,9 @@ export type MarketOffer = {
   tons: number;
   pricePerKg: number;
   fieldId: string | null;
+  product: ProductKind;
+  /** Delivery date the mill proposed (local YYYY-MM-DD), from created_at + delivery_in_days. */
+  proposedDate: string | null;
   fieldName: string | null;
   lotVariety: string | null;
   buyRequestId: string | null;
@@ -26,6 +30,7 @@ export type MarketRequest = {
   id: string;
   processorId: string;
   processorName: string;
+  product: ProductKind;
   variety: string;
   tons: number;
   filledTons: number;
@@ -33,6 +38,8 @@ export type MarketRequest = {
   region: string | null;
   windowLabel: string | null;
   noBanned: boolean;
+  maxAcidity: number | null;
+  oilCategory: OilCategory | null;
 };
 
 export type MarketDelivery = {
@@ -47,12 +54,14 @@ export type MarketDelivery = {
   fieldName: string | null;
   processorName: string | null;
   lotVariety: string | null;
+  product: ProductKind;
 };
 
 /** One listing (lot) on a field, with its own status and its own open offers. */
 export type FieldLot = {
   id: string;
   status: "listed" | "reserved" | "sold";
+  product: ProductKind;
   pricePerKg: number | null;
   tons: number | null;
   /** Open mill bids on this lot (only counted while it is still listed). */
@@ -83,6 +92,8 @@ type State = {
   requests: MarketRequest[];
   deliveries: MarketDelivery[];
   fieldCards: Record<string, FieldMarketCard>;
+  /** Oil (or other) lots listed without a field_id — bulk stock. */
+  stockLots: FieldLot[];
   /** Farmer's country from profile (GR/TR) — used for region matching. */
   farmerCountry: "GR" | "TR" | null;
   loading: boolean;
@@ -95,6 +106,7 @@ const EMPTY: State = {
   requests: [],
   deliveries: [],
   fieldCards: {},
+  stockLots: [],
   farmerCountry: null,
   loading: true,
   error: null,
@@ -132,14 +144,14 @@ export function useFarmerMarket(fieldIds: string[]) {
         supabase
           .from("offers")
           .select(
-            "id, lot_id, processor_id, initiated_by, status, tons, price_per_kg, buy_request_id, lots(status, variety, field_id, fields(name))",
+            "id, lot_id, processor_id, initiated_by, status, tons, price_per_kg, buy_request_id, delivery_in_days, created_at, lots(status, product, variety, field_id, fields(name))",
           )
           .eq("farmer_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
           .from("buy_requests")
           .select(
-            "id, processor_id, variety, tons, filled_tons, min_score, region, window_label, no_banned",
+            "id, processor_id, product, variety, tons, filled_tons, min_score, region, window_label, no_banned, max_acidity, oil_category",
           )
           .eq("active", true)
           .eq("shared_with_farmers", true)
@@ -147,13 +159,13 @@ export function useFarmerMarket(fieldIds: string[]) {
         supabase
           .from("deliveries")
           .select(
-            "id, status, tons, price_per_kg, scheduled_for, processor_id, actual_kg, lab_result, quality_score_snapshot, lots(variety, fields(name))",
+            "id, status, tons, price_per_kg, scheduled_for, processor_id, actual_kg, lab_result, quality_score_snapshot, lots(product, variety, fields(name))",
           )
           .eq("farmer_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
           .from("lots")
-          .select("id, field_id, price_per_kg, tons, status")
+          .select("id, field_id, product, price_per_kg, tons, status")
           .eq("farmer_id", user.id)
           .in("status", ["listed", "reserved", "sold"]),
         ids.length
@@ -190,6 +202,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         const lot = row.lots as
           | {
               status?: string;
+              product?: ProductKind;
               variety?: string;
               field_id?: string;
               fields?: { name?: string } | { name?: string }[];
@@ -208,6 +221,11 @@ export function useFarmerMarket(fieldIds: string[]) {
           tons: Number(row.tons),
           pricePerKg: Number(row.price_per_kg),
           fieldId: lot?.field_id ?? null,
+          product: lot?.product ?? "olives",
+          proposedDate:
+            row.delivery_in_days == null || !row.created_at
+              ? null
+              : addDaysIso(todayIsoDate(new Date(row.created_at)), Number(row.delivery_in_days)),
           fieldName: fieldName ?? null,
           lotVariety: lot?.variety ?? null,
           buyRequestId: row.buy_request_id ?? null,
@@ -218,6 +236,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         id: row.id,
         processorId: row.processor_id,
         processorName: nameByProcessor.get(row.processor_id) ?? "Buyer",
+        product: ((row as { product?: ProductKind }).product as ProductKind) ?? "olives",
         variety: row.variety,
         tons: Number(row.tons),
         filledTons: Number(row.filled_tons),
@@ -225,11 +244,16 @@ export function useFarmerMarket(fieldIds: string[]) {
         region: row.region,
         windowLabel: row.window_label,
         noBanned: row.no_banned,
+        maxAcidity:
+          (row as { max_acidity?: number | null }).max_acidity == null
+            ? null
+            : Number((row as { max_acidity?: number | null }).max_acidity),
+        oilCategory: ((row as { oil_category?: OilCategory | null }).oil_category as OilCategory | null) ?? null,
       }));
 
       const deliveries: MarketDelivery[] = (deliveriesRes.data ?? []).map((row) => {
         const lot = row.lots as
-          | { variety?: string; fields?: { name?: string } | { name?: string }[] }
+          | { product?: ProductKind; variety?: string; fields?: { name?: string } | { name?: string }[] }
           | null;
         const fieldsJoin = lot?.fields;
         const fieldName = Array.isArray(fieldsJoin) ? fieldsJoin[0]?.name : fieldsJoin?.name;
@@ -246,6 +270,7 @@ export function useFarmerMarket(fieldIds: string[]) {
           fieldName: fieldName ?? null,
           processorName: nameByProcessor.get(row.processor_id) ?? null,
           lotVariety: lot?.variety ?? null,
+          product: lot?.product ?? "olives",
         };
       });
 
@@ -274,17 +299,23 @@ export function useFarmerMarket(fieldIds: string[]) {
       const listedLotsByField = new Map<string, FieldMarketCard["listedLots"]>();
       const committedTonsByField = new Map<string, number>();
       const lotsByField = new Map<string, FieldLot[]>();
+      const stockLots: FieldLot[] = [];
       for (const lot of lotsRes.data ?? []) {
-        if (!lot.field_id) continue;
         const st = lot.status as "listed" | "reserved" | "sold";
-        const all = lotsByField.get(lot.field_id) ?? [];
-        all.push({
+        const mapped: FieldLot = {
           id: lot.id,
           status: st,
+          product: ((lot as { product?: ProductKind }).product as ProductKind) ?? "olives",
           pricePerKg: lot.price_per_kg == null ? null : Number(lot.price_per_kg),
           tons: lot.tons == null ? null : Number(lot.tons),
           offerCount: offerCountByLot.get(lot.id) ?? 0,
-        });
+        };
+        if (!lot.field_id) {
+          stockLots.push(mapped);
+          continue;
+        }
+        const all = lotsByField.get(lot.field_id) ?? [];
+        all.push(mapped);
         lotsByField.set(lot.field_id, all);
         const prev = lotStatusByField.get(lot.field_id);
         if (!prev || statusRank[st] > statusRank[prev]) {
@@ -333,6 +364,7 @@ export function useFarmerMarket(fieldIds: string[]) {
         requests,
         deliveries,
         fieldCards,
+        stockLots,
         farmerCountry,
         loading: false,
         error: offersRes.error?.message || requestsRes.error?.message || null,
@@ -476,7 +508,7 @@ export async function counterOffer(
   if (offer.status !== "pending" || offer.lotStatus !== "listed") {
     return { ok: false, error: "offerNotPending" };
   }
-  if (!Number.isFinite(newPrice) || newPrice < 0.05 || newPrice > 20) {
+  if (!Number.isFinite(newPrice) || newPrice < 0.05 || newPrice > 30) {
     return { ok: false, error: "invalidPrice" };
   }
   // Atomic on the server: marks the bid countered and creates exactly one counter offer.

@@ -12,11 +12,22 @@ import {
   deliveryInDaysFromIso,
   todayIsoDate,
 } from "@/features/marketplace/schedule";
-import type { DeliveryStatus, LabResult, LotUse } from "@/shared/types/database";
+import type {
+  DeliveryStatus,
+  LabResult,
+  LotUse,
+  OilCategory,
+  OilStorage,
+  ProductKind,
+} from "@/shared/types/database";
+
+const LOT_SELECT =
+  "id, status, product, use_type, variety, tons, price_per_kg, negotiable, delivery_mode, town, region, country, lat, lon, harvest_start, harvest_end, quality_score, has_banned_spray, lab_result, lab_acidity, oil_category, acidity, harvest_season, storage, peroxide, polyphenols, pdo_pgi, organic, listed_at, field_id, farmer_id, identity_unlocked_for";
 
 export type ProcessorLot = {
   id: string;
   status: string;
+  product: ProductKind;
   useType: LotUse;
   variety: string;
   tons: number;
@@ -34,6 +45,14 @@ export type ProcessorLot = {
   hasBannedSpray: boolean;
   labResult: LabResult | null;
   labAcidity: number | null;
+  oilCategory: OilCategory | null;
+  acidity: number | null;
+  harvestSeason: string | null;
+  storage: OilStorage | null;
+  peroxide: number | null;
+  polyphenols: number | null;
+  pdoPgi: string | null;
+  organic: boolean;
   fieldId: string | null;
   farmerId: string | null;
   farmerDisplayName: string | null;
@@ -55,6 +74,7 @@ export type ProcessorOffer = {
 
 export type ProcessorRequest = {
   id: string;
+  product: ProductKind;
   variety: string;
   tons: number;
   filledTons: number;
@@ -63,6 +83,8 @@ export type ProcessorRequest = {
   windowLabel: string | null;
   noBanned: boolean;
   active: boolean;
+  maxAcidity: number | null;
+  oilCategory: OilCategory | null;
 };
 
 export type ProcessorDelivery = {
@@ -80,6 +102,7 @@ export type ProcessorDelivery = {
   farmerName: string | null;
   lotVariety: string | null;
   lotRegion: string | null;
+  product: ProductKind;
 };
 
 export type SupplyRow = {
@@ -111,6 +134,7 @@ function mapLot(row: Record<string, unknown>): ProcessorLot {
   return {
     id: String(row.id),
     status: String(row.status),
+    product: (row.product as ProductKind) ?? "olives",
     useType: (row.use_type as LotUse) ?? "oil",
     variety: String(row.variety ?? "olive"),
     tons: Number(row.tons),
@@ -128,6 +152,14 @@ function mapLot(row: Record<string, unknown>): ProcessorLot {
     hasBannedSpray: Boolean(row.has_banned_spray),
     labResult: (row.lab_result as LabResult | null) ?? null,
     labAcidity: row.lab_acidity == null ? null : Number(row.lab_acidity),
+    oilCategory: (row.oil_category as OilCategory | null) ?? null,
+    acidity: row.acidity == null ? null : Number(row.acidity),
+    harvestSeason: (row.harvest_season as string | null) ?? null,
+    storage: (row.storage as OilStorage | null) ?? null,
+    peroxide: row.peroxide == null ? null : Number(row.peroxide),
+    polyphenols: row.polyphenols == null ? null : Number(row.polyphenols),
+    pdoPgi: (row.pdo_pgi as string | null) ?? null,
+    organic: Boolean(row.organic),
     fieldId: (row.field_id as string | null) ?? null,
     farmerId: (row.farmer_id as string | null) ?? null,
     farmerDisplayName: (row.farmer_display_name as string | null) ?? null,
@@ -189,9 +221,7 @@ export function useProcessorMarket() {
         // Use `lots` (not the masked view) so processor bids can include farmer_id.
         supabase
           .from("lots")
-          .select(
-            "id, status, use_type, variety, tons, price_per_kg, negotiable, delivery_mode, town, region, country, lat, lon, harvest_start, harvest_end, quality_score, has_banned_spray, lab_result, lab_acidity, listed_at, field_id, farmer_id, identity_unlocked_for",
-          )
+          .select(LOT_SELECT)
           .in("status", ["listed", "reserved", "sold"])
           .not("listed_at", "is", null)
           .order("quality_score", { ascending: false, nullsFirst: false }),
@@ -202,7 +232,9 @@ export function useProcessorMarket() {
           .order("created_at", { ascending: false }),
         supabase
           .from("buy_requests")
-          .select("id, variety, tons, filled_tons, min_score, region, window_label, no_banned, active")
+          .select(
+            "id, product, variety, tons, filled_tons, min_score, region, window_label, no_banned, active, max_acidity, oil_category",
+          )
           .eq("processor_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
@@ -221,12 +253,7 @@ export function useProcessorMarket() {
       );
       const extraLotsRes =
         missingLotIds.length > 0
-          ? await supabase
-              .from("lots")
-              .select(
-                "id, status, use_type, variety, tons, price_per_kg, negotiable, delivery_mode, town, region, country, lat, lon, harvest_start, harvest_end, quality_score, has_banned_spray, lab_result, lab_acidity, listed_at, field_id, farmer_id, identity_unlocked_for",
-              )
-              .in("id", missingLotIds)
+          ? await supabase.from("lots").select(LOT_SELECT).in("id", missingLotIds)
           : { data: [] as NonNullable<typeof lotsRes.data> };
 
       const allLotRows = [...(lotsRes.data ?? []), ...(extraLotsRes.data ?? [])];
@@ -279,6 +306,7 @@ export function useProcessorMarket() {
 
       const requests: ProcessorRequest[] = (requestsRes.data ?? []).map((row) => ({
         id: row.id,
+        product: ((row as { product?: ProductKind }).product as ProductKind) ?? "olives",
         variety: row.variety,
         tons: Number(row.tons),
         filledTons: Number(row.filled_tons),
@@ -287,6 +315,11 @@ export function useProcessorMarket() {
         windowLabel: row.window_label,
         noBanned: row.no_banned,
         active: row.active,
+        maxAcidity:
+          (row as { max_acidity?: number | null }).max_acidity == null
+            ? null
+            : Number((row as { max_acidity?: number | null }).max_acidity),
+        oilCategory: ((row as { oil_category?: OilCategory | null }).oil_category as OilCategory | null) ?? null,
       }));
 
       const deliveries: ProcessorDelivery[] = (deliveriesRes.data ?? []).map((row) => {
@@ -311,6 +344,7 @@ export function useProcessorMarket() {
           farmerName: nameByFarmer.get(row.farmer_id) ?? null,
           lotVariety: lot?.variety ?? null,
           lotRegion: lot?.region ?? null,
+          product: lot?.product ?? "olives",
         };
       });
 
@@ -345,12 +379,15 @@ export function useProcessorMarket() {
 }
 
 export type BuyRequestInput = {
+  product?: ProductKind;
   variety: string;
   tons: number;
   minScore: number;
   region: string | null;
   windowLabel: string;
   noBanned: boolean;
+  maxAcidity?: number | null;
+  oilCategory?: OilCategory | null;
 };
 
 export async function createBuyRequest(input: BuyRequestInput): Promise<{ ok: boolean; error?: string }> {
@@ -361,14 +398,18 @@ export async function createBuyRequest(input: BuyRequestInput): Promise<{ ok: bo
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "needLogin" };
 
+  const product = input.product ?? "olives";
   const { error } = await supabase.from("buy_requests").insert({
     processor_id: user.id,
+    product,
     variety: input.variety,
     tons: input.tons,
     min_score: input.minScore,
     region: input.region,
     window_label: input.windowLabel,
     no_banned: input.noBanned,
+    max_acidity: product === "oil" ? (input.maxAcidity ?? null) : null,
+    oil_category: product === "oil" ? (input.oilCategory ?? null) : null,
     shared_with_farmers: true,
     active: true,
   });
@@ -386,15 +427,19 @@ export async function updateBuyRequest(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "needLogin" };
 
+  const product = input.product ?? "olives";
   const { error } = await supabase
     .from("buy_requests")
     .update({
+      product,
       variety: input.variety,
       tons: input.tons,
       min_score: input.minScore,
       region: input.region,
       window_label: input.windowLabel,
       no_banned: input.noBanned,
+      max_acidity: product === "oil" ? (input.maxAcidity ?? null) : null,
+      oil_category: product === "oil" ? (input.oilCategory ?? null) : null,
     })
     .eq("id", id)
     .eq("processor_id", user.id);
@@ -520,7 +565,7 @@ export async function counterIncomingOffer(
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = tryCreateBrowserClient();
   if (!supabase) return { ok: false, error: "needSupabase" };
-  if (!Number.isFinite(newPrice) || newPrice < 0.05 || newPrice > 20) {
+  if (!Number.isFinite(newPrice) || newPrice < 0.05 || newPrice > 30) {
     return { ok: false, error: "invalidPrice" };
   }
   // Atomic on the server: one counter per offer, only the receiving side may counter.

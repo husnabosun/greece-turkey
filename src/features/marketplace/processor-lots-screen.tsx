@@ -18,9 +18,21 @@ import {
   MARKET_LIMITS,
   formatEuro,
   formatEuroPerKg,
-  formatTons,
+  formatQuantity,
+  kgToTons,
   parseBounded,
+  parseLocaleNumber,
+  tonsToKg,
 } from "@/features/marketplace/pricing";
+import {
+  OIL_CATEGORIES,
+  OIL_STORAGES,
+  ProductBadge,
+  oilCategoryI18nKey,
+  oilStorageI18nKey,
+  productI18nKey,
+} from "@/features/marketplace/product-badge";
+import type { OilCategory, OilStorage, ProductKind } from "@/shared/types/database";
 // Mapbox (~1 MB) is only fetched when a map is actually on screen.
 const LotsMap = dynamic(() => import("./lots-map").then((m) => m.LotsMap), {
   ssr: false,
@@ -47,6 +59,7 @@ import {
   nextSevenDays,
   todayIsoDate,
 } from "./schedule";
+import { SCORE_SLIDER_MAX, ScoreSlider, scoreBand } from "./score-slider";
 import {
   harvestRangeLabel,
   lotPlaceLabel,
@@ -141,7 +154,12 @@ export function ProcessorLotsScreen() {
   const varietyOptions = useMemo(() => marketplaceVarietyOptions(locale), [locale]);
   const { lots, loading, error, reload } = useProcessorMarket();
   const placeById = useLotPlaceLabels(lots);
+  const [productFilter, setProductFilter] = useState<ProductKind>("oil");
   const [useFilter, setUseFilter] = useState<"all" | "oil" | "table">("all");
+  const [oilCategoryFilter, setOilCategoryFilter] = useState<"all" | OilCategory>("all");
+  const [maxAcidityText, setMaxAcidityText] = useState("");
+  const [organicOnly, setOrganicOnly] = useState(false);
+  const [storageFilter, setStorageFilter] = useState<"all" | OilStorage>("all");
   const [variety, setVariety] = useState("all");
   const [varietyExpanded, setVarietyExpanded] = useState(false);
   const [province, setProvince] = useState("all");
@@ -156,6 +174,7 @@ export function ProcessorLotsScreen() {
   const [offerLot, setOfferLot] = useState<ProcessorLot | null>(null);
   const [offerTons, setOfferTons] = useState("5");
   const [offerPrice, setOfferPrice] = useState("0.80");
+  const offerIsOil = offerLot?.product === "oil";
   const [offerArrive, setOfferArrive] = useState(() => addDaysIso(todayIsoDate(), DEFAULT_DELIVERY_IN_DAYS));
   const offerWeek = useMemo(() => nextSevenDays(), []);
   const mapToken = publicEnv.NEXT_PUBLIC_MAPBOX_TOKEN || undefined;
@@ -177,9 +196,28 @@ export function ProcessorLotsScreen() {
   const extraVarieties = varietyOptions.slice(3);
   const visibleVarieties = varietyExpanded ? varietyOptions : popularVarieties;
 
+  const maxAcidityN = parseLocaleNumber(maxAcidityText);
+
   const shown = useMemo(() => {
     const filtered = listed
-      .filter((l) => (useFilter === "all" ? true : l.useType === useFilter))
+      .filter((l) => l.product === productFilter)
+      .filter((l) =>
+        productFilter === "olives" ? (useFilter === "all" ? true : l.useType === useFilter) : true,
+      )
+      .filter((l) =>
+        productFilter === "oil" && oilCategoryFilter !== "all"
+          ? l.oilCategory === oilCategoryFilter
+          : true,
+      )
+      .filter((l) =>
+        productFilter === "oil" && maxAcidityN != null
+          ? l.acidity != null && l.acidity <= maxAcidityN
+          : true,
+      )
+      .filter((l) => (productFilter === "oil" && organicOnly ? l.organic : true))
+      .filter((l) =>
+        productFilter === "oil" && storageFilter !== "all" ? l.storage === storageFilter : true,
+      )
       .filter((l) => (variety === "all" ? true : l.variety === variety))
       .filter((l) => regionMatches(l.region, placeById[l.id] ?? "", province))
       .filter((l) => (l.qualityScore ?? 0) >= minScore)
@@ -202,7 +240,22 @@ export function ProcessorLotsScreen() {
       if (sort === "tons") return b.tons - a.tons;
       return (b.qualityScore ?? -1) - (a.qualityScore ?? -1);
     });
-  }, [listed, useFilter, variety, province, minScore, noBanned, labSuggested, placeById, sort]);
+  }, [
+    listed,
+    productFilter,
+    useFilter,
+    oilCategoryFilter,
+    maxAcidityN,
+    organicOnly,
+    storageFilter,
+    variety,
+    province,
+    minScore,
+    noBanned,
+    labSuggested,
+    placeById,
+    sort,
+  ]);
 
   const mapPoints = useMemo(
     () =>
@@ -216,17 +269,34 @@ export function ProcessorLotsScreen() {
             lon: l.lon!,
             label: place,
             score: l.qualityScore,
-            title: `${varietyLabel(l.variety)} · ${formatTons(l.tons, locale)}`,
+            title: `${varietyLabel(l.variety)} · ${formatQuantity(l.product, l.tons, locale)}`,
             subtitle: t("lotSub", {
               place,
               harvest: harvestRangeLabel(l.harvestStart, l.harvestEnd, locale),
-              use: l.useType === "table" ? t("filterTable") : t("filterOil"),
+              use:
+                l.product === "oil"
+                  ? [
+                      l.oilCategory ? t(oilCategoryI18nKey(l.oilCategory)) : t("productOil"),
+                      l.acidity != null ? `${t("acidity")} ${l.acidity}%` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : l.useType === "table"
+                    ? t("filterTable")
+                    : t("filterOil"),
             }),
             priceLabel:
               l.pricePerKg != null
                 ? `${formatEuroPerKg(l.pricePerKg, locale)} · ${t("farmerPrice")}`
                 : t("openToOffers"),
-            useLabel: l.useType === "table" ? t("filterTable") : t("filterOil"),
+            useLabel:
+              l.product === "oil"
+                ? l.oilCategory
+                  ? t(oilCategoryI18nKey(l.oilCategory))
+                  : t("productOil")
+                : l.useType === "table"
+                  ? t("filterTable")
+                  : t("filterOil"),
             harvestLabel: harvestRangeLabel(l.harvestStart, l.harvestEnd, locale),
           };
         }),
@@ -244,7 +314,11 @@ export function ProcessorLotsScreen() {
     (province !== "all" ? 1 : 0) +
     (minScore > 0 ? 1 : 0) +
     (noBanned ? 1 : 0) +
-    (labSuggested ? 1 : 0);
+    (labSuggested ? 1 : 0) +
+    (productFilter === "oil" && oilCategoryFilter !== "all" ? 1 : 0) +
+    (productFilter === "oil" && maxAcidityText.trim() ? 1 : 0) +
+    (productFilter === "oil" && organicOnly ? 1 : 0) +
+    (productFilter === "oil" && storageFilter !== "all" ? 1 : 0);
 
   const clearFilters = () => {
     setVariety("all");
@@ -253,6 +327,10 @@ export function ProcessorLotsScreen() {
     setNoBanned(false);
     setLabSuggested(false);
     setVarietyExpanded(false);
+    setOilCategoryFilter("all");
+    setMaxAcidityText("");
+    setOrganicOnly(false);
+    setStorageFilter("all");
   };
 
   const submitOffer = async () => {
@@ -260,20 +338,27 @@ export function ProcessorLotsScreen() {
       toast.error(t("identityHidden"));
       return;
     }
-    const tc = parseBounded(String(offerTons), {
-      min: MARKET_LIMITS.lotTons.min,
-      max: Math.min(MARKET_LIMITS.lotTons.max, offerLot.tons ?? MARKET_LIMITS.lotTons.max),
-    });
+    const oil = offerLot.product === "oil";
+    const qtyBounds = oil
+      ? {
+          min: MARKET_LIMITS.oilKg.min,
+          max: Math.min(MARKET_LIMITS.oilKg.max, tonsToKg(offerLot.tons)),
+        }
+      : {
+          min: MARKET_LIMITS.lotTons.min,
+          max: Math.min(MARKET_LIMITS.lotTons.max, offerLot.tons ?? MARKET_LIMITS.lotTons.max),
+        };
+    const tc = parseBounded(String(offerTons), qtyBounds);
     if (!tc.ok) {
-      toast.error(boundsMsg(tc, "tons", locale));
+      toast.error(boundsMsg(tc, oil ? "kg" : "tons", locale));
       return;
     }
-    const pc = parseBounded(String(offerPrice), MARKET_LIMITS.pricePerKg);
+    const pc = parseBounded(String(offerPrice), oil ? MARKET_LIMITS.oilPricePerKg : MARKET_LIMITS.pricePerKg);
     if (!pc.ok) {
       toast.error(boundsMsg(pc, "price", locale));
       return;
     }
-    const tons = tc.value;
+    const tons = oil ? kgToTons(tc.value) : tc.value;
     const price = pc.value;
     const toastId = toast.loading(t("sendingOffer"));
     const deliveryInDays = Math.max(
@@ -308,6 +393,45 @@ export function ProcessorLotsScreen() {
 
   const filtersBody = (
     <>
+      {productFilter === "oil" ? (
+        <>
+          <ChipGroup
+            label={t("oilCategory")}
+            value={oilCategoryFilter}
+            onChange={(v) => setOilCategoryFilter(v as "all" | OilCategory)}
+            chipClassName={CHIP_TOUCH}
+            options={[
+              { value: "all", label: t("filterAll") },
+              ...OIL_CATEGORIES.map((c) => ({ value: c, label: t(oilCategoryI18nKey(c)) })),
+            ]}
+          />
+          <TextField
+            label={t("maxAcidity")}
+            value={maxAcidityText}
+            onChange={setMaxAcidityText}
+            suffix="%"
+            inputMode="decimal"
+            placeholder="0,8"
+          />
+          <ChipGroup
+            label={t("storage")}
+            value={storageFilter}
+            onChange={(v) => setStorageFilter(v as "all" | OilStorage)}
+            chipClassName={CHIP_TOUCH}
+            options={[
+              { value: "all", label: t("filterAll") },
+              ...OIL_STORAGES.map((s) => ({ value: s, label: t(oilStorageI18nKey(s)) })),
+            ]}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Chip tone="black" on={organicOnly} onClick={() => setOrganicOnly((v) => !v)} className={CHIP_TOUCH}>
+              <span className={cn("text-[12px] font-bold", organicOnly ? "text-white" : "text-ink")}>
+                {t("organicOil")}
+              </span>
+            </Chip>
+          </div>
+        </>
+      ) : null}
       <div className="flex flex-col gap-1.5">
         <p className="text-[12px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{t("variety")}</p>
         <div className="flex flex-wrap gap-2">
@@ -335,24 +459,27 @@ export function ProcessorLotsScreen() {
         options={[{ value: "all", label: t("filterAll") }, ...regionOptions]}
       />
 
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[12px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{t("minScore")}</p>
-          <p className="text-[13px] font-extrabold text-ink">
-            {minScore <= 0 ? t("allScores") : t("minScoreValue", { score: minScore })}
-          </p>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={95}
-          step={5}
-          value={minScore}
-          onChange={(e) => setMinScore(Number(e.target.value))}
-          className="w-full accent-ink"
-          aria-label={t("minScore")}
-        />
-      </div>
+      <ScoreSlider
+        label={t("minScore")}
+        value={minScore}
+        onChange={setMinScore}
+        min={0}
+        max={SCORE_SLIDER_MAX}
+        step={1}
+        valueLabel={minScore <= 0 ? t("allScores") : t("requestScoreMin", { score: String(minScore) })}
+        bandLabel={
+          minScore <= 0
+            ? t("allScores")
+            : t(
+                scoreBand(minScore) === "high"
+                  ? "scoreBandHigh"
+                  : scoreBand(minScore) === "mid"
+                    ? "scoreBandMid"
+                    : "scoreBandLow",
+              )
+        }
+        hint={minScore <= 0 ? undefined : t("scoreSliderHint", { score: String(minScore) })}
+      />
 
       <div className="flex flex-wrap gap-2">
         <Chip tone="black" on={noBanned} onClick={() => setNoBanned((v) => !v)} className={CHIP_TOUCH}>
@@ -375,7 +502,7 @@ export function ProcessorLotsScreen() {
           <button
             type="button"
             onClick={() => setVariety("all")}
-            className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
+            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-2.5 text-[12px] font-bold text-ink"
           >
             {varietyLabel(variety)}
             <X className="size-3.5" />
@@ -385,7 +512,7 @@ export function ProcessorLotsScreen() {
           <button
             type="button"
             onClick={() => setProvince("all")}
-            className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
+            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-2.5 text-[12px] font-bold text-ink"
           >
             {regionLabel(province, locale)}
             <X className="size-3.5" />
@@ -395,7 +522,7 @@ export function ProcessorLotsScreen() {
           <button
             type="button"
             onClick={() => setMinScore(0)}
-            className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
+            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-2.5 text-[12px] font-bold text-ink"
           >
             {t("minScoreValue", { score: minScore })}
             <X className="size-3.5" />
@@ -405,7 +532,7 @@ export function ProcessorLotsScreen() {
           <button
             type="button"
             onClick={() => setNoBanned(false)}
-            className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
+            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-2.5 text-[12px] font-bold text-ink"
           >
             {t("noBannedProducts")}
             <X className="size-3.5" />
@@ -415,9 +542,49 @@ export function ProcessorLotsScreen() {
           <button
             type="button"
             onClick={() => setLabSuggested(false)}
-            className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line bg-card px-3 text-[12px] font-bold text-ink"
+            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-2.5 text-[12px] font-bold text-ink"
           >
             {t("labTestSuggested")}
+            <X className="size-3.5" />
+          </button>
+        ) : null}
+        {productFilter === "oil" && oilCategoryFilter !== "all" ? (
+          <button
+            type="button"
+            onClick={() => setOilCategoryFilter("all")}
+            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-2.5 text-[12px] font-bold text-ink"
+          >
+            {t(oilCategoryI18nKey(oilCategoryFilter))}
+            <X className="size-3.5" />
+          </button>
+        ) : null}
+        {productFilter === "oil" && maxAcidityText.trim() ? (
+          <button
+            type="button"
+            onClick={() => setMaxAcidityText("")}
+            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-2.5 text-[12px] font-bold text-ink"
+          >
+            {t("maxAcidity")} {maxAcidityText}%
+            <X className="size-3.5" />
+          </button>
+        ) : null}
+        {productFilter === "oil" && organicOnly ? (
+          <button
+            type="button"
+            onClick={() => setOrganicOnly(false)}
+            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-2.5 text-[12px] font-bold text-ink"
+          >
+            {t("organicOil")}
+            <X className="size-3.5" />
+          </button>
+        ) : null}
+        {productFilter === "oil" && storageFilter !== "all" ? (
+          <button
+            type="button"
+            onClick={() => setStorageFilter("all")}
+            className="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-card px-2.5 text-[12px] font-bold text-ink"
+          >
+            {t(oilStorageI18nKey(storageFilter))}
             <X className="size-3.5" />
           </button>
         ) : null}
@@ -478,16 +645,31 @@ export function ProcessorLotsScreen() {
         {shown.map((lot) => {
           const badges = lotBadgesFor(lot, t).slice(0, 3);
           const place = regionLabel(lot.region, locale);
+          const oilMeta =
+            lot.product === "oil"
+              ? [
+                  lot.oilCategory ? t(oilCategoryI18nKey(lot.oilCategory)) : null,
+                  lot.acidity != null ? `${t("acidity")} ${lot.acidity}%` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : "";
+          const harvest = harvestRangeLabel(lot.harvestStart, lot.harvestEnd, locale);
           return (
             <LotResultCard
               key={lot.id}
               href={`/processor/lots/${lot.id}`}
-              title={`${varietyLabel(lot.variety)} · ${formatTons(lot.tons, locale)}`}
+              title={`${varietyLabel(lot.variety)} · ${formatQuantity(lot.product, lot.tons, locale)}`}
               place={place}
-              harvest={harvestRangeLabel(lot.harvestStart, lot.harvestEnd, locale)}
-              score={lot.qualityScore}
+              harvest={oilMeta ? `${oilMeta}${harvest !== "—" ? ` · ${harvest}` : ""}` : harvest}
+              score={lot.product === "oil" ? null : lot.qualityScore}
               scoreLabel={t("qualityScore")}
-              badges={<LotBadges badges={badges} max={3} />}
+              badges={
+                <>
+                  <ProductBadge product={lot.product} label={t(productI18nKey(lot.product))} />
+                  {lot.product === "olives" ? <LotBadges badges={badges} max={3} /> : null}
+                </>
+              }
               price={
                 lot.pricePerKg != null ? (
                   <Amount value={formatEuro(lot.pricePerKg, locale)} unit="/kg" />
@@ -504,17 +686,30 @@ export function ProcessorLotsScreen() {
       </div>
     );
 
-  const useFilterSegmented = (
+  const productSegmented = (
     <Segmented
-      value={useFilter}
-      onChange={setUseFilter}
+      fullWidth
+      value={productFilter}
+      onChange={setProductFilter}
       options={[
-        { value: "all", label: t("filterAll") },
-        { value: "oil", label: t("filterOil") },
-        { value: "table", label: t("filterTable") },
+        { value: "oil", label: t("productOil") },
+        { value: "olives", label: t("productOlives") },
       ]}
     />
   );
+
+  const useFilterSegmented =
+    productFilter === "olives" ? (
+      <Segmented
+        value={useFilter}
+        onChange={setUseFilter}
+        options={[
+          { value: "all", label: t("filterAll") },
+          { value: "oil", label: t("filterOil") },
+          { value: "table", label: t("filterTable") },
+        ]}
+      />
+    ) : null;
 
   const sortSelect = (
     <label className="inline-flex items-center gap-2">
@@ -536,7 +731,12 @@ export function ProcessorLotsScreen() {
 
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-4">
-      <PageHeader title={t("findTitle")} subtitle={t("findSubtitle")} />
+      <div className="mb-2 flex flex-col gap-3 min-[720px]:mb-6 min-[720px]:flex-row min-[720px]:items-end min-[720px]:justify-between">
+        <div className="min-w-0 flex-1 [&_>div]:mb-0">
+          <PageHeader title={t("findTitle")} subtitle={t("findSubtitle")} />
+        </div>
+        <div className="w-full shrink-0 min-[720px]:w-[260px]">{productSegmented}</div>
+      </div>
 
       {error === "needSupabase" || error === "needLogin" ? (
         <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{errMsg(error)}</ApCard>
@@ -573,7 +773,9 @@ export function ProcessorLotsScreen() {
           />
         </div>
 
-        <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{useFilterSegmented}</div>
+        {useFilterSegmented ? (
+          <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{useFilterSegmented}</div>
+        ) : null}
         {activeChips}
 
         {mobileView === "map"
@@ -653,11 +855,21 @@ export function ProcessorLotsScreen() {
         open={offerLot != null}
         onClose={() => setOfferLot(null)}
         title={t("makeOffer")}
-        subtitle={offerLot ? `${varietyLabel(offerLot.variety)} · ${formatTons(offerLot.tons, locale)}` : undefined}
+        subtitle={
+          offerLot
+            ? `${varietyLabel(offerLot.variety)} · ${formatQuantity(offerLot.product, offerLot.tons, locale)}`
+            : undefined
+        }
         actionLabel={t("sendOffer")}
         onAction={() => submitOffer()}
       >
-        <TextField label={t("tons")} value={offerTons} onChange={setOfferTons} suffix="t" inputMode="decimal" />
+        <TextField
+          label={offerIsOil ? t("quantityKg") : t("tons")}
+          value={offerTons}
+          onChange={setOfferTons}
+          suffix={offerIsOil ? "kg" : "t"}
+          inputMode="decimal"
+        />
         <TextField label={t("price")} value={offerPrice} onChange={setOfferPrice} suffix="€/kg" inputMode="decimal" />
         <DayChipPicker
           label={t("arriveOn")}

@@ -22,10 +22,12 @@ import { Link, useRouter } from "@/shared/i18n/navigation";
 import {
   formatEuro,
   formatEuroPerKg,
+  formatQuantity,
   formatTons,
   saleTotal,
   MARKET_LIMITS,
   parseBounded,
+  formatDecimalInput,
 } from "@/features/marketplace/pricing";
 import { trustBadges } from "@/features/marketplace/badges";
 import { canAdvanceDelivery } from "@/features/marketplace/delivery-state";
@@ -191,7 +193,8 @@ export function ProcessorOverviewScreen() {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => setNow(new Date()), []);
   const greet = overviewGreeting(locale, company, now);
-  const weekDates = useMemo(() => nextSevenDays(), []);
+  // Empty during SSR (server runs in UTC) so day chips never mismatch on hydration.
+  const weekDates = useMemo(() => (now ? nextSevenDays(todayIsoDate(now)) : []), [now]);
 
   useEffect(() => {
     const supabase = tryCreateBrowserClient();
@@ -234,7 +237,7 @@ export function ProcessorOverviewScreen() {
 
   const onCounter = async (offer: ProcessorOffer) => {
     const suggested = Math.max(0.05, Math.round((offer.pricePerKg - 0.05) * 100) / 100);
-    const raw = await promptDialog(t("counterPrompt"), String(suggested).replace(".", ","));
+    const raw = await promptDialog(t("counterPrompt"), formatDecimalInput(suggested, locale));
     if (raw == null) {
       toast.message(t("counterCancelled"));
       return;
@@ -465,7 +468,7 @@ export function ProcessorOverviewScreen() {
                         <p className="text-[12px] font-medium text-muted-foreground">
                           {[
                             d.lotVariety ? varietyLabel(d.lotVariety) : null,
-                            formatTons(d.tons, locale),
+                            formatQuantity(d.product, d.tons, locale),
                             t(`step.${d.status}` as "step.scheduled"),
                           ]
                             .filter(Boolean)
@@ -510,7 +513,7 @@ export function ProcessorOverviewScreen() {
                         : t("anonymousGrove")}
                   </p>
                   <p className="text-[12px] font-medium text-muted-foreground">
-                    {[d.lotVariety ? varietyLabel(d.lotVariety) : null, formatTons(d.tons, locale)].filter(Boolean).join(" · ")}
+                    {[d.lotVariety ? varietyLabel(d.lotVariety) : null, formatQuantity(d.product, d.tons, locale)].filter(Boolean).join(" · ")}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -717,7 +720,7 @@ export function ProcessorOverviewScreen() {
                             })
                           : t("unscheduledShort"),
                         d.lotVariety ? varietyLabel(d.lotVariety) : null,
-                        formatTons(d.tons, locale),
+                        formatQuantity(d.product, d.tons, locale),
                         d.lotRegion ? regionLabel(d.lotRegion, locale) : null,
                         t(`step.${d.status}` as "step.scheduled"),
                       ]

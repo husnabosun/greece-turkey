@@ -18,6 +18,7 @@ import {
   formatTons,
   parseBounded,
   saleTotal,
+  formatDecimalInput,
 } from "@/features/marketplace/pricing";
 import { varietyLabelFromStored } from "@/features/fields/olive-varieties";
 import type { LotMapPoint } from "@/features/marketplace/lots-map";
@@ -140,7 +141,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
   const openCounterDialog = () => {
     if (!offer) return;
     const suggested = Math.max(0.05, Math.round((offer.pricePerKg - 0.05) * 100) / 100);
-    setCounterPrice(String(suggested).replace(".", ","));
+    setCounterPrice(formatDecimalInput(suggested, locale));
     setCounterOpen(true);
   };
 

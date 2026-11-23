@@ -15,6 +15,7 @@ import {
   initialMapView,
   LOCATE_ZOOM,
   LOCATION_FAILURE_MESSAGE_KEY,
+  isGeolocationGranted,
   locateDevice,
   requestDeviceLocation,
   writeLastMapCenter,
@@ -156,7 +157,10 @@ export function FieldMapEditor({
         map!.on("draw.delete", onChange);
         timers.push(window.setTimeout(resize, 50));
         timers.push(window.setTimeout(resize, 250));
-        void goToDevice(LOCATE_ZOOM);
+        // Only centre on the device when permission was already granted: no prompt just for opening the page.
+        void isGeolocationGranted().then((granted) => {
+          if (granted && !removed) void goToDevice(LOCATE_ZOOM);
+        });
       });
       map.on("error", () => {
         if (!removed) setMapError(true);

@@ -74,6 +74,50 @@ export function formatTons(n: number, locale?: string) {
   return `${body} t`;
 }
 
+/** DB stores oil quantity in `tons`; UI shows kg. */
+export const tonsToKg = (tons: number) => Math.round(tons * 1000 * 1000) / 1000;
+export const kgToTons = (kg: number) => Math.round((kg / 1000) * 1000) / 1000;
+
+/** "2.500 kg" for oil, "2,5 t" for olives. */
+export function formatQuantity(
+  product: "oil" | "olives",
+  tons: number,
+  locale?: string,
+): string {
+  if (product === "oil") {
+    const kg = tonsToKg(tons);
+    const body = new Intl.NumberFormat(localeTag(locale), {
+      maximumFractionDigits: kg % 1 ? 1 : 0,
+    }).format(kg);
+    return `${body} kg`;
+  }
+  return formatTons(tons, locale);
+}
+
+export type OilCategoryCode = "extra_virgin" | "virgin" | "lampante";
+
+/**
+ * EU Reg. 2022/2104 acidity bands for virgin olive oils.
+ * ≤0.8% extra virgin · ≤2.0% virgin · >2.0% lampante.
+ */
+export function oilCategoryFromAcidity(acidity: number): OilCategoryCode {
+  if (acidity <= 0.8) return "extra_virgin";
+  if (acidity <= 2.0) return "virgin";
+  return "lampante";
+}
+
+/** Categories the acidity allows — farmer may only pick this or a LOWER grade. */
+export function allowedOilCategories(acidity: number): OilCategoryCode[] {
+  const best = oilCategoryFromAcidity(acidity);
+  if (best === "extra_virgin") return ["extra_virgin", "virgin", "lampante"];
+  if (best === "virgin") return ["virgin", "lampante"];
+  return ["lampante"];
+}
+
+export function isOilCategoryAllowed(category: OilCategoryCode, acidity: number): boolean {
+  return allowedOilCategories(acidity).includes(category);
+}
+
 /** "27 Νοε" */
 export function formatDateShort(d: string | Date, locale: string) {
   const dt = asDate(d);
@@ -163,8 +207,14 @@ export function parseLocaleNumber(raw: string): number | null {
 /** Same bounds the database CHECK constraints enforce (see migration 20261121020000). */
 export const MARKET_LIMITS = {
   lotTons: { min: 0.1, max: 500 },
+  /** Oil listed in kg in the UI; stored as tons/1000 in DB. */
+  oilKg: { min: 50, max: 500_000 },
   pricePerKg: { min: 0.05, max: 20 },
+  /** Oil often trades higher €/kg than fruit. */
+  oilPricePerKg: { min: 1, max: 30 },
   requestTons: { min: 0.1, max: 2000 },
+  oilRequestKg: { min: 50, max: 2_000_000 },
+  acidity: { min: 0, max: 10 },
 } as const;
 
 export type BoundedResult =

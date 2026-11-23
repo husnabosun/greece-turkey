@@ -302,6 +302,8 @@ export function varietyLabelFromStored(stored: string | null | undefined, locale
   if (v) return varietyName(v, locale);
   const raw = stored?.trim();
   if (!raw) return "—";
+  // Generic fallback slug used for bulk oil without a field.
+  if (raw === "olive") return locale.startsWith("el") ? "Ανάμεικτη" : locale.startsWith("tr") ? "Karışık" : "Mixed";
   if (/^[a-z0-9][a-z0-9/_-]*$/.test(raw)) return humanizeSlug(raw);
   return raw;
 }

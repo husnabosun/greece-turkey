@@ -4,6 +4,7 @@ import {
   LOCATE_TIMEOUT_MS,
   LOCATION_FAILURE_MESSAGE_KEY,
   classifyLocationError,
+  isGeolocationGranted,
   locateDevice,
   requestDeviceLocation,
 } from "@/features/fields/map-location";
@@ -105,5 +106,27 @@ describe("failure messages", () => {
         expect(flat[`common.${key}`], `${locale}:common.${key}`).toBeTruthy();
       }
     }
+  });
+});
+
+describe("isGeolocationGranted (auto-locate only without a prompt)", () => {
+  const perms = (state: string) => ({ query: vi.fn(async () => ({ state }) as PermissionStatus) });
+
+  it("is true only for 'granted'", async () => {
+    expect(await isGeolocationGranted(perms("granted"))).toBe(true);
+    expect(await isGeolocationGranted(perms("prompt"))).toBe(false);
+    expect(await isGeolocationGranted(perms("denied"))).toBe(false);
+  });
+
+  it("asks about geolocation", async () => {
+    const p = perms("granted");
+    await isGeolocationGranted(p);
+    expect(p.query).toHaveBeenCalledWith({ name: "geolocation" });
+  });
+
+  it("is false when the Permissions API is missing or throws", async () => {
+    expect(await isGeolocationGranted(undefined)).toBe(false);
+    const throwing = { query: vi.fn(async () => { throw new TypeError("unsupported"); }) };
+    expect(await isGeolocationGranted(throwing)).toBe(false);
   });
 });

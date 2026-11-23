@@ -8,8 +8,18 @@ import mapboxgl from "mapbox-gl";
 import { ChevronLeft, ChevronRight, Crosshair, Minus, Plus, X } from "lucide-react";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { SATELLITE_STYLE } from "@/features/fields/satellite-style";
+import { scoreBand, scoreToneClasses } from "@/features/marketplace/score-slider";
 import { colors } from "@/shared/theme/tokens";
 import { cn } from "@/shared/lib/utils";
+
+/** Marker fill/border from the shared score bands (DOM styles, not Tailwind). */
+function markerScoreColors(score: number | null): { fill: string; border: string } {
+  if (score == null) return { fill: colors.muted, border: colors.line };
+  const band = scoreBand(score);
+  if (band === "high") return { fill: colors.good, border: colors.goodSoft };
+  if (band === "mid") return { fill: colors.warn, border: colors.warnSoft };
+  return { fill: colors.risk, border: colors.riskSoft };
+}
 
 export type LotMapPoint = {
   id: string;
@@ -166,12 +176,13 @@ export function LotsMap({
       el.type = "button";
       el.setAttribute("aria-label", point.label);
       const active = point.id === selectedId;
+      const tone = markerScoreColors(point.score);
       el.style.cssText = [
         "width:36px",
         "height:36px",
         "border-radius:999px",
-        `background:${active ? colors.ink : colors.good}`,
-        `border:3px solid ${active ? "#fff" : colors.goodSoft}`,
+        `background:${active ? colors.ink : tone.fill}`,
+        `border:3px solid ${active ? "#fff" : tone.border}`,
         "box-shadow:0 3px 12px rgba(0,0,0,.4)",
         "cursor:pointer",
         "padding:0",
@@ -276,11 +287,16 @@ export function LotsMap({
           >
             {previewCollapsed ? (
               <>
-                {preview.score != null ? (
-                  <span className="rounded-md bg-good-soft px-1.5 py-0.5 text-[12px] font-extrabold text-good">
-                    {preview.score}
-                  </span>
-                ) : null}
+                {preview.score != null
+                  ? (() => {
+                      const tone = scoreToneClasses(preview.score);
+                      return (
+                        <span className={cn("rounded-md px-1.5 py-0.5 text-[12px] font-extrabold", tone.soft, tone.text)}>
+                          {preview.score}
+                        </span>
+                      );
+                    })()
+                  : null}
                 <button
                   type="button"
                   onClick={() => onSelectRef.current(null)}
@@ -314,10 +330,17 @@ export function LotsMap({
                       </p>
                     </div>
                     {preview.score != null ? (
-                      <div className="flex shrink-0 flex-col items-center rounded-lg bg-good-soft px-2 py-1">
-                        <span className="text-[12px] font-semibold text-good">{labels.qualityScore}</span>
-                        <span className="text-[16px] leading-5 font-extrabold text-good">{preview.score}</span>
-                      </div>
+                      (() => {
+                        const tone = scoreToneClasses(preview.score);
+                        return (
+                          <div className={cn("flex shrink-0 flex-col items-center rounded-lg px-2 py-1", tone.soft)}>
+                            <span className={cn("text-[12px] font-semibold", tone.text)}>{labels.qualityScore}</span>
+                            <span className={cn("text-[16px] leading-5 font-extrabold", tone.text)}>
+                              {preview.score}
+                            </span>
+                          </div>
+                        );
+                      })()
                     ) : null}
                   </div>
                   <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-line pt-2.5">

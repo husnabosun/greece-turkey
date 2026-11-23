@@ -6,7 +6,8 @@ import { useLocale, useTranslations } from "next-intl";
 import { ApCard } from "@/shared/components/brand/ap-card";
 import { Pill } from "@/shared/components/brand/pill";
 import { Link } from "@/shared/i18n/navigation";
-import { euroPrice, formatTons, intlTag } from "@/features/marketplace/pricing";
+import { euroPrice, formatQuantity, intlTag } from "@/features/marketplace/pricing";
+import { ProductBadge, productI18nKey } from "@/features/marketplace/product-badge";
 import { useErrorMessage } from "@/shared/lib/error-message";
 import { regionLabel } from "@/features/marketplace/regions";
 import { EmptyBlock, PageHeader, Panel, Segmented } from "./processor-kit";
@@ -123,8 +124,9 @@ export function ProcessorOffersScreen() {
         ) : (
           visible.map((offer, i) => {
             const lot = offer.lot;
+            const product = lot?.product ?? "olives";
             const variety = lot ? varietyLabel(lot.variety) : t("oliveDefault");
-            const title = `${variety} · ${formatTons(offer.tons, locale)}`;
+            const title = `${variety} · ${formatQuantity(product, offer.tons, locale)}`;
             const region = lot?.region ? regionLabel(lot.region, locale) : null;
             const dateStr = formatShortDate(lot?.listedAt ?? lot?.harvestStart, locale);
             const sub = [region, dateStr].filter(Boolean).join(" · ");
@@ -140,6 +142,7 @@ export function ProcessorOffersScreen() {
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
+                    <ProductBadge product={product} label={t(productI18nKey(product))} />
                     <p className="truncate text-[16px] leading-5 font-extrabold text-ink">
                       {title}
                     </p>

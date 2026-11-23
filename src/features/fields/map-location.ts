@@ -118,3 +118,20 @@ export async function requestDeviceLocation(opts?: PositionOptions): Promise<Geo
   if (!r.ok) throw new Error(`geolocation ${r.reason}`);
   return r.position;
 }
+
+/**
+ * True only when the browser already granted geolocation to this site, so we can centre the map on the
+ * device without showing a permission prompt on page load. Never throws; an unknown / unsupported
+ * Permissions API counts as "not granted".
+ */
+export async function isGeolocationGranted(
+  permissions: Pick<Permissions, "query"> | undefined = typeof navigator !== "undefined" ? navigator.permissions : undefined,
+): Promise<boolean> {
+  if (!permissions) return false;
+  try {
+    const status = await permissions.query({ name: "geolocation" as PermissionName });
+    return status.state === "granted";
+  } catch {
+    return false;
+  }
+}
