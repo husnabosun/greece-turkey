@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
   if (!url || !serviceKey) {
     return NextResponse.json(
-      { error: "Supabase service role is not configured." },
+      { error: "Supabase service role is not configured.", code: "service_role_missing" },
       { status: 503 },
     );
   }
@@ -40,7 +40,10 @@ export async function POST(request: Request) {
 
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input." }, { status: 400 });
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input.", code: parsed.error.issues[0]?.path[0] === "email" ? "invalid_email" : parsed.error.issues[0]?.path[0] === "password" ? "weak_password" : "invalid_input" },
+      { status: 400 },
+    );
   }
 
   const email = parsed.data.email.trim().toLowerCase();
@@ -48,7 +51,7 @@ export async function POST(request: Request) {
 
   if (role === "processor") {
     if (!company_name?.trim()) {
-      return NextResponse.json({ error: "Company name is required for processors." }, { status: 400 });
+      return NextResponse.json({ error: "Company name is required for processors.", code: "company_required" }, { status: 400 });
     }
   }
 
@@ -71,7 +74,7 @@ export async function POST(request: Request) {
   });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ error: error.message, code: error.code }, { status: 400 });
   }
 
   // GoTrue inserts the auth user first and writes custom app_metadata in a later UPDATE, so the

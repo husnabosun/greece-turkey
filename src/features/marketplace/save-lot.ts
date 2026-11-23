@@ -148,7 +148,8 @@ export async function publishLot(input: PublishLotInput): Promise<PublishResult>
   }
 
   if (!region) {
-    region = country === "TR" ? "İzmir" : country === "GR" ? "Βόρειο Αιγαίο" : "—";
+    // Canonical (language-neutral) region ids; the UI localises them with regionLabel().
+    region = country === "TR" ? "Aegean Turkey" : country === "GR" ? "Aegean Islands" : "—";
   }
 
   const targetedOffer = Boolean(input.processorId);

@@ -21,6 +21,7 @@ import {
   parseLocaleNumber,
   saleTotal,
   tonsToKg,
+  formatDecimalInput,
 } from "@/features/marketplace/pricing";
 import {
   OIL_CATEGORIES,
@@ -688,7 +689,7 @@ export function ProcessorRequestsScreen() {
 
   const onCounterOffer = async (offer: ProcessorOffer) => {
     const suggested = Math.max(0.05, Math.round((offer.pricePerKg - 0.05) * 100) / 100);
-    const raw = await promptDialog(t("counterPrompt"), String(suggested).replace(".", ","));
+    const raw = await promptDialog(t("counterPrompt"), formatDecimalInput(suggested, locale));
     if (raw == null) return;
     const pc = parseBounded(raw, MARKET_LIMITS.pricePerKg);
     if (!pc.ok) {
@@ -722,7 +723,7 @@ export function ProcessorRequestsScreen() {
       />
 
       {error === "needSupabase" || error === "needLogin" ? (
-        <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{t(error)}</ApCard>
+        <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{errMsg(error)}</ApCard>
       ) : null}
 
       <Dialog

@@ -1,9 +1,28 @@
+import { cookies, headers } from "next/headers";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
+import { DEFAULT_LOCALE, LOCALES, type Locale } from "@/core/config/constants";
+
+/** The user's language outside a locale segment: NEXT_LOCALE cookie, then Accept-Language, then the default. */
+async function pickLocale(): Promise<Locale> {
+  const fromCookie = (await cookies()).get("NEXT_LOCALE")?.value;
+  if (fromCookie && (LOCALES as readonly string[]).includes(fromCookie)) return fromCookie as Locale;
+
+  const accept = (await headers()).get("accept-language") ?? "";
+  for (const part of accept.split(",")) {
+    const lang = part.trim().split(";")[0]?.toLowerCase().split("-")[0];
+    if (lang && (LOCALES as readonly string[]).includes(lang)) return lang as Locale;
+  }
+  return DEFAULT_LOCALE;
+}
 
 /** Root fallback when a request is outside a locale segment. */
-export default function RootNotFound() {
+export default async function RootNotFound() {
+  const locale = await pickLocale();
+  const t = await getTranslations({ locale, namespace: "errors" });
+
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body style={{ fontFamily: "system-ui, sans-serif", margin: 0 }}>
         <div
           style={{
@@ -18,12 +37,10 @@ export default function RootNotFound() {
           }}
         >
           <p style={{ fontSize: 48, fontWeight: 800, margin: 0 }}>404</p>
-          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Page not found</h1>
-          <p style={{ maxWidth: 360, color: "#666", margin: 0 }}>
-            This link does not exist or the page has moved.
-          </p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>{t("notFoundTitle")}</h1>
+          <p style={{ maxWidth: 360, color: "#666", margin: 0 }}>{t("notFoundBody")}</p>
           <Link
-            href="/"
+            href={`/${locale}`}
             style={{
               marginTop: 12,
               display: "inline-flex",
@@ -37,7 +54,7 @@ export default function RootNotFound() {
               textDecoration: "none",
             }}
           >
-            Back to home
+            {t("backHome")}
           </Link>
         </div>
       </body>

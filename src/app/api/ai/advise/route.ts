@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       return jsonOk({ advice: live, source: "gemini" as const });
     }
 
-    return jsonOk({ advice: demoAdvice(body.field.name), source: "demo" as const });
+    return jsonOk({ advice: demoAdvice(body.field.name, body.language), source: "demo" as const });
   } catch (err) {
     if (err instanceof ZodError) return fromZodError(err);
     return jsonError("Advice failed", 500);

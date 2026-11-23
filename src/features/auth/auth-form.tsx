@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, Eye, EyeOff, Factory, Loader2, Sprout } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
+import { authErrorKey, type AuthErrorKey, type AuthErrorLike } from "@/features/auth/auth-errors";
 import { homePathForRole } from "@/core/auth/routing";
 import type { UserRole } from "@/core/config/constants";
 import { ApButton, ApCard } from "@/shared/components/brand";
@@ -46,13 +47,13 @@ function credentialsFromForm(form: HTMLFormElement) {
   return { email, password, displayName, companyName };
 }
 
-function authErrorMessage(error: { message: string; code?: string }, t: (key: string) => string) {
-  const code = error.code ?? "";
-  const msg = error.message.toLowerCase();
-  if (code === "invalid_credentials" || msg.includes("invalid login credentials")) {
-    return t("invalidCredentials");
-  }
-  return error.message;
+/** Localised message for an auth failure; never the raw (English) server text. */
+function authErrorMessage(
+  error: AuthErrorLike | null | undefined,
+  t: (key: AuthErrorKey) => string,
+  fallback: "registerFailed" | "signInFailed" = "signInFailed",
+) {
+  return t(authErrorKey(error, fallback));
 }
 
 export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
@@ -138,11 +139,11 @@ export function AuthForm({ mode = "login" }: { mode?: "login" | "register" }) {
       }),
     });
     const registerJson = (await registerRes.json().catch(() => null)) as
-      | { error?: string }
+      | { error?: string; code?: string }
       | null;
     if (!registerRes.ok) {
       setLoading(false);
-      toast.error(registerJson?.error || t("registerFailed"));
+      toast.error(authErrorMessage({ message: registerJson?.error, code: registerJson?.code }, t, "registerFailed"));
       return;
     }
 

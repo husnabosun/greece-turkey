@@ -8,7 +8,7 @@ import { ArrowRight, ChevronLeft, Mic, Minus, Plus, Sparkles } from "lucide-reac
 import { hasSupabaseConfig, publicEnv } from "@/core/config/env";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import type { FieldPolygon } from "@/features/fields/field-map-editor";
-import { initialMapView } from "@/features/fields/map-location";
+import { useMapStartView } from "@/features/fields/use-map-start-view";
 import {
   defaultVarietySlug,
   isVarietyAllowed,
@@ -22,6 +22,12 @@ import { ApCard } from "@/shared/components/brand";
 import { useRouter } from "@/shared/i18n/navigation";
 import { cn } from "@/shared/lib/utils";
 import { parseTreeCount, useErrorMessage } from "@/shared/lib/error-message";
+import {
+  TREE_SOURCE_MESSAGE_KEY,
+  canOverwriteTreeCount,
+  sourceForNewField,
+  withTreeCountSource,
+} from "@/features/fields/tree-count-source";
 
 const FieldMapEditor = dynamic(() => import("./field-map-editor").then((m) => m.FieldMapEditor), {
   ssr: false,
@@ -51,10 +57,13 @@ export function AddFieldScreen() {
   const [name, setName] = useState("");
   const [polygon, setPolygon] = useState<FieldPolygon | null>(null);
   const [areaHa, setAreaHa] = useState<number | null>(null);
-  const [mapLon, setMapLon] = useState<number | null>(() => {
-    const last = initialMapView();
-    return last.center[0] ?? null;
-  });
+  const { view: startView, ready: startReady } = useMapStartView(locale);
+  const [mapLon, setMapLon] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Country-aware varieties follow where the map opens until the user draws or moves it.
+    if (startReady) setMapLon((prev) => prev ?? startView.center[0]);
+  }, [startReady, startView.center]);
   const [profileCountry, setProfileCountry] = useState<OliveCountry | null>(null);
   const [treesText, setTreesText] = useState("80");
   const [ageYears, setAgeYears] = useState(35);
@@ -120,6 +129,13 @@ export function AddFieldScreen() {
   /** Prefer AI crown count; fall back to area×density while counting / if AI fails. */
   const satelliteTrees = aiTrees ?? densityTrees;
 
+  /** Where the number in the field comes from: the farmer once they typed, else satellite, else field size. */
+  const treeSource = sourceForNewField({
+    farmerEdited: treesTouched,
+    hasSatelliteCount: aiTrees != null,
+    hasDensityEstimate: densityTrees != null,
+  });
+
   useEffect(() => {
     if (!polygon) {
       setAiTrees(null);
@@ -148,7 +164,8 @@ export function AddFieldScreen() {
           }
           const n = Math.max(1, Math.min(5000, Math.round(json.data.treeCount)));
           setAiTrees(n);
-          if (!treesTouchedRef.current) setTreesText(String(n));
+          // A number the farmer typed or confirmed is never replaced by a satellite count.
+          if (canOverwriteTreeCount(treesTouchedRef.current ? "farmer" : null)) setTreesText(String(n));
         } catch {
           if (requestId === countRequestId.current) setAiTrees(null);
         } finally {
@@ -215,11 +232,12 @@ export function AddFieldScreen() {
         return;
       }
 
-      const notes = JSON.stringify({
+      const baseNotes = JSON.stringify({
         tree_age_years: ageYears,
         tree_age_band: ageYears <= 20 ? "5-20" : ageYears <= 50 ? "20-50" : "50+",
         area_ha_client: areaHa,
       });
+      const notes = treeSource ? withTreeCountSource(baseNotes, treeSource) : baseNotes;
 
       const { error } = await supabase.rpc("create_field_from_geojson", {
         p_name: name.trim(),
@@ -289,8 +307,11 @@ export function AddFieldScreen() {
           <p className="mx-4 rounded-[18px] border border-line bg-soft px-3 py-6 text-center text-ap-body text-muted-foreground md:mx-6">
             {t("needMapboxBody")}
           </p>
+        ) : !startReady ? (
+          <div className="h-[58dvh] min-h-[320px] w-full animate-pulse bg-soft md:h-[62dvh]" />
         ) : (
           <FieldMapEditor
+            startView={startView}
             token={token}
             onPolygonChange={onPolygon}
             onCenterChange={(lon) => setMapLon(lon)}
@@ -318,6 +339,14 @@ export function AddFieldScreen() {
           <div className="mt-3 grid grid-cols-1 gap-2.5 min-[400px]:grid-cols-2">
             <ApCard className="p-3.5">
               <p className="text-ap-small font-medium text-muted-foreground">{t("numberOfTrees")}</p>
+              {treeSource ? (
+                <p
+                  className={`mt-0.5 text-ap-small font-bold ${treeSource === "farmer" ? "text-good" : "text-muted-foreground"}`}
+                  data-testid="tree-count-source"
+                >
+                  {t(TREE_SOURCE_MESSAGE_KEY[treeSource])}
+                </p>
+              ) : null}
               <div className="mt-2 flex items-center justify-between gap-1">
                 <RoundBtn
                   label={t("less")}

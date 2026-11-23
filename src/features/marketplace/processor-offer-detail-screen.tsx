@@ -18,6 +18,7 @@ import {
   formatTons,
   parseBounded,
   saleTotal,
+  formatDecimalInput,
 } from "@/features/marketplace/pricing";
 import { varietyLabelFromStored } from "@/features/fields/olive-varieties";
 import type { LotMapPoint } from "@/features/marketplace/lots-map";
@@ -140,7 +141,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
   const openCounterDialog = () => {
     if (!offer) return;
     const suggested = Math.max(0.05, Math.round((offer.pricePerKg - 0.05) * 100) / 100);
-    setCounterPrice(String(suggested).replace(".", ","));
+    setCounterPrice(formatDecimalInput(suggested, locale));
     setCounterOpen(true);
   };
 
@@ -198,7 +199,7 @@ export function ProcessorOfferDetailScreen({ id }: { id: string }) {
   if (error === "needSupabase" || error === "needLogin") {
     return (
       <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6">
-        <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{t(error)}</ApCard>
+        <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{errMsg(error)}</ApCard>
       </div>
     );
   }

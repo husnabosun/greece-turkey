@@ -33,6 +33,8 @@ import {
   parseBounded,
   parseLocaleNumber,
   saleTotal,
+  formatDecimalInput,
+  intlTag,
   tonsToKg,
 } from "@/features/marketplace/pricing";
 import { ProductBadge, productI18nKey } from "@/features/marketplace/product-badge";
@@ -451,12 +453,15 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
     if (!card.listedLotId || card.lotStatus !== "listed") return;
     setListingTarget({ field, card });
     setListingPrice(
-      card.listedPrice != null ? card.listedPrice.toFixed(2).replace(".", ",") : "",
+      card.listedPrice != null ? formatDecimalInput(card.listedPrice, locale) : "",
     );
     const oil = listingProduct(card) === "oil";
     const qty = card.listedTons;
+    // oil is listed in kg (stored as tons); locale decimal separator, no hand-built comma
     setListingTons(
-      qty != null ? String(oil ? tonsToKg(qty) : qty).replace(".", ",") : "",
+      qty != null
+        ? new Intl.NumberFormat(intlTag(locale), { maximumFractionDigits: 3, useGrouping: false }).format(oil ? tonsToKg(qty) : qty)
+        : "",
     );
   }
 
@@ -513,7 +518,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
   function openCounter(offer: MarketOffer) {
     if (offer.initiatedBy !== "processor" || offer.status !== "pending") return;
     setCounterTarget(offer);
-    setCounterPrice((offer.pricePerKg + 0.01).toFixed(2).replace(".", ","));
+    setCounterPrice(formatDecimalInput(offer.pricePerKg + 0.01, locale));
   }
 
   async function confirmCounter() {
@@ -1224,7 +1229,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   onClick={() => {
                     const n = parseLocaleNumber(counterPrice) ?? 0;
                     const next = Math.max(MARKET_LIMITS.pricePerKg.min, Math.round((n - 0.01) * 100) / 100);
-                    setCounterPrice(next.toFixed(2).replace(".", ","));
+                    setCounterPrice(formatDecimalInput(next, locale));
                   }}
                 >
                   −
@@ -1242,7 +1247,7 @@ export function FarmerMarketScreen({ initialTab }: { initialTab?: string }) {
                   onClick={() => {
                     const n = parseLocaleNumber(counterPrice) ?? 0;
                     const next = Math.min(MARKET_LIMITS.pricePerKg.max, Math.round((n + 0.01) * 100) / 100);
-                    setCounterPrice(next.toFixed(2).replace(".", ","));
+                    setCounterPrice(formatDecimalInput(next, locale));
                   }}
                 >
                   +
@@ -1513,7 +1518,7 @@ function RequestCard({
     <div className="rounded-[18px] border border-line bg-card p-3">
       <div className="flex items-center gap-2.5">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-soft text-ap-body font-extrabold text-ink">
-          {initials || "Μ"}
+          {initials || "?"}
         </span>
         <div className="min-w-0 flex-1">
           <div className="mb-0.5">

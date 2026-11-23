@@ -1,5 +1,8 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { LOCATION_FAILURE_MESSAGE_KEY, locateDevice } from "@/features/fields/map-location";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import mapboxgl from "mapbox-gl";
 import { ChevronLeft, ChevronRight, Crosshair, Minus, Plus, X } from "lucide-react";
@@ -77,6 +80,8 @@ export function LotsMap({
   popup = true,
   height,
 }: Props) {
+  const tMap = useTranslations("processor");
+  const tCommon = useTranslations("common");
   const shellRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -214,25 +219,24 @@ export function LotsMap({
 
   const locateMe = () => {
     const map = mapRef.current;
-    if (!map || !navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        if (!userMarkerRef.current) {
-          const el = document.createElement("div");
-          el.style.cssText =
-            "width:16px;height:16px;border-radius:999px;background:#2E6FB0;border:3px solid #fff;box-shadow:0 0 0 5px rgba(46,111,176,.28)";
-          userMarkerRef.current = new mapboxgl.Marker({ element: el }).setLngLat([longitude, latitude]).addTo(map);
-        } else {
-          userMarkerRef.current.setLngLat([longitude, latitude]);
-        }
-        map.easeTo({ center: [longitude, latitude], zoom: Math.max(map.getZoom(), 11), duration: 600 });
-      },
-      () => {
-        /* browser denied / unavailable */
-      },
-      { enableHighAccuracy: true, timeout: 8000 },
-    );
+    if (!map) return;
+    void locateDevice().then((r) => {
+      if (!r.ok) {
+        // Keep the current view and say why.
+        toast.error(tCommon(LOCATION_FAILURE_MESSAGE_KEY[r.reason]));
+        return;
+      }
+      const { latitude, longitude } = r.position.coords;
+      if (!userMarkerRef.current) {
+        const el = document.createElement("div");
+        el.style.cssText =
+          "width:16px;height:16px;border-radius:999px;background:#2E6FB0;border:3px solid #fff;box-shadow:0 0 0 5px rgba(46,111,176,.28)";
+        userMarkerRef.current = new mapboxgl.Marker({ element: el }).setLngLat([longitude, latitude]).addTo(map);
+      } else {
+        userMarkerRef.current.setLngLat([longitude, latitude]);
+      }
+      map.easeTo({ center: [longitude, latitude], zoom: Math.max(map.getZoom(), 11), duration: 600 });
+    });
   };
 
   if (!token) {
@@ -296,7 +300,7 @@ export function LotsMap({
                 <button
                   type="button"
                   onClick={() => onSelectRef.current(null)}
-                  aria-label="Επαναφορά χάρτη"
+                  aria-label={tMap("mapReset")}
                   className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-card text-muted-foreground hover:bg-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
                 >
                   <X className="size-3.5" strokeWidth={2.5} />
@@ -309,7 +313,7 @@ export function LotsMap({
                   <button
                     type="button"
                     onClick={() => onSelectRef.current(null)}
-                    aria-label="Επαναφορά χάρτη"
+                    aria-label={tMap("mapReset")}
                     className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-card text-muted-foreground hover:bg-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
                   >
                     <X className="size-3.5" strokeWidth={2.5} />
@@ -359,7 +363,7 @@ export function LotsMap({
             type="button"
             onClick={togglePreviewCollapsed}
             aria-expanded={!previewCollapsed}
-            aria-label={previewCollapsed ? "Εμφάνιση υπομνήματος" : "Απόκρυψη υπομνήματος"}
+            aria-label={previewCollapsed ? tMap("legendShow") : tMap("legendHide")}
             className="flex w-10 shrink-0 items-center justify-center self-stretch border-l border-line bg-card/80 text-ink hover:bg-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink/30"
           >
             {previewCollapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}

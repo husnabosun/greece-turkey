@@ -22,7 +22,8 @@ import {
   Trees,
   TriangleAlert,
 } from "lucide-react";
-import { formatStremmata } from "@/features/fields/area";
+import { formatArea } from "@/features/fields/area";
+import { TREE_SOURCE_MESSAGE_KEY, parseTreeCountSource } from "@/features/fields/tree-count-source";
 import { reverseGeocodePlace } from "@/features/fields/reverse-geocode";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { scanCameraHref, scanCameraHrefForTask } from "@/features/diagnostics/open-scan-camera";
@@ -199,12 +200,12 @@ export function DashboardScreen() {
     const msg =
       fieldsError === "needSupabase" || fieldsError === "needLogin"
         ? tFields(fieldsError)
-        : fieldsError;
+        : errMsg(fieldsError);
     toast.error(msg);
     if (process.env.NODE_ENV === "development") {
       console.warn("[farmerHome] fields load:", fieldsError);
     }
-  }, [fieldsError, tFields]);
+  }, [fieldsError, tFields, errMsg]);
 
   useEffect(() => {
     const supabase = tryCreateBrowserClient();
@@ -777,8 +778,11 @@ export function DashboardScreen() {
                           <p className="truncate text-ap-card text-ink">{f.name}</p>
                           <p className="text-ap-small text-muted-foreground">
                             {f.tree_count != null ? tFields("treesCount", { n: f.tree_count }) : "—"}
+                            {f.tree_count != null && parseTreeCountSource(f.notes)
+                              ? ` · ${tFields(TREE_SOURCE_MESSAGE_KEY[parseTreeCountSource(f.notes)!])}`
+                              : ""}
                             {f.area_ha != null
-                              ? ` · ${tFields("haCount", { n: formatStremmata(Number(f.area_ha), 1, locale) })}`
+                              ? ` · ${formatArea(Number(f.area_ha), locale)}`
                               : ""}
                           </p>
                         </div>

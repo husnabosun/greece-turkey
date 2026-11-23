@@ -220,12 +220,12 @@ export function Initials({ text, size = 44 }: { text: string; size?: number }) {
   );
 }
 
-export const initialsOf = (name: string) =>
+export const initialsOf = (name: string, locale?: string) =>
   name
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
-    .map((w) => w[0]?.toLocaleUpperCase("tr-TR") ?? "")
+    .map((w) => w[0]?.toLocaleUpperCase(locale) ?? "")
     .join("");
 
 export function ScoreBox({
@@ -515,7 +515,7 @@ export function WeekStrip({
               <span className={cn("text-[13px] font-extrabold", selected ? "text-white" : "text-ink")}>{day.dayNum}</span>
               {day.tons > 0 ? (
                 <span className={cn("mt-0.5 text-[12px] font-bold", selected ? "text-white" : day.overloaded ? "text-warn-text" : "text-good")}>
-                  {day.tons % 1 ? day.tons.toFixed(1) : day.tons}
+                  {day.tons.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                 </span>
               ) : (
                 <span className={cn("mt-1 size-1.5 rounded-full", selected ? "bg-white/40" : count > 0 ? "bg-good" : "bg-line")} />

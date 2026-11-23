@@ -739,7 +739,7 @@ export function ProcessorLotsScreen() {
       </div>
 
       {error === "needSupabase" || error === "needLogin" ? (
-        <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{t(error)}</ApCard>
+        <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">{errMsg(error)}</ApCard>
       ) : null}
 
       {/* —— Mobile —— */}

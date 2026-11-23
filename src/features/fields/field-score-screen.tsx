@@ -30,6 +30,7 @@ import { refreshFieldQuality } from "@/features/quality/refresh-field-quality";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { ApCard } from "@/shared/components/brand";
 import type { ProofLevel } from "@/shared/types/database";
+import { ScoreHistoryChart } from "@/features/quality/score-history-chart";
 import { useRouter } from "@/shared/i18n/navigation";
 import { colors } from "@/shared/theme/tokens";
 import { cn } from "@/shared/lib/utils";
@@ -479,6 +480,8 @@ export function FieldScoreScreen({ fieldId }: Props) {
             {publish ? t("shownBuyers") : t("scorePrivateHint")}
           </p>
         </div>
+
+        {displayScore != null ? <ScoreHistoryChart fieldId={fieldId} refreshKey={displayScore} className="mt-3.5" /> : null}
 
         <button
           type="button"

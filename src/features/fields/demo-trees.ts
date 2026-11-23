@@ -33,8 +33,9 @@ export const DEMO_FIELD_TREES: MapTree[] = [
   { id: 41, x: 25, y: 84, status: "diseased", issue: "peacock-spot" },
 ];
 
+/** Tree that most needs attention (diseased, then suspicious); null when all healthy. */
 export function pickDefaultTreeId(trees: MapTree[]): number | null {
-  if (!trees.length) return null;
-  const preferred = trees.find((t) => t.id === 23) ?? trees.find((t) => t.status === "diseased");
-  return preferred?.id ?? trees[0]!.id;
+  return (
+    trees.find((t) => t.status === "diseased")?.id ?? trees.find((t) => t.status === "suspicious")?.id ?? null
+  );
 }

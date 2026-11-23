@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ChevronLeft, RefreshCw } from "lucide-react";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import { refreshFieldQuality } from "@/features/quality/refresh-field-quality";
+import { ScoreHistoryChart } from "@/features/quality/score-history-chart";
 import { useFieldQuality } from "@/features/quality/use-field-quality";
 import { useFieldSignals } from "@/features/weather-risk/use-field-signals";
 import { useFieldWeather } from "@/features/weather-risk/use-field-weather";
@@ -182,6 +183,8 @@ export function QualityScreen() {
               {t("buyersSee")}
             </p>
           </ApCard>
+
+          <ScoreHistoryChart fieldId={selectedId} refreshKey={current.id} />
 
           {deltaPct != null && deltaPct !== 0 ? (
             <div

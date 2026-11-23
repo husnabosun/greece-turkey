@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { ArrowRight, ChevronLeft, Trees } from "lucide-react";
-import { formatStremmata } from "@/features/fields/area";
+import { formatArea } from "@/features/fields/area";
 import { useFarmerFields } from "@/features/fields/use-farmer-fields";
 import {
   defaultVarietySlug,
@@ -357,7 +357,7 @@ export function NewListingScreen({
                       ) : null}
                       {f.area_ha != null ? (
                         <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-ink">
-                          {t("haPill", { n: formatStremmata(Number(f.area_ha), 1, locale) })}
+                          {formatArea(Number(f.area_ha), locale)}
                         </span>
                       ) : null}
                     </span>

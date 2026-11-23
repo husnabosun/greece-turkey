@@ -6,8 +6,9 @@ import { useLocale, useTranslations } from "next-intl";
 import { ApCard } from "@/shared/components/brand/ap-card";
 import { Pill } from "@/shared/components/brand/pill";
 import { Link } from "@/shared/i18n/navigation";
-import { euroPrice, formatQuantity } from "@/features/marketplace/pricing";
+import { euroPrice, formatQuantity, intlTag } from "@/features/marketplace/pricing";
 import { ProductBadge, productI18nKey } from "@/features/marketplace/product-badge";
+import { useErrorMessage } from "@/shared/lib/error-message";
 import { regionLabel } from "@/features/marketplace/regions";
 import { EmptyBlock, PageHeader, Panel, Segmented } from "./processor-kit";
 import { useProcessorMarket, type ProcessorOffer } from "./use-processor-market";
@@ -17,7 +18,7 @@ function formatShortDate(iso: string | null | undefined, locale: string): string
   if (!iso) return null;
   const d = new Date(iso.includes("T") ? iso : `${iso}T12:00:00`);
   if (Number.isNaN(d.getTime())) return null;
-  const tag = locale.startsWith("el") ? "el-GR" : locale.startsWith("tr") ? "tr-TR" : "en-GB";
+  const tag = intlTag(locale);
   return d.toLocaleDateString(tag, { day: "numeric", month: "short" });
 }
 
@@ -36,6 +37,7 @@ export function ProcessorOffersScreen() {
   const t = useTranslations("processor");
   const locale = useLocale();
   const varietyLabel = useVarietyLabel();
+  const errMsg = useErrorMessage();
   const { offers, loading, error } = useProcessorMarket();
   const [tab, setTab] = useState<"incoming" | "outgoing" | "history">("incoming");
 
@@ -102,7 +104,7 @@ export function ProcessorOffersScreen() {
 
       {error === "needSupabase" || error === "needLogin" ? (
         <ApCard className="p-4 text-[13px] font-semibold text-muted-foreground">
-          {t(error)}
+          {errMsg(error)}
         </ApCard>
       ) : error ? (
         <p className="text-ap-small text-risk">{error}</p>

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import type { FieldTree } from "@/shared/types/database";
 import type { MapTree, MapTreeStatus } from "@/features/fields/field-health-map";
-import { pickDefaultTreeId } from "@/features/fields/demo-trees";
+import { pickAttentionTreeId } from "@/features/fields/field-summary";
 
 type State = {
   trees: MapTree[];
@@ -37,7 +37,8 @@ export function useFieldTrees(fieldId: string | null | undefined) {
     }
 
     let cancelled = false;
-    setState((prev) => ({ ...prev, loading: true }));
+    // Drop the previous field's dots right away so they never render on the new polygon.
+    setState({ trees: [], loading: true, fromDemo: false });
 
     void (async () => {
       const supabase = tryCreateBrowserClient();
@@ -77,5 +78,5 @@ export function useFieldTrees(fieldId: string | null | undefined) {
     };
   }, [fieldId]);
 
-  return { ...state, defaultSelectedId: pickDefaultTreeId(state.trees) };
+  return { ...state, defaultSelectedId: pickAttentionTreeId(state.trees) };
 }

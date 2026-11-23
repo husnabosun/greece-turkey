@@ -103,6 +103,7 @@ const FRUIT_VIEW: Record<string, FruitView> = {
 
 export function ScanScreen() {
   const t = useTranslations("farmerScan");
+  const errMsg = useErrorMessage();
   const tTasks = useTranslations("farmerTasks");
   const locale = useLocale();
   const searchParams = useSearchParams();
@@ -461,7 +462,7 @@ export function ScanScreen() {
       setPhotos([]);
       setView("result");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("failed"));
+      toast.error(errMsg(err instanceof Error ? err.message : null, "actionFailed"));
     } finally {
       setAnalysing(false);
     }
