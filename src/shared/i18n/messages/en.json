@@ -950,6 +950,7 @@
     "polyphenols": "Polyphenols",
     "pdoPgi": "PDO/PGI",
     "pdoPgiNone": "None",
+    "pdoPgiHint": "PDO = Protected Designation of Origin: the entire production takes place in the area. PGI = Protected Geographical Indication: at least one stage takes place in the area. Select only if your oil is certified.",
     "organicOil": "Organic",
     "quantityKg": "Kilograms",
     "bulkOil": "Bulk oil — no field",

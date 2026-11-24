@@ -513,6 +513,7 @@ export function NewListingScreen({
                     ))}
                   </select>
                 </span>
+                <p className="text-ap-small text-muted-foreground">{t("pdoPgiHint")}</p>
               </label>
             </div>
           ) : (

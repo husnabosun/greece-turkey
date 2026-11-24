@@ -950,6 +950,7 @@
     "polyphenols": "Polifenol",
     "pdoPgi": "PDO/PGI",
     "pdoPgiNone": "Yok",
+    "pdoPgiHint": "PDO = Korunmuş Menşe Adı: üretimin tamamı o bölgede yapılır. PGI = Korunmuş Coğrafi İşaret: en az bir aşama o bölgede gerçekleşir. Yalnızca yağınız belgelendirilmişse seçin.",
     "organicOil": "Organik",
     "quantityKg": "Kilogram",
     "bulkOil": "Dökme yağ — tarlasız",

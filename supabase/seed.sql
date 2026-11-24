@@ -158,7 +158,7 @@ where p.role = 'processor'
 insert into public.lots (farmer_id, status, product, use_type, variety, tons, price_per_kg, negotiable, delivery_mode, town, region, country, lat, lon, harvest_start, harvest_end, quality_score, oil_category, acidity, harvest_season, storage, peroxide, polyphenols, pdo_pgi, organic, listed_at)
 select v.farmer::uuid, 'listed', 'oil', 'oil', v.variety, v.tons, v.price, true, 'pickup', v.town, v.region, v.country::country_code, v.lat, v.lon, (timezone('Europe/Athens', now()))::date, (timezone('Europe/Athens', now()))::date + 21, v.score, v.cat, v.acid, '2026/27', v.storage, v.perox, v.poly, v.pdo, v.org, now()
 from (values
- ('0b53b1be-a540-49fd-9e0e-4940233f9cdf','koroneiki',2.500,7.80,'Καλαμάτα','Messinia','GR',37.038::numeric,22.114::numeric,88,'extra_virgin',0.25::numeric,'tank',7.5::numeric,320,'ΠΟΠ Καλαμάτα',true),
+ ('0b53b1be-a540-49fd-9e0e-4940233f9cdf','koroneiki',2.500,7.80,'Καλαμάτα','Messinia','GR',37.038::numeric,22.114::numeric,88,'extra_virgin',0.25::numeric,'tank',7.5::numeric,320,'kalamata',true),
  ('398c1799-7b34-450a-b320-e54768ce4a33','koroneiki',1.200,6.90,'Άμφισσα','Phocis','GR',38.527,22.377,82,'extra_virgin',0.45,'ibc',9.0,240,null,false),
  ('b066489e-a61f-4e57-b3e6-f8b055f1a03a','koroneiki',8.000,5.40,'Μυτιλήνη','Lesvos','GR',39.110,26.555,74,'virgin',1.20,'tank',12.0,150,null,false),
  ('b7900af0-8621-4b04-8c4d-3fd237cb7912','ayvalik',3.000,6.20,'Ayvalık','Balıkesir','TR',39.319,26.695,80,'extra_virgin',0.60,'ibc',10.0,210,null,false),

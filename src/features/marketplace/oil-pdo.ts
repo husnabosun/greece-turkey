@@ -29,6 +29,7 @@ export const OIL_PDO_PGI: readonly OilPdoPgi[] = [
   gi("thrapsano", "GR", "PDO", "eu", "Θραψανό", "Thrapsano", "Thrapsano"),
   gi("selino-kritis", "GR", "PDO", "eu", "Σελίνο Κρήτης", "Selino Kritis", "Selino Kritis"),
   gi("messara", "GR", "PDO", "eu", "Μεσσαρά", "Messara", "Messara"),
+  gi("kalamata", "GR", "PDO", "eu", "Καλαμάτα", "Kalamata", "Kalamata"),
   gi("kranidi-argolidas", "GR", "PDO", "eu", "Κρανίδι Αργολίδας", "Kranidi Argolidas", "Kranidi Argolidas"),
   gi("lygourio-asklipiou", "GR", "PDO", "eu", "Λυγουριό Ασκληπιείου", "Lygourio Asklipiou", "Lygourio Asklipiou"),
   gi("krokees-lakonias", "GR", "PDO", "eu", "Κροκεές Λακωνίας", "Krokees Lakonias", "Krokees Lakonias"),
