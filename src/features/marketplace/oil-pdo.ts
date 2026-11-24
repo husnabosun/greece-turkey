@@ -161,6 +161,8 @@ export function oilPdoPgiGrouped(
   return (["GR", "TR"] as const).map((country) => ({
     country,
     label: labels[country][loc],
-    items: OIL_PDO_PGI.filter((item) => item.country === country),
+    items: OIL_PDO_PGI.filter((item) => item.country === country).sort((a, b) =>
+      oilPdoPgiOptionLabel(a, locale).localeCompare(oilPdoPgiOptionLabel(b, locale), locale),
+    ),
   }));
 }
