@@ -33,6 +33,7 @@ import {
   oilStorageI18nKey,
   productI18nKey,
 } from "@/features/marketplace/product-badge";
+import { formatOilPdoPgi } from "@/features/marketplace/oil-pdo";
 import { scoreBand, scoreToneClasses } from "@/features/marketplace/score-slider";
 // Mapbox (~1 MB) is only fetched when a map is actually on screen.
 const LotsMap = dynamic(() => import("./lots-map").then((m) => m.LotsMap), {
@@ -505,9 +506,9 @@ export function ProcessorLotDetailScreen({ id }: { id: string }) {
                 ...(lot.acidity != null ? [{ k: t("acidity"), v: `${lot.acidity}%` }] : []),
                 ...(lot.harvestSeason ? [{ k: t("harvestSeason"), v: lot.harvestSeason }] : []),
                 ...(lot.storage ? [{ k: t("storage"), v: t(oilStorageI18nKey(lot.storage)) }] : []),
-                ...(lot.peroxide != null ? [{ k: t("peroxide"), v: String(lot.peroxide) }] : []),
-                ...(lot.polyphenols != null ? [{ k: t("polyphenols"), v: String(lot.polyphenols) }] : []),
-                ...(lot.pdoPgi ? [{ k: t("pdoPgi"), v: lot.pdoPgi }] : []),
+                ...(lot.peroxide != null ? [{ k: t("peroxide"), v: `${lot.peroxide} meq O₂/kg` }] : []),
+                ...(lot.polyphenols != null ? [{ k: t("polyphenols"), v: `${lot.polyphenols} mg/kg` }] : []),
+                ...(lot.pdoPgi ? [{ k: t("pdoPgi"), v: formatOilPdoPgi(lot.pdoPgi, locale) }] : []),
                 ...(lot.organic ? [{ k: t("organicOil"), v: "✓" }] : []),
               ]
             : [{ k: t("useLabel"), v: useLabel }]),

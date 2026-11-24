@@ -34,6 +34,7 @@ import {
   oilStorageI18nKey,
   productI18nKey,
 } from "@/features/marketplace/product-badge";
+import { oilPdoPgiGrouped, oilPdoPgiOptionLabel } from "@/features/marketplace/oil-pdo";
 import { ChipGroup, Segmented, Switch, TextField } from "@/features/marketplace/processor-kit";
 import { RangeCalendar } from "@/features/marketplace/range-calendar";
 import type { OilCategory, OilStorage, ProductKind } from "@/shared/types/database";
@@ -414,7 +415,7 @@ export function NewListingScreen({
                 = {Math.round(tons * 1000).toLocaleString(locale)} kg
               </p>
             ) : (
-              <p className="mt-1 text-ap-small text-muted-foreground">{t("anyQuantityHint")}</p>
+              <p className="mt-1 text-ap-small text-muted-foreground">{isOil ? t("anyQuantityHintKg") : t("anyQuantityHint")}</p>
             )}
           </div>
 
@@ -480,16 +481,39 @@ export function NewListingScreen({
                   label={t("peroxide")}
                   value={peroxideText}
                   onChange={setPeroxideText}
+                  suffix="meq O₂/kg"
                   inputMode="decimal"
                 />
                 <TextField
                   label={t("polyphenols")}
                   value={polyphenolsText}
                   onChange={setPolyphenolsText}
+                  suffix="mg/kg"
                   inputMode="numeric"
                 />
               </div>
-              <TextField label={t("pdoPgi")} value={pdoPgi} onChange={setPdoPgi} />
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[12px] leading-[14px] font-bold tracking-wide text-muted-foreground uppercase">{t("pdoPgi")}</span>
+                <span className="flex h-11 items-center rounded-xl border border-line bg-card px-3 focus-within:border-ink">
+                  <select
+                    value={pdoPgi}
+                    onChange={(e) => setPdoPgi(e.target.value)}
+                    aria-label={t("pdoPgi")}
+                    className="h-full w-full min-w-0 appearance-none bg-transparent text-[14px] font-semibold text-ink outline-none"
+                  >
+                    <option value="">{t("pdoPgiNone")}</option>
+                    {oilPdoPgiGrouped(locale).map((group) => (
+                      <optgroup key={group.country} label={group.label}>
+                        {group.items.map((item) => (
+                          <option key={item.slug} value={item.slug}>
+                            {oilPdoPgiOptionLabel(item, locale)}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </span>
+              </label>
             </div>
           ) : (
             <>
