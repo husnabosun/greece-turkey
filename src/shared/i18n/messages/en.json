@@ -968,7 +968,14 @@
     "requests": "Requests",
     "switchView": "Switch view",
     "processorPanel": "Processor panel",
-    "processorFallback": "Processor"
+    "processorFallback": "Processor",
+    "settings": "Profile & settings",
+    "settingsSubtitle": "Company details and language for your mill account.",
+    "language": "Language",
+    "companyName": "Company name",
+    "displayName": "Contact name",
+    "saveSettings": "Save",
+    "settingsSaved": "Settings saved"
   },
   "processor": {
     "overviewTitle": "Overview",

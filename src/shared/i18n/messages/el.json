@@ -1061,7 +1061,14 @@
     "requests": "Αιτήματα",
     "switchView": "Αλλαγή προβολής",
     "processorPanel": "Πίνακας επεξεργαστή",
-    "processorFallback": "Επεξεργαστής"
+    "processorFallback": "Επεξεργαστής",
+    "settings": "Προφίλ και ρυθμίσεις",
+    "settingsSubtitle": "Στοιχεία εταιρείας και γλώσσα για τον λογαριασμό του ελαιοτριβείου.",
+    "language": "Γλώσσα",
+    "companyName": "Επωνυμία",
+    "displayName": "Όνομα επικοινωνίας",
+    "saveSettings": "Αποθήκευση",
+    "settingsSaved": "Οι ρυθμίσεις αποθηκεύτηκαν"
   },
   "processor": {
     "overviewTitle": "Επισκόπηση",

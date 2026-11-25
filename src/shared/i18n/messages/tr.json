@@ -968,7 +968,14 @@
     "requests": "Talepler",
     "switchView": "Görünümü değiştir",
     "processorPanel": "İşleyici paneli",
-    "processorFallback": "İşleyici"
+    "processorFallback": "İşleyici",
+    "settings": "Profil ve ayarlar",
+    "settingsSubtitle": "Değirmen hesabınız için şirket bilgileri ve dil.",
+    "language": "Dil",
+    "companyName": "Şirket adı",
+    "displayName": "İletişim adı",
+    "saveSettings": "Kaydet",
+    "settingsSaved": "Ayarlar kaydedildi"
   },
   "processor": {
     "overviewTitle": "Özet",

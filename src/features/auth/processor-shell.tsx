@@ -1,18 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   ChevronUp,
   ClipboardList,
+  Globe,
   Inbox,
   LayoutDashboard,
   LogOut,
   Search,
+  Settings,
   Truck,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { LOCALES, type Locale } from "@/core/config/constants";
 import { tryCreateBrowserClient } from "@/core/supabase/safe-client";
 import { Initials, initialsOf } from "@/features/marketplace/processor-kit";
 import { BrandLogo } from "@/shared/components/brand";
@@ -101,6 +105,8 @@ function UserMenu({
   company,
   panel,
   logoutLabel,
+  settingsLabel,
+  languageLabel,
   placement,
   trigger = "text",
   initials,
@@ -108,12 +114,16 @@ function UserMenu({
   company: string;
   panel: string;
   logoutLabel: string;
+  settingsLabel: string;
+  languageLabel: string;
   placement: "up" | "down";
-  trigger?: "text" | "avatar";
+  trigger?: "text" | "avatar" | "gear";
   initials?: string;
 }) {
   const tAuth = useTranslations("auth");
+  const locale = useLocale();
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -148,14 +158,34 @@ function UserMenu({
     router.refresh();
   }
 
+  function onPickLocale(code: Locale) {
+    if (code === locale) {
+      setOpen(false);
+      return;
+    }
+    router.replace(pathname, { locale: code });
+    setOpen(false);
+  }
+
   return (
     <div ref={rootRef} className="relative">
-      {trigger === "avatar" ? (
+      {trigger === "gear" ? (
         <button
           type="button"
           aria-expanded={open}
           aria-haspopup="menu"
-          aria-label={company}
+          aria-label={settingsLabel}
+          onClick={() => setOpen((v) => !v)}
+          className="flex size-11 items-center justify-center rounded-full border border-line bg-card transition-colors hover:bg-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+        >
+          <Settings className="size-[18px]" aria-hidden />
+        </button>
+      ) : trigger === "avatar" ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-haspopup="menu"
+          aria-label={settingsLabel}
           onClick={() => setOpen((v) => !v)}
           className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
         >
@@ -177,22 +207,58 @@ function UserMenu({
         <div
           role="menu"
           className={cn(
-            "absolute z-50 min-w-[200px] overflow-hidden rounded-2xl border border-line bg-card py-1 shadow-[0_12px_32px_rgba(0,0,0,.14)]",
+            "absolute z-50 min-w-[220px] overflow-hidden rounded-2xl border border-line bg-card p-1.5 shadow-[0_12px_32px_rgba(0,0,0,.14)]",
             placement === "up" ? "bottom-full left-0 mb-2 w-full" : "top-full right-0 mt-2 w-56",
           )}
         >
-          <p className="truncate px-3 pt-2 pb-1 text-[12px] font-extrabold text-ink">{company}</p>
-          <p className="px-3 pb-2 text-[12px] font-medium text-muted-foreground">{panel}</p>
-          <button
-            type="button"
+          <p className="truncate px-2.5 pt-1.5 pb-0.5 text-[12px] font-extrabold text-ink">{company}</p>
+          <p className="px-2.5 pb-2 text-[12px] font-medium text-muted-foreground">{panel}</p>
+
+          <Link
+            href="/processor/settings"
             role="menuitem"
-            disabled={signingOut}
-            onClick={() => void onSignOut()}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] font-bold text-risk hover:bg-risk-soft disabled:opacity-50"
+            onClick={() => setOpen(false)}
+            className="flex h-11 items-center gap-2.5 rounded-xl px-2.5 text-[13px] font-semibold text-ink hover:bg-soft"
           >
-            <LogOut className="size-3.5" aria-hidden />
-            {signingOut ? tAuth("loading") : logoutLabel}
-          </button>
+            <UserRound className="size-[18px]" aria-hidden />
+            {settingsLabel}
+          </Link>
+
+          <div className="px-2.5 pt-1.5 pb-2">
+            <p className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold text-ink">
+              <Globe className="size-4" aria-hidden />
+              {languageLabel}
+            </p>
+            <div className="flex gap-1.5">
+              {LOCALES.map((code) => (
+                <button
+                  key={code}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => onPickLocale(code)}
+                  className={cn(
+                    "h-10 flex-1 rounded-full border text-[12px] font-bold uppercase transition-colors",
+                    locale === code ? "border-ink bg-ink text-white" : "border-line bg-card text-ink hover:bg-soft",
+                  )}
+                >
+                  {code}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-line pt-1">
+            <button
+              type="button"
+              role="menuitem"
+              disabled={signingOut}
+              onClick={() => void onSignOut()}
+              className="flex h-11 w-full items-center gap-2.5 rounded-xl px-2.5 text-left text-[13px] font-bold text-risk hover:bg-risk-soft disabled:opacity-50"
+            >
+              <LogOut className="size-[18px]" aria-hidden />
+              {signingOut ? tAuth("loading") : logoutLabel}
+            </button>
+          </div>
         </div>
       ) : null}
     </div>
@@ -266,20 +332,31 @@ export function ProcessorShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="flex-1" />
-        <UserMenu company={company} panel={panel} logoutLabel={tAuth("logout")} placement="up" />
+        <UserMenu
+          company={company}
+          panel={panel}
+          logoutLabel={tAuth("logout")}
+          settingsLabel={t("settings")}
+          languageLabel={t("language")}
+          placement="up"
+        />
       </aside>
 
       <div className="relative z-50 overflow-visible border-b border-line bg-card px-4 py-3 min-[900px]:hidden">
-        <div className="flex h-10 items-center justify-between gap-2">
+        <div className="flex h-11 items-center justify-between gap-2">
           <BrandLogo size={30} />
-          <UserMenu
-            company={company}
-            panel={panel}
-            logoutLabel={tAuth("logout")}
-            placement="down"
-            trigger="avatar"
-            initials={initials}
-          />
+          <div className="flex items-center gap-2">
+            <UserMenu
+              company={company}
+              panel={panel}
+              logoutLabel={tAuth("logout")}
+              settingsLabel={t("settings")}
+              languageLabel={t("language")}
+              placement="down"
+              trigger="gear"
+            />
+            <Initials text={initials} size={36} />
+          </div>
         </div>
       </div>
 
