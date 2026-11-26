@@ -107,7 +107,10 @@
     "noAccount": "Δεν έχεις λογαριασμό;",
     "hasAccount": "Έχεις ήδη λογαριασμό;",
     "goRegister": "Εγγραφή",
-    "goLogin": "Σύνδεση"
+    "goLogin": "Σύνδεση",
+    "demoFarmer": "Δοκιμή ως παραγωγός (demo)",
+    "demoMill": "Δοκιμή ως ελαιοτριβείο (demo)",
+    "demoFailed": "Δεν άνοιξε ο λογαριασμός demo. Δοκίμασε ξανά."
   },
   "farmerNav": {
     "home": "Αρχική",

@@ -107,7 +107,10 @@
     "noAccount": "Hesabınız yok mu?",
     "hasAccount": "Zaten hesabınız var mı?",
     "goRegister": "Kayıt ol",
-    "goLogin": "Giriş yap"
+    "goLogin": "Giriş yap",
+    "demoFarmer": "Çiftçi olarak dene (demo)",
+    "demoMill": "Fabrika olarak dene (demo)",
+    "demoFailed": "Demo hesabı açılamadı. Lütfen tekrar deneyin."
   },
   "farmerNav": {
     "home": "Ana",
