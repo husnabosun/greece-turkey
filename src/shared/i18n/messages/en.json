@@ -107,7 +107,10 @@
     "noAccount": "No account yet?",
     "hasAccount": "Already have an account?",
     "goRegister": "Register",
-    "goLogin": "Sign in"
+    "goLogin": "Sign in",
+    "demoFarmer": "Try as farmer (demo)",
+    "demoMill": "Try as mill (demo)",
+    "demoFailed": "Could not open the demo account. Please try again."
   },
   "farmerNav": {
     "home": "Home",
